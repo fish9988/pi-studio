@@ -283,7 +283,7 @@ export async function launchSettings(
       })
       .toBe("ready");
     await launched.page.setViewportSize({ width: 1200, height: options.height ?? 800 });
-    await launched.page.keyboard.press("Control+,");
+    await launched.page.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");
     await expect(launched.page.getByTestId("settings")).toBeVisible();
     if (options.section !== undefined) await launched.page.getByTestId(`settings-nav-${options.section}`).click();
   } catch (error) {

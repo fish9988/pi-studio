@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -695,7 +695,7 @@ describe("pi-config backend", () => {
       agentDir: string;
     };
     expect(echoed.argv).toEqual(["install", "npm:@scope/demo", "-l", "--approve"]);
-    expect(path.resolve(echoed.cwd)).toBe(path.resolve(projectDir));
+    expect(await realpath(echoed.cwd)).toBe(await realpath(projectDir));
     expect(echoed.agentDir).toBe(agentDir);
 
     const resourcesSnap = await readPiResourcesSnapshot(agentDir, projectDir);

@@ -154,8 +154,8 @@ test("没有项目时直接发送：在 chats 目录里建项目和任务，侧�
     await expect(page.getByTestId("sidebar")).not.toContainText("chats");
     await expect(page.getByTestId("sidebar-new-task")).not.toHaveAttribute("aria-current", "page");
 
-    // 之后 Ctrl N 还是默认文件夹（不沿用刚才的项目也一样是它）；项目标签直接写它的路径。
-    await page.keyboard.press("Control+n");
+    // 之后 Ctrl/Cmd N 还是默认文件夹（不沿用刚才的项目也一样是它）；项目标签直接写它的路径。
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+n" : "Control+n");
     await expect(page.getByTestId("empty-state")).toHaveAttribute("data-kind", "no-project");
     await expect(page.getByTestId("empty-project")).toHaveText(chats);
   } finally {

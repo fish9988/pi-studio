@@ -26,7 +26,7 @@ test("Pi 8 大设置分区与 / 斜杠命令菜单端到端验证", async () => 
     await input.fill("");
 
     // 2. 通过快捷键打开重做后的 Pi 设置中心，逐节校验 8 大分区挂载与真实读写。
-    await page.keyboard.press("Control+,");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");
     await expect(page.getByTestId("settings")).toBeVisible();
     await expect(page.getByTestId("settings-nav")).toBeVisible();
 

@@ -125,6 +125,7 @@ export class PiTaskRunner {
   #stopRequested = false;
   #lastStopAborted = false;
   #lastRunError: string | null = null;
+  #agentLifecycleSeq = 0;
   #publishedRestartable = true;
 
   #model: ModelOption | null;
@@ -363,6 +364,7 @@ export class PiTaskRunner {
     this.#stopRequested = false;
     this.#lastStopAborted = false;
     this.#lastRunError = null;
+    this.#agentLifecycleSeq = 0;
     this.#apply({ type: "start" });
 
     let client: PiRpcClient | null = null;
@@ -590,8 +592,16 @@ export class PiTaskRunner {
       this.#lastStopAborted = false;
       this.#lastRunError = null;
       this.#bridge.appendOptimisticUserMessage(body, piImages);
+      const lifecycleBefore = this.#agentLifecycleSeq;
       const ack = await client.prompt(body, { images: piImages });
-      if ((ack?.disposition === undefined || ack.disposition === "started") && !this.#machine.working) {
+      // On POSIX pipes, `response`, `agent_start`, and `agent_end` can coalesce into a single stdout chunk
+      // and run synchronously before `await client.prompt(...)` resumes its microtask. Only apply optimistic
+      // `agent_start` if no lifecycle event has fired since issuing `prompt`.
+      if (
+        this.#agentLifecycleSeq === lifecycleBefore &&
+        (ack?.disposition === undefined || ack.disposition === "started") &&
+        !this.#machine.working
+      ) {
         this.#apply({ type: "agent_start" });
       }
       return;
@@ -1214,6 +1224,7 @@ export class PiTaskRunner {
     this.#bridge.handleRpcEvent(event);
 
     if (event.type === "agent_start") {
+      this.#agentLifecycleSeq += 1;
       this.#lastActiveAt = Date.now();
       this.#lastRunError = null;
       this.#lastStopAborted = false;
@@ -1227,6 +1238,7 @@ export class PiTaskRunner {
       }
       void this.#persistSessionFile();
     } else if ((event.type === "agent_end" && event.willRetry !== true) || event.type === "agent_settled") {
+      this.#agentLifecycleSeq += 1;
       const endedAt = Date.now();
       this.#touch(endedAt);
       const eventAborted = event.type === "agent_settled" ? event.aborted : this.#lastStopAborted;

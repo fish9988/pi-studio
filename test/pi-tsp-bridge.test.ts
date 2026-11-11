@@ -595,4 +595,95 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
       await service.close();
     }
   });
+
+  it("returns to idle when prompt response, agent_start, and agent_end coalesce in one stdout chunk", async () => {
+    const dir = await makeTempDir();
+    const coalescedMock = path.join(dir, "coalesced-rpc.mjs");
+    await writeFile(
+      coalescedMock,
+      [
+        'import { StringDecoder } from "node:string_decoder";',
+        'const dec = new StringDecoder("utf8");',
+        'let buf = "";',
+        'process.stdin.on("data", (chunk) => {',
+        "  buf += dec.write(chunk);",
+        '  let idx = buf.indexOf("\\n");',
+        "  while (idx !== -1) {",
+        '    const line = buf.slice(0, idx).replace(/\\r$/, "");',
+        "    buf = buf.slice(idx + 1);",
+        '    if (line.trim() !== "") {',
+        "      const cmd = JSON.parse(line);",
+        '      if (cmd.type === "get_state") {',
+        "        process.stdout.write(JSON.stringify({",
+        '          type: "response", id: cmd.id, command: "get_state", success: true,',
+        '          data: { thinkingLevel: "medium", isStreaming: false, isCompacting: false, steeringMode: "all", followUpMode: "all", sessionId: "s1", autoCompactionEnabled: true, messageCount: 0, pendingMessageCount: 0 }',
+        '        }) + "\\n");',
+        '      } else if (cmd.type === "get_available_thinking_levels") {',
+        '        process.stdout.write(JSON.stringify({ type: "response", id: cmd.id, command: cmd.type, success: true, data: { levels: ["off", "medium"] } }) + "\\n");',
+        '      } else if (cmd.type === "get_session_stats") {',
+        '        process.stdout.write(JSON.stringify({ type: "response", id: cmd.id, command: cmd.type, success: true, data: { sessionId: "s1", userMessages: 0, assistantMessages: 0, toolCalls: 0, toolResults: 0, totalMessages: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 } }) + "\\n");',
+        '      } else if (cmd.type === "prompt") {',
+        "        // Emit response + agent_start + agent_end + agent_settled in a SINGLE write syscall!",
+        "        const coalesced =",
+        '          JSON.stringify({ type: "response", id: cmd.id, command: "prompt", success: true, data: { disposition: "started" } }) + "\\n" +',
+        '          JSON.stringify({ type: "agent_start" }) + "\\n" +',
+        '          JSON.stringify({ type: "agent_end", messages: [] }) + "\\n" +',
+        '          JSON.stringify({ type: "agent_settled", aborted: false }) + "\\n";',
+        "        process.stdout.write(coalesced);",
+        "      } else {",
+        '        process.stdout.write(JSON.stringify({ type: "response", id: cmd.id, command: cmd.type, success: true, data: {} }) + "\\n");',
+        "      }",
+        "    }",
+        '    idx = buf.indexOf("\\n");',
+        "  }",
+        "});",
+      ].join("\n"),
+      "utf8",
+    );
+
+    let record: TaskRecord = {
+      id: "task_coalesced" as TaskId,
+      projectId: "proj_coalesced" as ProjectId,
+      title: "",
+      archived: false,
+      sessionFile: null,
+      worktreePath: null,
+      worktreeBranch: null,
+      worktreeBase: null,
+      cwd: dir,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      model: null,
+      thinkingLevel: null,
+    };
+
+    const runner = new PiTaskRunner(
+      record,
+      { id: "proj_coalesced" as ProjectId, name: "Coalesced", path: dir },
+      {
+        buildPiLaunch: () =>
+          Promise.resolve({
+            command: process.execPath,
+            prefixArgs: [coalescedMock],
+            env: { ELECTRON_RUN_AS_NODE: "1" },
+            displayPath: coalescedMock,
+          }),
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+
+    try {
+      await runner.sendPrompt({ text: "fast turn", whenBusy: "steer" });
+      expect(runner.status).toBe("idle");
+    } finally {
+      await runner.dispose();
+    }
+  });
 });

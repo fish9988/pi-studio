@@ -9,6 +9,12 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-11
+
+### Fixed
+
+- Fixed a race where tasks could stay marked as running after finishing a very fast turn (such as cached responses or coalesced pipe frames on macOS and Linux).
+
 ## [0.1.0] - 2026-11-11
 
 ### Added
