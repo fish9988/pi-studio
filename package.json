@@ -1,8 +1,8 @@
 {
-  "name": "omp-studio",
-  "version": "0.5.0",
+  "name": "pi-studio",
+  "version": "0.1.0",
   "private": true,
-  "description": "oh-my-pi (omp) 的桌面端",
+  "description": "Pi (@earendil-works/pi-coding-agent) 的桌面工作台",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -25,7 +25,7 @@
     "rpc:update-wire": "node scripts/update-rpc-wire.ts",
     "icons": "node scripts/make-icons.ts",
     "dist": "electron-vite build && electron-builder --win nsis --publish never && node scripts/check-package.ts release/win-unpacked/resources/app.asar win32-x64",
-    "dist:mac": "electron-vite build && electron-builder --mac --arm64 --publish never && node scripts/check-package.ts release/mac-arm64/omp-studio.app/Contents/Resources/app.asar darwin-arm64",
+    "dist:mac": "electron-vite build && electron-builder --mac --arm64 --publish never && node scripts/check-package.ts release/mac-arm64/pi-studio.app/Contents/Resources/app.asar darwin-arm64",
     "dist:linux": "electron-vite build && electron-builder --linux AppImage --x64 --publish never && node scripts/check-package.ts release/linux-unpacked/resources/app.asar linux-x64",
     "release": "node scripts/release.ts",
     "postinstall": "node scripts/postinstall.ts"

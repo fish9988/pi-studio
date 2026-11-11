@@ -15,7 +15,6 @@ import { takePendingDraftText } from "../palette/index.ts";
 import { pushToast } from "../dialogs/index.ts";
 import { blockWorktree, ensureSetupApproved, getWorktreeDraft, setWorktreeOn } from "../git/index.ts";
 import { handOverDraftTerminal, withDraftHandover } from "../terminal/index.ts";
-import { ApprovalChip } from "./ApprovalChip.tsx";
 import { buildSubmission, ensureAttachmentTokens, historyText, slotsToNames, viewToText } from "./composer-tokens.ts";
 import { recordHistory } from "./history-store.ts";
 import { ComposerInput, keepFieldFocus } from "./ComposerInput.tsx";
@@ -243,7 +242,6 @@ export function DraftComposer({ projectId, projectTools }: { projectId: ProjectI
             setModel={(modelKey) => Promise.resolve(chooseDraftModel(key, { model: modelKey }))}
             setThinking={(level) => Promise.resolve(chooseDraftModel(key, { thinkingLevel: level }))}
           />
-          <ApprovalChip projectId={projectId} forgetTaskId={null} />
           {projectTools}
           <span className="composer-spacer" />
           <AttachButton addFiles={attach.addFiles} acceptsImages={model?.acceptsImages} disabled={sending} />

@@ -11,7 +11,7 @@ import {
 } from "../../shared/git.ts";
 import { app, shell } from "electron";
 import type { HandlerGroup, TaskId } from "../../shared/ipc.ts";
-import { generateCommitMessage, type OmpCommand } from "../git/commit-message.ts";
+import { generateCommitMessage, generatePiCommitMessage, type OmpCommand } from "../git/commit-message.ts";
 import { getChangeStats } from "../git/numstat.ts";
 import { commit, createPullRequest, lastCommit, push } from "../git/remote.ts";
 import { taskPullRequestUrl } from "../git/pull-request-url.ts";
@@ -38,8 +38,8 @@ import {
   worktreeInfo,
 } from "../git/worktree.ts";
 import { log } from "../log/log.ts";
-import { getOmpExecutable } from "../omp-manager/index.ts";
-import { parseTestOmpOverride, prependToPath } from "../omp/launch-args.ts";
+import { parseTestOmpOverride } from "../omp/launch-args.ts";
+import { readyPiLaunch } from "../pi/runtime-singleton.ts";
 import { resolveLocale } from "../settings/settings-store.ts";
 import { getSetupConsent, getTaskPool } from "../tasks/runtime.ts";
 import {
@@ -100,20 +100,23 @@ function parseLinesRef(value: unknown): GitLinesRef {
 const generating = new Map<TaskId, AbortController>();
 
 /**
- * `omp commit` 用的 omp：和任务进程同一个可执行文件；e2e 里任务进程是假 omp，
- * 未打包时 `STUDIO_TEST_COMMIT_OMP`（JSON `{command, args}`，同 STUDIO_TEST_OMP）指向另一个假 omp 来扮演 `omp commit`。
+ * 生成提交信息用的 CLI：在正常运行时使用 `pi -p --no-session --no-tools`（`generatePiCommitMessage`）；
+ * 未打包时若设置了 `STUDIO_TEST_COMMIT_OMP`，兼容旧测试脚本（`generateCommitMessage`）。
  */
-async function commitOmp(): Promise<OmpCommand> {
+async function commitPi(): Promise<{ mode: "pi" | "omp"; cmd: OmpCommand }> {
   const override = app.isPackaged ? undefined : process.env["STUDIO_TEST_COMMIT_OMP"];
   if (override) {
     const parsed = parseTestOmpOverride(override);
-    return { command: parsed.command, args: parsed.args, env: { ...process.env } };
+    return { mode: "omp", cmd: { command: parsed.command, args: parsed.args, env: { ...process.env } } };
   }
-  const executable = await getOmpExecutable();
+  const launch = await readyPiLaunch();
   return {
-    command: executable.path,
-    args: [],
-    env: prependToPath({ ...process.env }, executable.managedBin),
+    mode: "pi",
+    cmd: {
+      command: launch.command,
+      args: launch.prefixArgs,
+      env: { ...process.env, ...launch.env },
+    },
   };
 }
 
@@ -331,7 +334,11 @@ export const gitHandlers: HandlerGroup<
     const controller = new AbortController();
     generating.set(id, controller);
     try {
-      const result = await generateCommitMessage(cwd, await commitOmp(), controller.signal);
+      const { mode, cmd } = await commitPi();
+      const result =
+        mode === "omp"
+          ? await generateCommitMessage(cwd, cmd, controller.signal)
+          : await generatePiCommitMessage(cwd, cmd, controller.signal);
       log.info("git commit message generated", { result: result.kind });
       return result;
     } finally {

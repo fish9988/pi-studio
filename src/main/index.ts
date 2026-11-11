@@ -1,13 +1,12 @@
 // 主进程入口：单实例、userData 测试覆盖、设置、会话安全、注册 IPC、打开主窗口、托盘常驻、退出流程。
 import { app, Menu } from "electron";
-import { prepareAccountExtension } from "./client-accounts/prepare.ts";
 import { registerIpcHandlers } from "./ipc/register.ts";
-import { applyOmpStartupDefaults } from "./ipc/omp-handlers.ts";
 import { initLog } from "./log/instance.ts";
-import { prewarmToolbarData } from "./service/default-model.ts";
 import { log } from "./log/log.ts";
+import { piManager } from "./pi/runtime-singleton.ts";
 import { fixLoginPath } from "./platform/darwin/login-path.ts";
 import { holdSpawnsUntil } from "./platform/spawn-gate.ts";
+import { prewarmToolbarData } from "./service/default-model.ts";
 import { loadSettings } from "./settings/settings-store.ts";
 import { startUpdates } from "./update/instance.ts";
 import { installAppProtocol, registerAppScheme } from "./window/app-protocol.ts";
@@ -60,17 +59,14 @@ if (!app.requestSingleInstanceLock()) {
     installAppProtocol();
     installSessionSecurity(isAppUrl);
     loadSettings();
-    // 下面两件事和窗口同时做，不挡首帧；起子进程（omp、git、终端）的地方先等它们做完（platform/spawn-gate.ts）。
-    // 账号型 provider 的扩展写进 omp 的扩展目录：之后起的 omp 进程自动加载它。
-    holdSpawnsUntil(prepareAccountExtension());
-    // mac / Linux 从桌面启动时 PATH 缺用户 shell 配置里加的目录：补上登录 shell 的 PATH，之后起的 omp / git / gh 才找得到。
+    // mac / Linux 从桌面启动时 PATH 缺用户 shell 配置里加的目录：补上登录 shell 的 PATH，之后起的 pi / git / gh 才找得到。
     // Windows 不执行，最多等 3 秒。
     holdSpawnsUntil(fixLoginPath());
     registerIpcHandlers();
     createMainWindow();
     createTray();
     startUpdates().catch((error: unknown) => log.error("update service failed to start", error));
-    void applyOmpStartupDefaults();
+    void piManager().startOnce();
     // 输入框工具行要的默认模型、模型目录：窗口淡入后再拉起服务进程去读，不和首帧抢 CPU（之前先用启动缓存里的值）。
     afterFirstReveal(prewarmToolbarData);
     app.on("activate", () => {

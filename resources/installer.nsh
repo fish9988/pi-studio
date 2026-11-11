@@ -9,13 +9,13 @@
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
-; 只装给当前用户（%LOCALAPPDATA%\Programs\omp-studio），跳过"为谁安装"那一页：不要管理员权限，自动更新也不弹 UAC。
+; 只装给当前用户（%LOCALAPPDATA%\Programs\pi-studio），跳过"为谁安装"那一页：不要管理员权限，自动更新也不弹 UAC。
 !macro customInstallMode
   StrCpy $isForceCurrentInstall "1"
 !macroend
 
-; 卸载时删掉 studio 写进 omp 扩展目录的账号插件（src/main/client-accounts/deploy.ts），不然终端版 omp 还会一直加载这份旧代码。
-; 目录和 studio 的 resolveAgentDir 一致：PI_CODING_AGENT_DIR，否则 <家目录>\<PI_CONFIG_DIR 或 .omp>\agent。
+; 卸载时若有 studio 写入过扩展目录的清单文件则清理。
+; 目录和 studio 的 resolveAgentDir 一致：PI_CODING_AGENT_DIR，否则 <家目录>\<PI_CONFIG_DIR 或 .pi>\agent。
 ; 只在目录里有 studio 的文件清单时删（确认是 studio 写的）；更新（--updated）时旧版本的卸载也会跑，这时不删。
 !macro customUnInstall
   ${ifNot} ${isUpdated}
@@ -24,7 +24,7 @@
     ${if} $0 == ""
       ReadEnvStr $0 PI_CONFIG_DIR
       ${if} $0 == ""
-        StrCpy $0 ".omp"
+        StrCpy $0 ".pi"
       ${endif}
       StrCpy $0 "$PROFILE\$0\agent"
     ${endif}

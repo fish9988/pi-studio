@@ -6,8 +6,6 @@ import { useOmpStatus, useSettings, useTask } from "../../store/index.ts";
 import { onComposerText, onStudioCommand, refreshSlashCommands, useSlashCommands } from "../palette/index.ts";
 import { sendDraft, stopAndRestore, type Delivery } from "./actions.ts";
 import { reportError } from "../../ui/errors.ts";
-import { ApprovalChip } from "./ApprovalChip.tsx";
-import { SessionTogglesMenu } from "../session-toggles/SessionTogglesMenu.tsx";
 import { getDraft, setDraftText, useDraft } from "./draft-store.ts";
 import { ModelChip } from "./ModelChip.tsx";
 import { matchSlash, slashQuery } from "./slash-match.ts";
@@ -22,7 +20,7 @@ import { recordHistory, useProjectHistory } from "./history-store.ts";
 import { HistorySearch } from "./HistorySearch.tsx";
 import { decideSlashSend } from "./slash-guard.ts";
 import { withStudioSlash } from "./studio-slash.ts";
-import { studioSlashCommands } from "./studio-slash-table.ts";
+import { PI_STUDIO_SLASH_COMMANDS } from "./pi-slash-table.ts";
 import { FileMenu } from "./FileMenu.tsx";
 import { useFileMenu } from "./use-file-menu.ts";
 import { SendStop } from "./SendStop.tsx";
@@ -39,7 +37,6 @@ import { useFirstPrompt } from "../tsp/first-prompt-store.ts";
 import { ShellTag } from "./ShellTag.tsx";
 import { peekGateButton, peekTspDocument, useTspDerived, useTspPanelOpen } from "../tsp/tsp-store.ts";
 import { focusedAgentName } from "../../../../shared/tsp/agent-hub.ts";
-import { ModeChip } from "./ModeChip.tsx";
 import { userMessageTexts } from "../../../../shared/tsp/user-messages.ts";
 import { GATE_ACTION_APPROVE, GATE_ACTION_DETAILS, TSP_APPROVAL_DIALOG_ID } from "../../../../shared/tsp/gate.ts";
 import { PathLabel } from "../empty/ProjectLabel.tsx";
@@ -76,7 +73,7 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
   // omp 的列表还没载入时保持空：守卫在空列表时一律放行（studio-slash 的命令发送时照样会被接管）。
   // studio 接管哪些命令、哪些交给 omp 由命令表按宿主（task / draft）定，见 studio-slash.ts。
   const commands = useMemo(
-    () => (ompCommands.length === 0 ? ompCommands : withStudioSlash(ompCommands, studioSlashCommands, t)),
+    () => (ompCommands.length === 0 ? ompCommands : withStudioSlash(ompCommands, PI_STUDIO_SLASH_COMMANDS, t)),
     [ompCommands, t],
   );
   const [slashIndex, setSlashIndex] = useState(0);
@@ -460,23 +457,13 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
             setThinking={(level) => window.studio.setTaskThinkingLevel(taskId, level)}
             taskId={taskId}
             fallbackModel={task.fallbackModel}
-            speed={{
-              fast: task.fastMode,
-              slow: task.slowMode,
-              setFast: (enabled) => window.studio.setTaskFastMode(taskId, enabled),
-              setSlow: (enabled) => window.studio.setTaskSlowMode(taskId, enabled),
-            }}
             // 起进程期间还不知道模型时和草稿一样写"模型…"，不写"未连接模型"
             {...(shownModel === null && (task.status === "starting" || (preStart && projectDefault.pending))
               ? { emptyLabel: t("composer.modelLoading") }
               : {})}
           />
-          {/* 还没发过消息的任务（标题为空）不能发斜杠命令：第一次发送会拿它当标题 */}
-          <ApprovalChip projectId={task.projectId} forgetTaskId={task.title === "" ? null : taskId} />
           {/* 和草稿工具行同一个位置：任务在哪个文件夹里跑（有 worktree 时是 worktree 根），发出第一句话后不消失 */}
           <PathLabel path={task.cwd} testId="composer-folder" />
-          <SessionTogglesMenu taskId={taskId} task={task} />
-          <ModeChip taskId={taskId} task={task} />
           <ShellTag taskId={taskId} />
           <span className="composer-spacer" />
           {tooOld && <span className="composer-note">{t("composer.versionTooOld")}</span>}

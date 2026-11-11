@@ -45,6 +45,7 @@
     "src/renderer/src/features/composer/slash-guard.ts",
     "src/renderer/src/features/composer/slash-args.ts",
     "src/renderer/src/features/composer/studio-slash.ts",
+    "src/renderer/src/features/composer/pi-slash-spec.ts",
     "src/renderer/src/features/composer/stop-outcome.ts",
     "src/renderer/src/features/composer/thinking-levels.ts",
     "src/renderer/src/features/file-preview/tree-model.ts",

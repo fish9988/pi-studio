@@ -6,5 +6,5 @@ import path from "node:path";
 
 export function chatsDir(): string {
   if (!app.isPackaged && process.env["STUDIO_USER_DATA"]) return path.join(app.getPath("userData"), "chats");
-  return path.join(app.getPath("home"), "omp-studio", "chats");
+  return path.join(app.getPath("home"), "pi-studio", "chats");
 }

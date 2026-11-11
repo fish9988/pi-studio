@@ -25,7 +25,7 @@ const defaultShellState: ShellState = {
   terminalHeight: 280,
   historyOrder: "folder",
   chatWidth: 0,
-  brandStyle: "claude",
+  brandStyle: "pi",
   mascot: "clawd",
   processRows: "column",
   helperModel: "smol",

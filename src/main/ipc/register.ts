@@ -23,6 +23,7 @@ import { integrationsHandlers } from "./integrations-handlers.ts";
 import { mcpHandlers } from "./mcp-handlers.ts";
 import { sessionInfoHandlers } from "./session-info-handlers.ts";
 import { agentsHandlers } from "./agents-handlers.ts";
+import { piHandlers } from "./pi-handlers.ts";
 import { registerDropFolder } from "./drop-folder.ts";
 import { inputHistoryHandlers } from "./input-history-handlers.ts";
 import { registerComposerFilesChannel } from "./composer-files-handlers.ts";
@@ -52,6 +53,7 @@ const handlers: InvokeHandlers = {
   ...sessionInfoHandlers,
   ...agentsHandlers,
   ...browserHandlers,
+  ...piHandlers,
 };
 
 export function registerIpcHandlers(): void {

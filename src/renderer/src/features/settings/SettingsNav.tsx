@@ -16,15 +16,14 @@ import {
 import { Button, IconButton, TextField } from "../../ui/controls.tsx";
 import { Select } from "../../ui/Select.tsx";
 
-// 只有一列分节，不分"omp-studio 的 / omp 的"（omp 的设置和终端共用一份，omp-settings.md），按要做的事排。
+// 按 Pi 的核心配置域排成 8 节（~/.pi/agent 与项目级 .pi 共用同一套分区）。
 export const settingsPages: readonly SettingsPage[] = [
   "general",
   "models",
   "providers",
-  "extensions",
   "tools",
+  "extensions",
   "context",
-  "agents",
   "advanced",
   "about",
 ];

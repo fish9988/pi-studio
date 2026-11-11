@@ -1,77 +1,20 @@
 # Changelog
 
-What changed in each omp-studio release, written for users. Versions follow [SemVer](https://semver.org/): bug fixes bump the patch number, new features bump the minor number.
+What changed in each pi-studio release, written for users. Versions follow [SemVer](https://semver.org/): bug fixes bump the patch number, new features bump the minor number.
 
 How to write it:
 
 - This is the English twin of `CHANGELOG.md`. Every entry goes into both files under "Unreleased", grouped as Added / Fixed / Changed, one sentence each about what users see, no implementation details.
 - The release script (`npm run release -- <version>`) turns "Unreleased" in both files into `[<version>] - <date>` and refuses to release when either one is empty. The GitHub Release shows this file's section first, then the Chinese one; the in-app changelog follows the UI language.
-- Releases before 0.4.55 are only in `CHANGELOG.md` (Chinese); the English UI shows those in Chinese.
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-11-11
+## [0.1.0] - 2026-11-11
 
 ### Added
 
-- The empty home screen now includes a usage overview card with Overview / Models and 7d / 30d / All toggles, a 26-week activity heatmap, a stacked daily model bar chart, total token stats, and a clickable folder pill to switch the working directory.
-- Added an interactive glyph-wave ripple backdrop on the home screen, with a toggle in Settings → General.
-- When the sidebar is collapsed, moving the pointer to the left window edge temporarily slides out a peek drawer over the main view.
-- The session top bar now supports click-to-rename on the task title, a Conversation / Trajectory view switch, and an Open in menu for opening the workspace in an external editor or file manager.
-- Upgraded the thinking effort popover to a continuous slider with an animated dot-matrix stream, added session duration, message count, and cache-hit telemetry to the input toolbar, and added a pixel mascot waiting bubble.
-- Unified the right inspector into a four-mode workbench (Files / Changes / Subagent / Browser) with an inline Git changes view for staged, unstaged, and untracked diffs.
-
-### Changed
-
-- Redesigned the main window as a flush borderless panel layout with synchronized window backgrounds across all 18 themes and responsive conversation and input widths.
-
-## [0.4.58] - 2026-11-06
-
-### Added
-
-- Usage and quota: when a provider has several signed-in accounts, the one the current task is using is marked "In use".
-
-### Changed
-
-- Usage and quota: "Syncing…" during a refresh now sits in the title row, left of the update time, aligned with it and the refresh button.
-- Output speed (tok/s) moved out of the input box toolbar into "Session usage" in the context ring popover, where the last reply's speed shows even when nothing is generating.
-
-## [0.4.57] - 2026-11-06
-
-### Fixed
-
-- The "Fallback" badge after the model name now goes away once omp switches back to the original model after the cooldown (it used to stay even while Opus was answering).
-
-## [0.4.56] - 2026-11-06
-
-### Added
-
-- Settings → Providers: a signed-in provider's card (such as Anthropic) now has "Add account" in its ⋯ menu; sign in with another account in the browser to add it, and omp switches to another account when one runs out of quota.
-- When omp hits an error and switches to a fallback model, a "Fallback" badge appears after the model name in the input box (hover to see which model), and in the subagent details too; the switch notice in the conversation is drawn as a visible warning bar.
-- Settings → Model roles: a new "Fallback chains" row shows chains set by model or provider (such as `anthropic/*`); before, only chains keyed by a role were shown.
-
-### Fixed
-
-- With a theme illustration as the background, moving the mouse over the sidebar task list no longer lags a frame on every move: the illustration is no longer redrawn with every repaint of the sidebar or the input box.
-
-### Changed
-
-- omp status lines in the conversation show at most two lines: with many MCP tools, the startup notice listing every mounted tool no longer fills the screen; click "more lines" to see all of it.
-- Settings → About → Changelog follows the UI language: the English UI shows English notes (releases before 0.4.55 are in Chinese only); release notes on GitHub list English first, then Chinese.
-
-## [0.4.55] - 2026-11-05
-
-### Added
-
-- Settings → General has a new "Show tool calls as titles only" switch: collapsed tool cards show just their title line, with no output preview; click one or press Ctrl+O to see everything (#8).
-
-### Fixed
-
-- In Settings → About, the result of checking for omp updates ("You're up to date") now sits to the left of the "Check for updates" button, like omp-studio's own, instead of on a separate line below.
-- Task titles no longer turn into terminal titles such as `C:\WINDOWS\system32\cmd.exe` or `Windows PowerShell`; omp-studio now uses the session title omp records (#8).
-- Opening a session you deleted in omp now explains that the session file was deleted, and sending a message starts a new session in the same task; before, the task only showed a red dot and nothing worked (#8).
-- Sessions of archived tasks show up again in the sidebar's session history, and opening one restores the original task; before, archived sessions could not be found again (#8).
-- The sidebar's session history refreshes when the window comes back to the foreground, so sessions created or deleted in a terminal appear without restarting (#8).
-- A task you just archived (while it can still be undone) no longer blocks "Remove from list" on its folder (#8).
-- Tool cards you opened can be collapsed again with Ctrl+O.
-- Settings → Integrations → MCP: a successful connection test shows just "Connected, N tools", with the tool names in the tooltip; before, every tool name was listed on the card, making it very tall when a server had many tools.
+- Initial desktop release of `pi-studio` built natively on `@earendil-works/pi-coding-agent` (`pi --mode rpc`), sharing settings, credentials, and session history in `~/.pi/agent/` directly with the terminal `pi` CLI.
+- Redesigned the Settings center into 8 Pi-native sections (General, Providers & Credentials, Models & Thinking, Session & Context, Extensions / Packages & Skills, Tools & System Prompts, Network & Advanced, Shortcuts, and About) with Global and Project (`.pi/`) scope switching.
+- Replaced slash commands with 24 Pi 1.5.2 commands (`/settings`, `/model`, `/thinking`, `/scoped-models`, `/mcp`, `/login`, `/logout`, `/new`, `/resume`, `/name`, `/session`, `/usage`, `/tree`, `/fork`, `/clone`, `/compact`, `/copy`, `/export`, `/reload`, `/btw`, `/git`, `/hotkeys`, `/changelog`, `/delete`) and a 7-level thinking effort slider (`off` through `max`).
+- Added a home Bento usage overview card backed by `~/.pi/agent/sessions/**/*.jsonl`, an interactive glyph-wave ripple backdrop, left-edge peek sidebar drawer, and minimal soft-halo task status dots.
+- Included the four-mode right workbench (Files / Changes / Subagent / Browser), line-level Git review and worktree management, built-in terminal, session tree navigation, HTML session export, and 18 synchronized light and dark themes.

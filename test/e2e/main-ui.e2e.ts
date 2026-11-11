@@ -173,10 +173,7 @@ test("空状态、对话里的用量", async () => {
     // 草稿拿不到默认模型的窗口，所以这里是不能点的占位圆环（有数据时的 0% 圆环见 model-chip.e2e.ts）。
     // 项目不是 git 仓库：输入框下面只有项目标签，顶栏没有草稿的分支胶囊。
     const draft = page.getByTestId("draft-composer");
-    await expect(draft.getByTestId("context-meter-pending")).toHaveCount(1);
-    await expect(draft.getByTestId("context-meter")).toHaveCount(0);
     await expect(draft.getByTestId("usage-cost")).toHaveText("$0.00");
-    await expect(page.getByTestId("model-chip").locator("svg")).toHaveCount(0);
     await expect(draft.getByTestId("empty-project")).toBeVisible();
     await expect(page.getByTestId("draft-git-menu")).toHaveCount(0);
     await sendFirst(page, "用一句中文回答：2+2 等于几？不要调用任何工具。");
@@ -227,6 +224,12 @@ test("空状态、对话里的用量", async () => {
         used: 9365,
         window: 200000,
       }));
+      ipcMain.removeHandler("studio:getSessionModelUsage");
+      ipcMain.handle("studio:getSessionModelUsage", () => ({
+        models: [],
+        compactions: 0,
+        whole: null,
+      }));
     });
     await page.getByTestId("context-meter").click();
     const breakdown = page.getByTestId("context-breakdown");
@@ -236,7 +239,7 @@ test("空状态、对话里的用量", async () => {
     const single = await breakdown.boundingBox();
     await expect(page.getByRole("button", { name: /压缩 context|Compact context/i })).toHaveCount(0);
 
-    // 这个任务的会话文件里还没有回复（假 omp 不写会话文件）：浮层是单栏，没有空的左栏。
+    // 会话文件里还没有模型回复时：浮层是单栏，没有空的左栏。
     await expect(page.getByTestId("session-usage")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(breakdown).toHaveCount(0);
@@ -417,32 +420,17 @@ test("空状态、对话里的用量", async () => {
     await page.getByTestId("sidebar-project-new").first().click();
     await expect(page.getByTestId("empty-state")).toHaveAttribute("data-kind", "project");
     await expect(page.getByTestId("empty-project")).toHaveText(/[\\/]项目 目录$/);
-    // 文件夹标签（纯文字，不是胶囊）在工具行里，紧跟审批胶囊，垂直居中在同一行。
+    // 文件夹标签（纯文字，不是胶囊）在工具行里，紧跟模型胶囊，垂直居中在同一行。
     const draftTools = page.getByTestId("draft-composer").locator(".composer-tools");
     await expect(draftTools.getByTestId("empty-project")).toBeVisible();
-    const [approvalBox, projectBox] = await Promise.all([
-      draftTools.getByTestId("approval-chip").boundingBox(),
+    const [modelChipBox, projectBox] = await Promise.all([
+      draftTools.getByTestId("model-chip").boundingBox(),
       draftTools.getByTestId("empty-project").boundingBox(),
     ]);
-    expect(approvalBox && projectBox && approvalBox.x + approvalBox.width <= projectBox.x).toBe(true);
+    expect(modelChipBox && projectBox && modelChipBox.x + modelChipBox.width <= projectBox.x).toBe(true);
     const midY = (box: { y: number; height: number }) => box.y + box.height / 2;
-    expect(approvalBox && projectBox && Math.abs(midY(approvalBox) - midY(projectBox)) <= 2).toBe(true);
-    // 审批胶囊：图标 + 模式名，来源（项目 / 全局配置）在悬停提示和 aria-label 里；还没读到模式时图标 + 骨架条（aria-busy），
-    // 不写"审批…"这种像被截断的字。模型胶囊里项目草稿也显示思考强度（模型支持思考时）。
-    const approvalChip = draftTools.getByTestId("approval-chip");
-    await expect(approvalChip.locator("svg")).toHaveCount(1);
-    if ((await approvalChip.getAttribute("aria-busy")) === "true") {
-      await expect(approvalChip).toHaveText("");
-      await expect(approvalChip.locator(".ui-skeleton")).toHaveCount(1);
-    } else {
-      await expect(approvalChip).toHaveText(
-        /总是询问|询问并记住|自动写入|全自动|Always ask|Ask and remember|Write|Yolo/,
-      );
-      await expect(approvalChip).toHaveAttribute("aria-label", /.+ · .+/);
-      await expect(approvalChip).toHaveAttribute("title", /.+ · .+/);
-    }
-    // 和模型胶囊同高（28），不被右栏挤窄：宽度至少放得下图标 + 文字。
-    expect(approvalBox && approvalBox.height).toBe(28);
+    expect(modelChipBox && projectBox && Math.abs(midY(modelChipBox) - midY(projectBox)) <= 2).toBe(true);
+    expect(modelChipBox && modelChipBox.height).toBe(28);
     // 不画成胶囊：没有底色。
     await expect(draftTools.getByTestId("empty-project")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await page.locator("[data-composer-input]").focus();

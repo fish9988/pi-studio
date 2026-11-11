@@ -63,6 +63,7 @@ export const taskHandlers: HandlerGroup<
   | "setTaskFastMode"
   | "setTaskSlowMode"
   | "compactTask"
+  | "cloneTask"
   | "restartTask"
   | "exportTaskHtml"
   | "revealTaskExport"
@@ -84,7 +85,12 @@ export const taskHandlers: HandlerGroup<
   | "sendTspKeys"
   | "resizeTsp"
 > = {
-  compactTask: async (taskId) => (await getTaskPool()).compactTask(parseTaskId(taskId)),
+  compactTask: async (taskId, instructions) =>
+    (await getTaskPool()).compactTask(
+      parseTaskId(taskId),
+      instructions === undefined ? undefined : parseString(instructions, "instructions", 8192, { allowEmpty: true }),
+    ),
+  cloneTask: async (taskId) => (await getTaskPool()).cloneTask(parseTaskId(taskId)),
   restartTask: async (taskId) => (await getTaskPool()).restartTask(parseTaskId(taskId)),
   exportTaskHtml: async (taskId) => {
     const pool = await getTaskPool();

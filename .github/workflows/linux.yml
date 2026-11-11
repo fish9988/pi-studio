@@ -59,9 +59,9 @@ jobs:
       - name: 允许 Chromium 沙箱
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      # 真实的 node-pty + TSP 路径：假 omp 回放录制，发一句 prompt 跑完一整轮（不需要真模型）。没有显示器，用 xvfb。
+      # 真实的 Pi RPC + TSP 桥接路径：假 pi 回放会话，发一句 prompt 跑完一整轮（不需要真模型）。没有显示器，用 xvfb。
       - name: e2e 冒烟
-        run: xvfb-run -a npx playwright test test/e2e/tsp.e2e.ts -g "完整一轮"
+        run: xvfb-run -a npx playwright test test/e2e/main-ui.e2e.ts -g "没有项目时直接发送"
 
       - name: 打包
         run: npx electron-builder --linux AppImage --x64 --publish never
@@ -81,7 +81,7 @@ jobs:
 
       # 打包版才有的问题（如启动时窗口一直透明，见 scripts/smoke-packaged.ts）上面的 e2e 测不到：启动打包好的应用，等窗口淡入。
       - name: 打包版冒烟
-        run: xvfb-run -a node scripts/smoke-packaged.ts release/linux-unpacked/omp-studio
+        run: xvfb-run -a node scripts/smoke-packaged.ts release/linux-unpacked/pi-studio
 
       - name: 传到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -92,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: omp-studio-linux-x64
+          name: pi-studio-linux-x64
           if-no-files-found: ignore
           retention-days: 14
           path: release/*.AppImage

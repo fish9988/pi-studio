@@ -2,6 +2,7 @@
 import { describeError } from "../../ui/errors.ts";
 import { useEffect, useMemo } from "react";
 import type { OmpConfigItem } from "../../../../shared/ipc.ts";
+import { findPiSettingSchema } from "../../../../shared/pi-settings-schema.ts";
 import { useT } from "../../i18n/use-t.ts";
 import { setSettingsQuery, useOmpStatus } from "../../store/index.ts";
 import { Button, Notice } from "../../ui/controls.tsx";
@@ -14,9 +15,8 @@ export function useOmpConfigLoader(): void {
   const status = useOmpStatus();
   const ready = status?.state === "ready";
   useEffect(() => {
-    if (ready) void loadOmpConfig();
+    void loadOmpConfig();
   }, [ready]);
-  // 主进程启动时可能晚于设置页读快照才写入默认值：收到就静默重读，开关不停在旧值上。
   useEffect(() => window.studio.onOmpConfigChanged(() => void loadOmpConfig(true)), []);
 }
 
@@ -47,9 +47,14 @@ export function OmpConfigPane({ view }: { view: ConfigView }) {
   const query = view.kind === "search" ? view.query.trim() : "";
   const snapshot = load.kind === "ready" ? load.data : null;
   const results = useMemo(
-    // 搜索只在会显示的项里找：终端专用的项（隐藏的）不出现。
+    // 搜索覆盖全部 Pi 设置 Schema 与可见项。
     () =>
-      snapshot && query ? snapshot.items.filter((item) => groupOf(item.key) !== null && matchesQuery(item, query)) : [],
+      snapshot && query
+        ? snapshot.items.filter(
+            (item) =>
+              (findPiSettingSchema(item.key) !== undefined || groupOf(item.key) !== null) && matchesQuery(item, query),
+          )
+        : [],
     [snapshot, query],
   );
 

@@ -2,6 +2,7 @@
 // 常用项的标签和中文说明在 i18n 的 ompcfg 命名空间（`<键>.label` / `<键>.desc`）；没有的显示 key 加 omp 原始英文描述。
 import { dictionaries } from "../../../../shared/i18n/index.ts";
 import type { Locale, OmpConfigItem } from "../../../../shared/ipc.ts";
+import { findPiSettingSchema } from "../../../../shared/pi-settings-schema.ts";
 import { groupConfigItems, groupOf, type ConfigGroup } from "../../../../shared/ui/config-groups.ts";
 
 function entry(locale: Locale, name: string): string | undefined {
@@ -17,6 +18,13 @@ interface ConfigText {
 }
 
 export function configText(locale: Locale, item: OmpConfigItem): ConfigText {
+  const piEntry = findPiSettingSchema(item.key);
+  if (piEntry !== undefined) {
+    return {
+      label: locale === "zh-CN" ? piEntry.labelZh : piEntry.labelEn,
+      description: locale === "zh-CN" ? piEntry.descZh : piEntry.descEn,
+    };
+  }
   const label = entry(locale, `${item.key}.label`);
   if (label !== undefined) return { label, description: entry(locale, `${item.key}.desc`) ?? item.description };
   return { label: null, description: item.description };
@@ -41,10 +49,15 @@ export function groupTitle(locale: Locale, group: string): string {
 export function matchesQuery(item: OmpConfigItem, query: string): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
+  const piEntry = findPiSettingSchema(item.key);
   const group = groupOf(item.key);
   const haystack = [
     item.key,
     item.description,
+    piEntry?.labelZh,
+    piEntry?.descZh,
+    piEntry?.labelEn,
+    piEntry?.descEn,
     entry("zh-CN", `${item.key}.label`),
     entry("zh-CN", `${item.key}.desc`),
     entry("en", `${item.key}.label`),

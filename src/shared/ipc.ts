@@ -61,6 +61,17 @@ import type { DocumentSnapshot, TspDocMessage } from "./tsp/document.ts";
 import type { OmpKeybinding } from "./tsp/omp-keybindings.ts";
 import type { ProviderKeyEnv } from "./provider-keys.ts";
 import type { TspEvent } from "./tsp/tsp.generated.ts";
+import type {
+  PiBuiltinExtensionId,
+  PiCloneResult,
+  PiConfigFileKind,
+  PiConfigScope,
+  PiMcpServerSaveInput,
+  PiProviderAuthStatus,
+  PiResourcesSnapshot,
+  PiSystemDoc,
+  PiSystemDocKind,
+} from "./pi-config-types.ts";
 
 // ───────── 标识 ─────────
 
@@ -1042,8 +1053,8 @@ export interface ShellState {
 export type ConversationView = "chat" | "trajectory";
 export const conversationViews: readonly ConversationView[] = ["chat", "trajectory"];
 
-export type BrandStyle = "claude" | "deepseek" | "omp";
-export const brandStyles: readonly BrandStyle[] = ["claude", "deepseek", "omp"];
+export type BrandStyle = "pi" | "claude" | "deepseek" | "omp";
+export const brandStyles: readonly BrandStyle[] = ["pi", "claude", "deepseek", "omp"];
 
 export type MascotCharacter = "clawd" | "deepy" | "whalegirl" | "omp" | "off";
 export const mascotCharacters: readonly MascotCharacter[] = ["clawd", "deepy", "whalegirl", "omp", "off"];
@@ -1256,8 +1267,10 @@ export interface StudioInvokeApi {
   getInputHistory(projectId: ProjectId): Promise<string[]>;
   /** 记一条发出去的消息（只存文字；空的、太长的、和上一条相同的不记）。 */
   recordInputHistory(projectId: ProjectId, text: string): Promise<void>;
-  /** 压缩上下文：发 `/compact`，等 omp 画出压缩分隔；失败（会话太小等）以 omp 的原文 reject。任务没有进程时先拉起。 */
-  compactTask(taskId: TaskId): Promise<void>;
+  /** 压缩上下文：发 `/compact`（可选自定义压缩说明），等待压缩完成。任务没有进程时先拉起。 */
+  compactTask(taskId: TaskId, instructions?: string): Promise<void>;
+  /** 克隆当前会话分支为新的独立任务与会话文件（对应 Pi `/clone`）。 */
+  cloneTask(taskId: TaskId): Promise<PiCloneResult>;
   /** 重开会话：结束这个任务的 omp 进程，再用 `--resume` 恢复同一个会话文件（等于终端里退出再进）。`restartable` 为 false 时 reject。 */
   restartTask(taskId: TaskId): Promise<void>;
   /**
@@ -1599,6 +1612,34 @@ export interface StudioInvokeApi {
   createPullRequest(taskId: TaskId, input: GitPullRequestInput): Promise<GitPullRequestResult>;
   /** 用系统浏览器打开任务当前分支的 PR 页面（PR 号来自 omp 标题后缀 `TaskState.prNumber`，地址由分支的 remote 推出，只开 https）；没有 PR 或推不出地址时 reject。 */
   openTaskPullRequest(taskId: TaskId): Promise<void>;
+
+  // Pi 1.5+ 专属配置与资源管理
+  listPiProviderStatuses(): Promise<PiProviderAuthStatus[]>;
+  getPiResources(projectId: ProjectId | null): Promise<PiResourcesSnapshot>;
+  savePiMcpServer(input: PiMcpServerSaveInput): Promise<void>;
+  deletePiMcpServer(scope: PiConfigScope, name: string, projectId: ProjectId | null): Promise<void>;
+  setPiMcpServerEnabled(
+    scope: PiConfigScope,
+    name: string,
+    enabled: boolean,
+    projectId: ProjectId | null,
+  ): Promise<void>;
+  setPiBuiltinExtensionEnabled(id: PiBuiltinExtensionId, enabled: boolean): Promise<void>;
+  setPiCustomExtensions(paths: string[]): Promise<void>;
+  runPiPackageAction(
+    op: "install" | "remove" | "update",
+    source: string | null,
+    scope: PiConfigScope,
+    projectId: ProjectId | null,
+  ): Promise<{ output: string }>;
+  getPiSystemDoc(scope: PiConfigScope, kind: PiSystemDocKind, projectId: ProjectId | null): Promise<PiSystemDoc>;
+  savePiSystemDoc(
+    scope: PiConfigScope,
+    kind: PiSystemDocKind,
+    content: string,
+    projectId: ProjectId | null,
+  ): Promise<void>;
+  openPiConfigFile(kind: PiConfigFileKind): Promise<void>;
 }
 
 export interface StudioEventPayloads {
@@ -1761,6 +1802,7 @@ export const invokeNames = {
   getInputHistory: true,
   recordInputHistory: true,
   compactTask: true,
+  cloneTask: true,
   restartTask: true,
   runTaskCommand: true,
   runBuiltin: true,
@@ -1895,6 +1937,17 @@ export const invokeNames = {
   pushGit: true,
   createPullRequest: true,
   openTaskPullRequest: true,
+  listPiProviderStatuses: true,
+  getPiResources: true,
+  savePiMcpServer: true,
+  deletePiMcpServer: true,
+  setPiMcpServerEnabled: true,
+  setPiBuiltinExtensionEnabled: true,
+  setPiCustomExtensions: true,
+  runPiPackageAction: true,
+  getPiSystemDoc: true,
+  savePiSystemDoc: true,
+  openPiConfigFile: true,
 } satisfies Record<keyof StudioInvokeApi, true>;
 
 /** StudioEventPayloads 的全部事件名；订阅函数叫 `on` + 首字母大写的名字。 */

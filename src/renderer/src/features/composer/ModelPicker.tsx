@@ -1,10 +1,6 @@
-// 模型选择对话框（ui/Dialog，照 Tern 里 omp 的 /models）：顶上是搜索框（没有标题和 ×，Esc、点遮罩、"关闭"关）；左栏是范围：角色 / 全部模型 / 各提供商；
-// 右边一张表（模型 | Int | t/s | Ctx | $/M，列名照 omp 原文）+ 参数行 + 三行控件（思考强度 / Prewalk / 预设）；页脚"关闭"+ 主按钮。
-// 全部模型：没有搜索词时"常用"在前，其余按提供商分组；有搜索词时是"匹配"。角色范围（或搜索框以 @ 开头）列角色。
-// 两种用法（仓库所有者 2026-10-22 定）：点行（或 ↑↓）只是选中，参数行和思考强度跟着选中的模型走，点"用于此任务"（Enter、双击行同）
-// 才切模型、设思考强度并关闭，只管这一个任务（草稿里是即将建的任务）；点一个角色则转到给它选模型：表里定位到它现在的模型，
-// 换一个点"应用"写进全局 omp 配置（modelRoles），不动正在运行的会话。
-// Tab 循环、Esc 关闭、焦点回到打开前的元素由 Dialog 负责。
+// 模型选择对话框（ui/Dialog，适配 Pi /model 与 /scoped-models）：
+// 顶上是搜索框；左栏是范围：全部模型 / 常用模型 (Scoped) / 各 Provider；
+// 右边一张表（模型 | Int | t/s | Ctx | $/M + 星标收藏进 enabledModels）+ 参数行 + 7 档思考强度分段选择。
 import {
   useCallback,
   useEffect,
@@ -20,40 +16,29 @@ import { useOpenKey, usePresence } from "../../ui/presence.ts";
 import type { ModelInsights, ModelKey, ModelOption, ProjectId, TaskId } from "../../../../shared/ipc.ts";
 import { clampThinkingLevel, thinkingLevelOptions } from "../../../../shared/ui/new-task-default.ts";
 import type { ThinkingLevel } from "../../../../shared/omp-wire/rpc-wire.generated.ts";
-import { useT } from "../../i18n/use-t.ts";
-import { ArrowLeft, Plus, Search, Check, ChevronRight } from "../../icons.tsx";
-import { Badge, Button, IconButton, TextField } from "../../ui/controls.tsx";
+import { useLocale, useT } from "../../i18n/use-t.ts";
+import { Check, ChevronRight, Plus, Search, Star } from "../../icons.tsx";
+import { Button, IconButton, TextField } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/Dialog.tsx";
 import { Skeleton } from "../../ui/Skeleton.tsx";
 import { Reveal } from "../../ui/Reveal.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { showView } from "../../store/index.ts";
 import { ModelDetails } from "./ModelDetails.tsx";
-import { RoleIcon } from "./RoleIcon.tsx";
-import { keepRoleLevel } from "../../../../shared/ui/role-value.ts";
-import { saveOmpModelRole } from "../settings/config-store.ts";
 import {
-  filterRoles,
   groupModels,
   modelContextCell,
   modelItemId,
   modelPriceCell,
   pinnedKeys,
   providerCounts,
-  roleHintKey,
-  roleItemId,
-  roleLabel,
-  roleView,
   sameModel,
 } from "./model-groups.ts";
-import { SpeedToggle, type SpeedControls } from "./SpeedToggle.tsx";
-import { PresetSection } from "../session-toggles/PresetSection.tsx";
-import { PrewalkSection } from "../session-toggles/PrewalkSection.tsx";
+import type { SpeedControls } from "./SpeedToggle.tsx";
 import { ThinkingSegments } from "./ThinkingSegments.tsx";
 import type { ModelPickerRequest } from "./slash-args.ts";
 
-const recentKey = "omp-studio.recentModels";
-/** 数据缺失（没有价格、没测过速度……）的单元格。 */
+const recentKey = "pi-studio.recentModels";
 const missing = "–";
 const loading = "…";
 
@@ -70,7 +55,7 @@ export interface ModelPickerProps {
   /** 正在生效的模型；表里它带勾，打开时选中的是它。 */
   model: ModelOption | null;
   thinkingLevel: ThinkingLevel | null;
-  /** 正在生效的模型的档位（任务里是 omp 报的，含 off）。 */
+  /** 正在生效的模型的档位（任务里含 off）。 */
   thinkingLevels: readonly ThinkingLevel[];
   running: boolean;
   /** 读压缩设置用哪个项目的配置；草稿里没有项目时为 null（只看全局）。 */
@@ -78,36 +63,45 @@ export interface ModelPickerProps {
   loadModels(): Promise<ModelOption[]>;
   setModel(key: ModelKey): Promise<void>;
   setThinking(level: ThinkingLevel): Promise<void>;
-  /** 速度开关（fast / slow，只对正在生效的模型）；没有任务的草稿里不传。 */
   speed?: SpeedControls;
-  /** 给了任务 id（任务里；草稿没有）才显示 Prewalk 和"预设"两节：都是对这个任务发的命令（`/prewalk`、`/modelpreset`）。 */
   taskId?: TaskId;
   onClose(): void;
-  /** `/model sonnet`、`/model @task` 带来的搜索词和范围（只在打开那一刻用）。 */
   request?: ModelPickerRequest | null;
 }
 
-/** 表里的一行：模型，或角色范围 / @ 搜索时的角色（带它绑定的模型）。 */
-type Item =
-  | { kind: "model"; id: string; option: ModelOption }
-  | { kind: "role"; id: string; role: string; option: ModelOption | null };
+interface ModelItem {
+  kind: "model";
+  id: string;
+  option: ModelOption;
+}
 
-/** 左栏的范围：角色表、全部模型、某个提供商的模型。 */
-type Scope = { kind: "roles" } | { kind: "all" } | { kind: "provider"; provider: string };
+type Scope = { kind: "all" } | { kind: "scoped" } | { kind: "provider"; provider: string };
 
 const sameScope = (a: Scope, b: Scope) =>
   a.kind === b.kind && (a.kind !== "provider" || (b.kind === "provider" && a.provider === b.provider));
 
-/** 对话框本体：每次打开都是全新的状态；退出动画由 Dialog 放，外层 ModelPicker 等它放完再卸载。 */
+function matchesScopedPattern(pattern: string, fullId: string, modelId: string): boolean {
+  const p = pattern.trim().toLowerCase();
+  if (p === "") return false;
+  const full = fullId.toLowerCase();
+  const id = modelId.toLowerCase();
+  if (p === full || p === id) return true;
+  if (p.includes("*")) {
+    const regex = new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`, "i");
+    return regex.test(full) || regex.test(id);
+  }
+  return false;
+}
+
 function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
   const { model, thinkingLevel, running, onClose, open } = props;
   const t = useT();
+  const locale = useLocale();
+  const zh = locale === "zh-CN";
   const listId = useId();
   const tableRef = useRef<HTMLDivElement>(null);
   const sideRef = useRef<HTMLElement>(null);
 
-  // 对话框打开以后只长不缩：见过的最大高度写进 min-height（取布局高度，不受弹出动画的缩放影响；同 CSS 的上限取小），
-  // 换到模型少的提供商、打字过滤时不跟着变矮；窗口变矮时上限跟着变小，min-height 不会把对话框撑出窗口。
   useEffect(() => {
     const dialog = sideRef.current?.closest<HTMLElement>(".mp-dialog");
     if (!dialog) return;
@@ -125,26 +119,29 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [models, setModels] = useState<ModelOption[] | null>(null);
   const [insights, setInsights] = useState<ModelInsights | null>(null);
+  const [enabledPatterns, setEnabledPatterns] = useState<string[]>([]);
   const [query, setQuery] = useState(props.request?.query ?? "");
-  const [scope, setScope] = useState<Scope>(props.request?.scope === "roles" ? { kind: "roles" } : { kind: "all" });
-  // 选中的行（点击、↑↓）：参数行和思考强度跟着它走，"用于此任务"才真的切换；null = 正在生效的模型。
+  const [scope, setScope] = useState<Scope>(props.request?.scope === "roles" ? { kind: "scoped" } : { kind: "all" });
   const [selection, setSelection] = useState<string | null>(null);
-  // 双击的第一下点在哪一行：点角色会换掉整张表，第二下落在原位的模型行上时不能当成双击它（否则直接把那个模型写给角色）。
   const firstClick = useRef<string | null>(null);
-  // 分段条上点过的档位；null = 没动过（切模型时交给 omp 钳到新模型的档位）。
   const [pickedLevel, setPickedLevel] = useState<ThinkingLevel | null>(null);
-  // 给谁选模型：null = 用于此任务；某个角色 = 给它指定模型，写进全局 omp 配置。
-  const [roles, setRoles] = useState<Record<string, string> | null>(null);
-  const [roleTab, setRoleTab] = useState<string | null>(null);
-  // "常用"在打开时定下来：选了模型之后当前模型会变，但行不跟着往上跳。
   const [pinned, setPinned] = useState<ModelKey[] | null>(null);
   const report = useCallback((error: unknown) => reportError(t, error), [t]);
-  const reloadRoles = () => window.studio.getModelRoles(props.projectId).then(setRoles, () => setRoles({}));
 
-  // 只在打开的那一刻拉一次列表（和实测速度、压缩设置、角色表）；props 每次渲染都是新对象，不能放进依赖。
   useEffect(() => {
-    void reloadRoles();
     let current = true;
+    window.studio
+      .getOmpConfig()
+      .then((snap) => {
+        if (!current) return;
+        const item = snap.items.find((entry) => entry.key === "enabledModels");
+        const val = item?.hasValue ? item.value : [];
+        if (Array.isArray(val)) {
+          setEnabledPatterns(val.filter((entry): entry is string => typeof entry === "string"));
+        }
+      })
+      .catch(() => {});
+
     props.loadModels().then(
       (list) => {
         if (!current) return;
@@ -173,48 +170,64 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const searching = query.trim() !== "";
-  const view = useMemo(() => roleView(roles ?? {}, models ?? []), [roles, models]);
-  const providers = useMemo(() => providerCounts(models ?? []), [models]);
-  const roleMode = roleTab !== null;
-  // 表里打勾的模型：给角色选时是这个角色现在的模型。
-  const activeModel = roleTab !== null ? (view.modelOf[roleTab] ?? null) : model;
-  const scopeProvider = scope.kind === "provider" ? scope.provider : null;
+  const isScopedModel = useCallback(
+    (option: ModelOption): boolean => {
+      const fullId = `${option.key.provider}/${option.key.modelId}`;
+      return enabledPatterns.some((pat) => matchesScopedPattern(pat, fullId, option.key.modelId));
+    },
+    [enabledPatterns],
+  );
+
+  const toggleScopedModel = useCallback(
+    (option: ModelOption) => {
+      const fullId = `${option.key.provider}/${option.key.modelId}`;
+      const currentlyScoped = enabledPatterns.some((pat) => matchesScopedPattern(pat, fullId, option.key.modelId));
+      const next = currentlyScoped
+        ? enabledPatterns.filter(
+            (pat) =>
+              pat.trim().toLowerCase() !== fullId.toLowerCase() &&
+              pat.trim().toLowerCase() !== option.key.modelId.toLowerCase(),
+          )
+        : [...enabledPatterns, fullId];
+      setEnabledPatterns(next);
+      window.studio.setOmpConfig("enabledModels", JSON.stringify(next)).catch(report);
+    },
+    [enabledPatterns, report],
+  );
+
+  const scopedModels = useMemo(() => (models ?? []).filter(isScopedModel), [models, isScopedModel]);
 
   useEffect(() => {
-    if (pinned === null && models !== null && roles !== null) {
-      setPinned(
-        pinnedKeys(
-          model?.key ?? null,
-          view.tabs.map((role) => view.modelOf[role]),
-          readRecent(),
-        ),
-      );
+    if (pinned === null && models !== null) {
+      setPinned(pinnedKeys(model?.key ?? null, scopedModels.slice(0, 5), readRecent()));
     }
-  }, [pinned, models, roles, model, view]);
+  }, [pinned, models, model, scopedModels]);
 
-  // 角色范围里搜索框过滤的是角色（和输入 @ 一样）。
-  const roleQuery = scope.kind === "roles" && !query.trimStart().startsWith("@") ? `@${query}` : query;
-  const roleMatches = useMemo(() => filterRoles(view.tabs, roleQuery), [view.tabs, roleQuery]);
-  const rows = useMemo(
-    () => groupModels(models ?? [], query, pinned ?? [], scopeProvider),
-    [models, query, pinned, scopeProvider],
-  );
-  // 全部模型（含给角色选）、没有搜索词时按提供商折叠：打开时只展开正在生效的模型（给角色选时是它现在的模型）所在的那个，
-  // 换角色时再展开新模型所在的；收起的提供商里的行不画，方向键也跳过。
-  const collapsible = scope.kind === "all" && !searching && roleMatches === null;
+  const searching = query.trim() !== "";
+  const providers = useMemo(() => providerCounts(models ?? []), [models]);
+  const activeModel = model;
+  const scopeProvider = scope.kind === "provider" ? scope.provider : null;
+
+  const rows = useMemo(() => {
+    const baseList = scope.kind === "scoped" ? scopedModels : (models ?? []);
+    return groupModels(baseList, query, scope.kind === "scoped" ? [] : (pinned ?? []), scopeProvider);
+  }, [scope.kind, scopedModels, models, query, pinned, scopeProvider]);
+
+  const collapsible = scope.kind === "all" && !searching;
   const [openProviders, setOpenProviders] = useState<ReadonlySet<string>>(new Set());
   const activeProvider = activeModel?.key.provider ?? null;
   useEffect(() => {
     if (activeProvider !== null) {
-      setOpenProviders((open) => (open.has(activeProvider) ? open : new Set([...open, activeProvider])));
+      setOpenProviders((prev) => (prev.has(activeProvider) ? prev : new Set([...prev, activeProvider])));
     }
   }, [activeProvider]);
+
   const toggleProvider = (provider: string) => {
     const next = new Set(openProviders);
     if (!next.delete(provider)) next.add(provider);
     setOpenProviders(next);
   };
+
   const shownRows = useMemo(
     () =>
       collapsible
@@ -222,89 +235,49 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
         : rows.flat,
     [collapsible, rows, openProviders],
   );
-  const items = useMemo<Item[]>(
-    () =>
-      roleMatches !== null
-        ? roleMatches.map((role) => ({
-            kind: "role",
-            id: roleItemId(role),
-            role,
-            option: view.modelOf[role] ?? null,
-          }))
-        : shownRows.map((option) => ({ kind: "model", id: modelItemId(option.key), option })),
-    [roleMatches, shownRows, view],
+
+  const items = useMemo<ModelItem[]>(
+    () => shownRows.map((option) => ({ kind: "model", id: modelItemId(option.key), option })),
+    [shownRows],
   );
-  const currentId =
-    roleMatches !== null
-      ? roleTab === null
-        ? null
-        : roleItemId(roleTab)
-      : activeModel
-        ? modelItemId(activeModel.key)
-        : null;
+
+  const currentId = activeModel ? modelItemId(activeModel.key) : null;
   const selectedItem = items.find((item) => item.id === (selection ?? currentId)) ?? items[0] ?? null;
   const selectedId = selectedItem?.id ?? null;
-  const shown = selectedItem === null ? null : selectedItem.option;
-  const shownIsCurrent = shown !== null && activeModel !== null && sameModel(shown.key, activeModel.key);
+  const shown = selectedItem?.option ?? null;
 
   useEffect(() => {
     tableRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
-  // 模型能用的档位：正在生效的模型用 omp 报的；别的模型按模型目录，omp 报的里有 off（任务里）时也给 off。
   const levelsOf = (option: ModelOption): readonly ThinkingLevel[] => {
     if (model !== null && sameModel(option.key, model.key)) return props.thinkingLevels;
     const efforts = thinkingLevelOptions(option, []);
     return efforts.length > 0 && props.thinkingLevels.includes("off") ? ["off", ...efforts] : efforts;
   };
-  // 分段条上亮哪一档：点过的，没点过是现在的；这个模型没有那一档时照 omp 的规则钳到最近的。
+
   const levelIn = (levels: readonly ThinkingLevel[]): ThinkingLevel | null => {
     const wanted = pickedLevel ?? thinkingLevel;
     if (wanted === null || levels.length === 0) return null;
     return levels.includes(wanted) ? wanted : clampThinkingLevel(wanted, levels);
   };
+
   const shownLevels = shown === null ? [] : levelsOf(shown);
   const shownLevel = levelIn(shownLevels);
-
-  const selectRole = (role: string | null) => {
-    setRoleTab(role);
-    setSelection(null);
-  };
 
   const selectScope = (next: Scope) => {
     setScope(next);
     setSelection(null);
   };
 
-  // 点角色（或在角色行上 Enter）：转到给它选模型，搜索词清空，从角色范围回到全部模型，表里定位到它现在的模型。
-  const applyRole = (role: string) => {
-    selectRole(role);
-    setQuery("");
-    if (scope.kind === "roles") setScope({ kind: "all" });
-    searchRef.current?.focus();
-  };
-
-  // 用于此任务：先关对话框，切模型、设思考强度在后台按顺序做（omp 的往返不挡界面，失败弹 toast）；给角色选时是写全局 modelRoles。
-  const apply = (item: Item | null) => {
+  const apply = (item: ModelItem | null) => {
     if (item === null) return;
-    if (item.kind === "role") {
-      applyRole(item.role);
-      return;
-    }
     const option = item.option;
     onClose();
     localStorage.setItem(
       recentKey,
       JSON.stringify([option.key, ...readRecent().filter((key) => !sameModel(key, option.key))].slice(0, 3)),
     );
-    if (roleTab !== null) {
-      // 档位以写入时的全局值为准（打开时读的角色表可能还没到，项目里的值也可能盖着全局的）。
-      window.studio
-        .getModelRoles(null)
-        .then((global) => saveOmpModelRole(roleTab, option.key, keepRoleLevel(global[roleTab] ?? null, option)))
-        .catch(report);
-      return;
-    }
     const switching = activeModel === null || !sameModel(option.key, activeModel.key);
     const level = pickedLevel === null ? null : levelIn(levelsOf(option));
     let done = switching ? props.setModel(option.key) : Promise.resolve();
@@ -329,29 +302,15 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     }
   };
 
-  // 角色的悬停说明（内置角色才有用途说明；自定义角色返回 undefined，不给 title）。
-  const roleHint = (role: string) => {
-    const key = roleHintKey(role);
-    return key === null ? undefined : t(key);
-  };
-  const roleTitle = (name: string, role: string) => {
-    const hint = roleHint(role);
-    return hint === undefined ? undefined : `${name}：${hint}`;
-  };
+  const total =
+    scope.kind === "scoped"
+      ? scopedModels.length
+      : scopeProvider === null
+        ? (models?.length ?? 0)
+        : (providers.find((entry) => entry.provider === scopeProvider)?.count ?? 0);
+  const matched = rows.flat.length;
 
-  const atRoles = roleMatches !== null;
-  const primaryLabel = atRoles ? t("model.pickRole") : roleMode ? t("model.applyRole") : t("model.use");
-
-  const total = atRoles
-    ? view.tabs.length
-    : scopeProvider === null
-      ? (models?.length ?? 0)
-      : (providers.find((entry) => entry.provider === scopeProvider)?.count ?? 0);
-  const matched = atRoles ? (roleMatches?.length ?? 0) : rows.flat.length;
-
-  const numbers = (option: ModelOption | null) => {
-    // 没指定模型的角色：数字列整行留空（不画一排 "-"，九个未指定角色就是 36 个破折号）。
-    if (option === null) return { intelligence: "", speed: "", context: "", price: "" };
+  const numbers = (option: ModelOption) => {
     const fullKey = `${option.key.provider}/${option.key.modelId}`;
     const measured = insights?.perf[fullKey]?.tokensPerSecond;
     const tps = measured ?? option.catalogTps ?? null;
@@ -364,14 +323,11 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     };
   };
 
-  const renderItem = (item: Item): ReactNode => {
+  const renderItem = (item: ModelItem): ReactNode => {
     const isSelected = item.id === selectedId;
-    const isCurrent =
-      item.kind === "role"
-        ? item.role === roleTab
-        : activeModel !== null && sameModel(activeModel.key, item.option.key);
-    const option = item.option;
-    const cells = numbers(option);
+    const isCurrent = activeModel !== null && sameModel(activeModel.key, item.option.key);
+    const starred = isScopedModel(item.option);
+    const cells = numbers(item.option);
     return (
       <div
         key={item.id}
@@ -379,57 +335,40 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
         role="option"
         aria-selected={isSelected}
         className="mp-row"
-        data-testid={item.kind === "role" ? "model-role-option" : "model-option"}
-        data-role={item.kind === "role" ? item.role : undefined}
+        data-testid="model-option"
         data-current={isCurrent || undefined}
-        title={
-          item.kind === "role"
-            ? roleTitle(roleLabel(item.role), item.role)
-            : `${item.option.name}\n${item.option.key.provider}/${item.option.key.modelId}`
-        }
+        title={`${item.option.name}\n${item.option.key.provider}/${item.option.key.modelId}`}
         onClick={(event) => {
           if (event.detail <= 1) firstClick.current = item.id;
-          if (item.kind === "role") applyRole(item.role);
-          else if (firstClick.current === item.id) setSelection(item.id);
+          if (firstClick.current === item.id) setSelection(item.id);
         }}
-        onDoubleClick={() => item.kind === "model" && firstClick.current === item.id && apply(item)}
+        onDoubleClick={() => firstClick.current === item.id && apply(item)}
         onMouseDown={(event) => event.preventDefault()}
       >
         <span className="mp-cell-model">
-          {item.kind === "role" ? (
-            <>
-              <span className="mp-role-icon" aria-hidden="true">
-                <RoleIcon role={item.role} />
-              </span>
-              <span className="mp-id-name">@{item.role}</span>
-              {/* 指到列表外的值（别名、带后缀、没登录的 provider）照原文显示，不说成"未指定" */}
-              <span className="mp-id-dim">
-                {option === null
-                  ? (roles?.[item.role] ?? t("model.roleUnset"))
-                  : `${option.key.provider}/${option.key.modelId}`}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="mp-id">
-                <span className="mp-id-dim">{item.option.key.provider}/</span>
-                <span className="mp-id-name">{item.option.key.modelId}</span>
-              </span>
-              {(view.badges.get(modelItemId(item.option.key)) ?? []).map((role) => (
-                <span
-                  key={role}
-                  className="mp-role-badge"
-                  data-testid="model-role-badge"
-                  data-role={role}
-                  role="img"
-                  aria-label={`@${role}`}
-                  title={roleTitle(`@${role}`, role)}
-                >
-                  <RoleIcon role={role} size={12} />
-                </span>
-              ))}
-            </>
-          )}
+          <IconButton
+            label={
+              starred
+                ? zh
+                  ? "移出常用模型 (enabledModels)"
+                  : "Remove from scoped models"
+                : zh
+                  ? "加入常用模型 (enabledModels)"
+                  : "Add to scoped models"
+            }
+            pressed={starred}
+            testId="model-scoped-star"
+            onClick={(event) => {
+              event.stopPropagation();
+              toggleScopedModel(item.option);
+            }}
+          >
+            <Star size={12} fill={starred ? "currentColor" : "none"} />
+          </IconButton>
+          <span className="mp-id">
+            <span className="mp-id-dim">{item.option.key.provider}/</span>
+            <span className="mp-id-name">{item.option.key.modelId}</span>
+          </span>
         </span>
         <span className="mp-num" data-testid="model-intelligence">
           {cells.intelligence}
@@ -444,7 +383,7 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     );
   };
 
-  const renderGroup = (key: string, label: string, list: readonly Item[]) => (
+  const renderGroup = (key: string, label: string, list: readonly ModelItem[]) => (
     <div role="group" aria-label={label} key={key}>
       <p className="mp-group" aria-hidden="true">
         {label} <span className="mp-group-count">{list.length}</span>
@@ -453,11 +392,10 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     </div>
   );
 
-  // 没有搜索词：常用在前，其余按提供商分组（rows.rest 已按提供商排好）；全部模型里组标题可以点开 / 收起。
   const providerGroups = () => {
-    const groups = new Map<string, Item[]>();
+    const groups = new Map<string, ModelItem[]>();
     for (const option of rows.rest) {
-      const item: Item = { kind: "model", id: modelItemId(option.key), option };
+      const item: ModelItem = { kind: "model", id: modelItemId(option.key), option };
       groups.set(option.key.provider, [...(groups.get(option.key.provider) ?? []), item]);
     }
     return [...groups].map(([provider, list]) => {
@@ -471,7 +409,6 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
             aria-expanded={expanded}
             data-testid="model-provider-group"
             data-provider={provider}
-            // 不抢焦点：焦点留在搜索框里，方向键接着用。
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => toggleProvider(provider)}
           >
@@ -484,22 +421,15 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     });
   };
 
-  const pinnedCount = atRoles || searching ? 0 : rows.pinned.length;
-  const groups = atRoles
-    ? [
-        <div role="group" aria-label={t("model.rolesGroup")} key="roles">
-          {items.map(renderItem)}
-        </div>,
-      ]
-    : searching
-      ? // 搜不到时只留头部的"0 / N"和一句"没有匹配的模型"，不再画一个"匹配 0"的空组
-        items.length === 0
-        ? []
-        : [renderGroup("matches", t("model.matches"), items)]
-      : [
-          ...(pinnedCount > 0 ? [renderGroup("pinned", t("model.pinned"), items.slice(0, pinnedCount))] : []),
-          ...providerGroups(),
-        ];
+  const pinnedCount = searching || scope.kind === "scoped" ? 0 : rows.pinned.length;
+  const groups = searching
+    ? items.length === 0
+      ? []
+      : [renderGroup("matches", t("model.matches"), items)]
+    : [
+        ...(pinnedCount > 0 ? [renderGroup("pinned", t("model.pinned"), items.slice(0, pinnedCount))] : []),
+        ...providerGroups(),
+      ];
 
   const scopeButton = (entry: Scope, label: string, count: number, testId: string, dot = false) => (
     <button
@@ -547,18 +477,6 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
             }}
             onKeyDown={onSearchKey}
           />
-          {roleTab !== null && (
-            // 改回"用于此任务"是返回，不是关对话框：← 放在胶囊前面，不用 ×（2026-10-29 审计 DLG-14）
-            <span className="mp-target" data-testid="model-role-target" title={roleHint(roleTab)}>
-              <IconButton label={t("model.roleTargetClear")} testId="model-role-clear" onClick={() => selectRole(null)}>
-                <ArrowLeft size={14} />
-              </IconButton>
-              <Badge tone="accent">
-                <RoleIcon role={roleTab} size={12} />
-                {t("model.roleTarget", { role: roleLabel(roleTab) })}
-              </Badge>
-            </span>
-          )}
           {searching && (
             <span className="mp-count" data-testid="model-count">
               {`${matched} / ${total}`}
@@ -588,18 +506,21 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
             variant="primary"
             testId="model-use"
             disabled={selectedItem === null}
-            // 写进全局配置的作用范围放在主按钮的悬停提示里，不在正文多写一行说明
-            title={roleMode && !atRoles ? t("model.roleSaved") : undefined}
             onClick={() => apply(selectedItem)}
           >
-            {primaryLabel}
+            {t("model.use")}
           </Button>
         </>
       }
     >
       <nav ref={sideRef} className="mp-side" aria-label={t("model.scopes")}>
-        {scopeButton({ kind: "roles" }, t("model.rolesGroup"), view.tabs.length, "model-scope-roles")}
         {scopeButton({ kind: "all" }, t("model.all"), models?.length ?? 0, "model-scope-all")}
+        {scopeButton(
+          { kind: "scoped" },
+          zh ? "常用模型 (Scoped)" : "Scoped models",
+          scopedModels.length,
+          "model-scope-scoped",
+        )}
         {providers.length > 0 && (
           <p className="mp-scopes-head" aria-hidden="true">
             {t("model.providers")}
@@ -621,7 +542,6 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
           className="mp-table ui-scroll-fade"
           style={{ "--fade-inset": "var(--control-h-md)" } as CSSProperties}
         >
-          {/* 0 行时数字表头没有可对的列，跟着隐藏 */}
           {(models === null || items.length > 0) && (
             <div className="mp-cols" aria-hidden="true">
               <span />
@@ -649,7 +569,13 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
             )}
             {models !== null && items.length === 0 && (
               <p className="mp-empty" data-testid="model-empty">
-                {atRoles ? t("model.noRoles") : searching ? t("model.noMatch") : t("model.empty")}
+                {scope.kind === "scoped" && !searching
+                  ? zh
+                    ? "尚未收藏常用模型（点击模型左侧星标即可加入 enabledModels）"
+                    : "No scoped models yet (star any model to add it to enabledModels)"
+                  : searching
+                    ? t("model.noMatch")
+                    : t("model.empty")}
               </p>
             )}
             {groups}
@@ -657,28 +583,14 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
         </div>
         <div className="mp-foot">
           {shown !== null && <ModelDetails option={shown} insights={insights} />}
-          {!roleMode && !atRoles && (
-            <>
-              {/* 不支持思考的模型没有这一行（不再占一行写"不支持"）；快速模式开关仍在时只留开关 */}
-              {shown !== null && (shownLevels.length > 0 || (props.speed && shownIsCurrent)) && (
-                <div className="mp-ctl">
-                  <span className="mp-ctl-label">{shownLevels.length > 0 && t("model.thinking")}</span>
-                  <div className="mp-ctl-body">
-                    {shownLevels.length > 0 && (
-                      <>
-                        <ThinkingSegments levels={shownLevels} level={shownLevel} onPick={setPickedLevel} />
-                        {running && <span className="mp-hint">{t("composer.nextRequest")}</span>}
-                      </>
-                    )}
-                    {props.speed && shownIsCurrent && <SpeedToggle speed={props.speed} />}
-                  </div>
-                </div>
-              )}
-              {props.taskId !== undefined && (
-                <PrewalkSection taskId={props.taskId} model={model} smol={view.modelOf["smol"] ?? null} />
-              )}
-              {props.taskId !== undefined && <PresetSection taskId={props.taskId} onApplied={onClose} />}
-            </>
+          {shown !== null && shownLevels.length > 0 && (
+            <div className="mp-ctl">
+              <span className="mp-ctl-label">{t("model.thinking")}</span>
+              <div className="mp-ctl-body">
+                <ThinkingSegments levels={shownLevels} level={shownLevel} onPick={setPickedLevel} />
+                {running && <span className="mp-hint">{t("composer.nextRequest")}</span>}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -686,7 +598,6 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
   );
 }
 
-/** open 变 false 后等 Dialog 放完退出动画再卸载；每次打开都是全新的对话框状态（退出动画中又打开也是，见 useOpenKey）。 */
 export function ModelPicker(props: ModelPickerProps & { open: boolean }) {
   const presence = usePresence(props.open);
   const key = useOpenKey(props.open);

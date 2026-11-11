@@ -8,8 +8,7 @@ import { restoreDocument } from "../../shared/tsp/document.ts";
 import { lastAnswerText } from "../../shared/tsp/last-answer.ts";
 import { userMessages } from "../../shared/tsp/user-messages.ts";
 import { runCommand } from "../git/exec.ts";
-import { getOmpExecutable } from "../omp-manager/index.ts";
-import { prependToPath } from "../omp/launch-args.ts";
+import { readyPiLaunch } from "../pi/runtime-singleton.ts";
 import { resolveLocale } from "../settings/settings-store.ts";
 import { getShellState } from "../window/window-state.ts";
 import { chatsDir } from "./chats-dir.ts";
@@ -55,21 +54,20 @@ async function runHelperLlm(options: {
   cwd: string;
   taskModel?: string | null;
 }): Promise<string | null> {
-  if (!app.isPackaged && process.env["STUDIO_TEST_OMP"]) {
+  if (!app.isPackaged && (process.env["STUDIO_TEST_PI"] || process.env["STUDIO_TEST_OMP"])) {
     return null;
   }
   try {
-    const executable = await getOmpExecutable();
+    const launch = await readyPiLaunch();
     const shell = getShellState();
     const helperModel = shell.helperModel ?? "smol";
     const helperThinking: HelperThinking = shell.helperThinking ?? "off";
 
     const args: string[] = [
+      ...launch.prefixArgs,
       "-p",
       "--no-session",
       "--no-tools",
-      "--no-lsp",
-      "--no-pty",
       `--thinking=${helperThinking}`,
       `--system-prompt=${options.systemPrompt}`,
     ];
@@ -85,14 +83,14 @@ async function runHelperLlm(options: {
       args.push(`--model=${helperModel}`);
     }
 
-    args.push(options.userPrompt);
+    args.push("--", options.userPrompt);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), HELPER_TIMEOUT_MS);
     try {
-      const result = await runCommand(executable.path, args, {
+      const result = await runCommand(launch.command, args, {
         cwd: options.cwd,
-        env: prependToPath({ ...process.env }, executable.managedBin),
+        env: { ...process.env, ...launch.env },
         signal: controller.signal,
       });
       if (result.code !== 0) return null;

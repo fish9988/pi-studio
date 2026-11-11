@@ -1,11 +1,10 @@
-// 任务的可用斜杠命令：主进程按任务目录向项目 rpc-ui 取的 get_available_commands（含项目 skill、自定义命令、扩展命令），
-// 加上 TSP 任务里 TUI 才有的命令（shared/omp-tui-commands.ts）。命令面板和输入框的 "/" 补全共用。
+// 任务的可用斜杠命令：主进程按任务目录向 `pi` 取的 `get_commands`（含项目/用户 skill、prompt 模板与扩展命令）；
+// Pi 内置与 Studio 接管的 24 条斜杠命令在输入框/面板里由 `withStudioSlash`（`pi-slash-table.ts`）合并。
 // 有人用到某个任务（或草稿页）时向主进程取，拿到非空列表之前每次任务状态变化都会再取（规则见 slash-cache.ts）；
-// 之后 omp 主动推来新列表（`available_commands_update`，如重新加载插件）由 slashCommands 事件整份替换。
+// 之后任务进程推来新列表由 slashCommands 事件整份替换。
 import { useEffect } from "react";
 import type { AvailableSlashCommand } from "../../../../shared/omp-wire/rpc-wire.generated.ts";
 import type { TaskId } from "../../../../shared/ipc.ts";
-import { mergeTuiCommands } from "../../../../shared/omp-tui-commands.ts";
 import { createStore, useStoreValue } from "../../store/create-store.ts";
 import { useTask } from "../../store/index.ts";
 import { createSlashLoader } from "./slash-cache.ts";
@@ -17,7 +16,7 @@ const byKey = createStore<Readonly<Record<string, readonly AvailableSlashCommand
 const none: readonly AvailableSlashCommand[] = [];
 
 const publish = (key: string, commands: readonly AvailableSlashCommand[]) =>
-  byKey.set({ ...byKey.get(), [key]: mergeTuiCommands(commands) });
+  byKey.set({ ...byKey.get(), [key]: commands });
 
 const loader = createSlashLoader(
   (key) => window.studio.listSlashCommands(key === DRAFT_KEY ? null : (key as TaskId)),

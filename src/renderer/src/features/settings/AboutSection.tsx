@@ -7,21 +7,24 @@ import { useAppInfo, useUpdateState } from "../../store/index.ts";
 import { describeError, reportError } from "../../ui/errors.ts";
 import { Button, IconButton, Row, SectionHead } from "../../ui/controls.tsx";
 import { Changelog } from "./Changelog.tsx";
-import { OmpSection } from "./OmpSection.tsx";
+import { PiCliCard } from "./pi/index.ts";
 import { TroubleshootCard } from "./TroubleshootCard.tsx";
 import { updateStatusText } from "./update-status.ts";
 import { useAsyncAction } from "./use-async-action.ts";
 import { useInstallUpdate } from "./use-install-update.tsx";
 
 /** 项目主页（GitHub 仓库）：标签右边的图标按钮用系统浏览器打开。 */
-const repoUrl = "https://github.com/DawnJson/omp-studio";
+const repoUrl = "https://github.com/fish9988/pi-studio";
 
 export function AboutSection() {
   const t = useT();
   return (
     <>
       <SectionHead title={t("settings.about.versions")} />
-      <OmpSection studio={<StudioUpdate />} />
+      <div className="st-cells">
+        <StudioUpdate />
+      </div>
+      <PiCliCard />
       <Changelog />
       <SectionHead title={t("settings.about.troubleshoot")} />
       <TroubleshootCard />
@@ -46,7 +49,7 @@ function StudioUpdate() {
 
   const label = (
     <span className="st-about-name">
-      omp-studio
+      pi-studio
       <IconButton
         label={t("settings.about.repo")}
         testId="about-repo"

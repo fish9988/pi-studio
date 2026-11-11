@@ -1,38 +1,33 @@
-// 自定义模型的 IPC：读写 omp 的 models.yml、一键拉取模型列表。规则和边界见 docs/architecture/omp-boundaries.md「自己写 omp 配置的例外」、
-// docs/architecture/custom-models.md。key 只进不出；日志只记 provider id 和结果，不记 key、不记 URL 里的查询串。
+// 自定义模型与 Provider 的 IPC：读写 Pi 的 `~/.pi/agent/models.json`、一键拉取模型列表与能力补全。
+// key 只进不出；日志只记 provider id 和结果，不记 key、不记 URL 里的查询串。
 import { existsSync } from "node:fs";
-import { net, shell } from "electron";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { net, shell } from "electron";
 import {
   isValidEnvName,
   limits,
   type CustomKeyInput,
   type CustomModelMeta,
   type CustomProviderInput,
-  type ProviderOverrideInput,
   type FetchModelsOutcome,
+  type ProviderOverrideInput,
 } from "../../shared/custom-models.ts";
 import type { HandlerGroup } from "../../shared/ipc.ts";
-import { envFilePath, envSourceOf, envValues, readEnvText } from "../omp-config/env-file.ts";
 import { resolveAgentDir } from "../history/session-index.ts";
 import { log } from "../log/log.ts";
+import { envFilePath, envSourceOf, envValues, readEnvText } from "../omp-config/env-file.ts";
 import { fetchModelList, resolveKeyToken } from "../omp-config/fetch-models.ts";
 import { lookupCapabilities } from "../omp-config/model-catalog.ts";
 import {
-  deleteCustomProvider,
-  readModelsFile,
-  readProviderKey,
-  saveCustomProvider,
-  saveProviderOverride,
-} from "../omp-config/models-file.ts";
-import { readyOmp } from "../omp-manager/index.ts";
+  deletePiCustomProvider,
+  readPiModelsFile,
+  readPiProviderKey,
+  savePiCustomProvider,
+  savePiProviderOverride,
+} from "../pi-config/auth-and-models.ts";
 import { reloadServiceModels } from "../service/default-model.ts";
-import { serviceCwd } from "../service/service-omp.ts";
-import { requireSuccess, runOmpCommand } from "../usage/usage-service.ts";
 import { IpcValidationError, parseBoolean, parseInteger, parseOneOf, parseRecord, parseString } from "./validate.ts";
-
-/** `omp models refresh` 要联网拉各 provider 的目录，慢的会要几十秒。 */
-const REFRESH_TIMEOUT_MS = 120_000;
 
 function parseKey(value: unknown): CustomKeyInput {
   const record = parseRecord(value, "key");
@@ -55,7 +50,7 @@ function parseOverrideKey(value: unknown): ProviderOverrideInput["key"] {
   if (value === null) return null;
   const key = parseKey(value);
   if (key.kind !== "none") return key;
-  throw new IpcValidationError(`key.kind must be keep, literal or env`);
+  throw new IpcValidationError("key.kind must be keep, literal or env");
 }
 
 function parseModels(value: unknown): Record<string, unknown>[] {
@@ -76,7 +71,6 @@ function parseTokens(value: unknown, name: string): number {
   return parseInteger(value, name, 1, limits.tokens);
 }
 
-/** 只校验形状（类型、长度）；内容规则（id 字符集、URL 协议……）在 models-file.ts，不合格返回 {ok:false, code}。 */
 function parseInput(value: unknown): CustomProviderInput {
   const record = parseRecord(value, "input");
   return {
@@ -119,14 +113,13 @@ async function fetchProviderModels(value: unknown): Promise<FetchModelsOutcome> 
   let raw: string | null = null;
   if (key.kind === "literal") raw = key.value.trim() === "" || /\p{Cc}/u.test(key.value) ? null : key.value;
   else if (key.kind === "env" && key.value !== undefined && key.value !== "")
-    raw = /\p{Cc}/u.test(key.value) ? null : key.value; // 刚填、还没写进 .env 的 key 直接用
+    raw = /\p{Cc}/u.test(key.value) ? null : key.value;
   else if (key.kind === "env") raw = key.name;
-  else if (key.kind === "keep" && providerId !== null) raw = await readProviderKey(resolveAgentDir(), providerId);
+  else if (key.kind === "keep" && providerId !== null) raw = await readPiProviderKey(resolveAgentDir(), providerId);
   if ((key.kind === "literal" || key.kind === "env") && raw === null) return { ok: false, code: "invalid-key" };
 
   let token: string | null = null;
   if (raw !== null) {
-    // 和 omp 一样：进程里非空的环境变量优先，其次 agent 目录的 .env（studio 自己的进程没加载它）。
     const fromProcess = Object.entries(process.env).filter(([, v]) => v !== undefined && v !== "");
     const env = { ...envValues(await readEnvText(resolveAgentDir())), ...Object.fromEntries(fromProcess) };
     token = resolveKeyToken(raw, env);
@@ -151,28 +144,26 @@ export const customModelHandlers: HandlerGroup<
   | "openEnvFile"
   | "envKeySource"
 > = {
-  listCustomProviders: () => readModelsFile(resolveAgentDir()),
+  listCustomProviders: () => readPiModelsFile(resolveAgentDir()),
   saveCustomProvider: async (mode, input) => {
-    const outcome = await saveCustomProvider(
+    const outcome = await savePiCustomProvider(
       resolveAgentDir(),
       parseInput(input),
       parseOneOf(mode, "mode", ["add", "edit"] as const),
     );
     log.info(`custom provider ${mode}: ${outcome.ok ? "saved" : outcome.code}`);
-    // omp 只在启动时读 models.yml（实测 18.12.1：同一进程里改了文件不会重新加载），所以关掉服务进程并作废模型缓存，
-    // 下次读模型列表时重新起；已经在跑的任务进程要等下次启动才看得到。
     if (outcome.ok) await reloadServiceModels();
     return outcome;
   },
   deleteCustomProvider: async (providerId) => {
-    const outcome = await deleteCustomProvider(resolveAgentDir(), parseString(providerId, "providerId", 200));
+    const outcome = await deletePiCustomProvider(resolveAgentDir(), parseString(providerId, "providerId", 200));
     log.info(`custom provider delete: ${outcome.ok ? "deleted" : outcome.code}`);
     if (outcome.ok) await reloadServiceModels();
     return outcome;
   },
   saveProviderOverride: async (providerId, input) => {
     const parsed = parseOverrideInput(input);
-    const outcome = await saveProviderOverride(resolveAgentDir(), parseString(providerId, "providerId", 200), parsed);
+    const outcome = await savePiProviderOverride(resolveAgentDir(), parseString(providerId, "providerId", 200), parsed);
     log.info(
       `custom provider override: key ${parsed.key?.kind ?? "clear"}, ${parsed.models.length} model(s): ${outcome.ok ? "saved" : outcome.code}`,
     );
@@ -181,28 +172,25 @@ export const customModelHandlers: HandlerGroup<
   },
   fetchProviderModels,
   lookupModelCapabilities: async (ids) => {
-    // 一键拉取最多 2000 个模型，加上已有的。
     if (!Array.isArray(ids) || ids.length > 3000) throw new IpcValidationError("ids 必须是数组");
     const parsed = (ids as unknown[]).map((id) => parseString(id, "id", limits.modelId));
     return lookupCapabilities((url, init) => net.fetch(url, init), parsed);
   },
   refreshModels: async () => {
-    const run = runOmpCommand(readyOmp().path, await serviceCwd(), REFRESH_TIMEOUT_MS);
-    requireSuccess("omp models refresh", await run(["models", "refresh"]));
-    log.info("omp models refresh: done");
-    // 服务进程的模型注册表是启动时建的：关掉它（并作废模型缓存），下次读模型列表时重新起、读到刷新后的目录。
     await reloadServiceModels();
   },
   openModelsFile: async () => {
-    const info = await readModelsFile(resolveAgentDir());
+    const agentDir = resolveAgentDir();
+    await mkdir(agentDir, { recursive: true });
+    const info = await readPiModelsFile(agentDir);
     await openInShell(info.exists ? info.path : path.dirname(info.path));
   },
-  // omp 启动时读 agent 目录的 `.env`（omp://providers.md「.env discovery」）；没有时打开目录。
   openEnvFile: async () => {
-    const file = envFilePath(resolveAgentDir());
+    const agentDir = resolveAgentDir();
+    await mkdir(agentDir, { recursive: true });
+    const file = envFilePath(agentDir);
     await openInShell(existsSync(file) ? file : path.dirname(file));
   },
-  // 只回答"这个变量设在哪"，不回值；不合法的名字当没设置。
   envKeySource: async (name) => {
     const parsed = parseString(name, "name", limits.envName, { allowEmpty: true });
     if (!isValidEnvName(parsed)) return "missing";
@@ -211,8 +199,7 @@ export const customModelHandlers: HandlerGroup<
 };
 
 async function openInShell(target: string): Promise<void> {
-  if (!existsSync(target)) throw new Error("the omp agent directory does not exist yet");
-  // openPath 失败不抛，返回错误文字；没有程序关联的扩展名（如 .env）Windows 弹"打开方式"，返回空串。
+  if (!existsSync(target)) throw new Error("the pi agent directory does not exist yet");
   const failure = await shell.openPath(target);
   if (failure !== "") throw new Error(failure);
 }

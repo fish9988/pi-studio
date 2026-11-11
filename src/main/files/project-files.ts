@@ -12,7 +12,7 @@ const MAX_QUERY_CHARS = 256;
 const MAX_WALK_DIRS = 5_000;
 const CACHE_TTL_MS = 10_000;
 const MAX_CACHED_DIRS = 8;
-const SKIPPED_DIRS = new Set(["node_modules", ".git", "out", "dist", ".omp", ".next", ".turbo"]);
+const SKIPPED_DIRS = new Set(["node_modules", ".git", "out", "dist", ".pi", ".omp", ".next", ".turbo"]);
 
 /**
  * 查询词的形状校验：渲染进程传来的不可信。查询词只用来匹配相对路径，但它是用户在 `@` 后面敲的路径，

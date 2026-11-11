@@ -61,11 +61,11 @@ function layoutWord(word: string, startX: number): { pixels: Pixel[]; endX: numb
   return { pixels, endX: x };
 }
 
-const ompWord = layoutWord("omp", textX);
-const studioWord = layoutWord("studio", ompWord.endX + wordGap);
-const ompViewWidth = studioWord.endX;
-const ompViewHeight = markHeight;
-const ompPath = ompWord.pixels.map(({ x, y }) => `M${x} ${y}h1v1h-1z`).join("");
+const piWord = layoutWord("pi", textX);
+const studioWord = layoutWord("studio", piWord.endX + wordGap);
+const piViewWidth = studioWord.endX;
+const piViewHeight = markHeight;
+const piPath = piWord.pixels.map(({ x, y }) => `M${x} ${y}h1v1h-1z`).join("");
 const studioPath = studioWord.pixels.map(({ x, y }) => `M${x} ${y}h1v1h-1z`).join("");
 
 export function PixelLogo({
@@ -77,28 +77,22 @@ export function PixelLogo({
   unit?: number;
   brandOverride?: BrandStyle;
 }) {
-  const storedBrand = useShellValue("brandStyle") ?? "claude";
+  const storedBrand = useShellValue("brandStyle") ?? "pi";
   const brand = brandOverride ?? storedBrand;
 
-  if (brand === "omp") {
+  if (brand === "pi" || brand === "omp") {
     return (
-      <span
-        className="claude-brand-lockup"
-        role="img"
-        aria-label="omp studio"
-        data-testid="pixel-logo"
-        data-brand="omp"
-      >
+      <span className="claude-brand-lockup" role="img" aria-label="pi studio" data-testid="pixel-logo" data-brand="pi">
         <svg
           className="pixel-logo"
-          width={ompViewWidth * unit}
-          height={ompViewHeight * unit}
-          viewBox={`0 0 ${ompViewWidth} ${ompViewHeight}`}
+          width={piViewWidth * unit}
+          height={piViewHeight * unit}
+          viewBox={`0 0 ${piViewWidth} ${piViewHeight}`}
           shapeRendering="crispEdges"
           aria-hidden="true"
         >
           <PiMark />
-          <path className="pixel-logo-text" d={ompPath} fill="var(--text)" />
+          <path className="pixel-logo-text" d={piPath} fill="var(--text)" />
           <path className="pixel-logo-text" d={studioPath} fill="var(--text-2)" />
         </svg>
         {version && (
@@ -120,7 +114,7 @@ export function PixelLogo({
       <span
         className="claude-brand-lockup"
         role="img"
-        aria-label="omp studio"
+        aria-label="pi studio"
         data-testid="pixel-logo"
         data-brand="deepseek"
       >

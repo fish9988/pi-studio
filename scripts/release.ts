@@ -70,9 +70,9 @@ git("tag", "-a", `v${version}`, "-m", `v${version}`);
 npm("run", "dist");
 // 只留这一版的安装包；差量更新用的旧版本 .blockmap 在之前各版本的 GitHub Release 里。
 const releaseDir = path.join(root, "release");
-const installer = `omp-studio-${version}-setup.exe`;
+const installer = `pi-studio-${version}-setup.exe`;
 const stale = (await readdir(releaseDir)).filter(
-  (file) => /^omp-studio-.+-setup\.exe(\.blockmap)?$/.test(file) && !file.startsWith(installer),
+  (file) => /^pi-studio-.+-setup\.exe(\.blockmap)?$/.test(file) && !file.startsWith(installer),
 );
 await Promise.all(stale.map((file) => rm(path.join(releaseDir, file), { force: true })));
 // 正斜杠：这条命令会被贴进 bash，反斜杠会被吃掉；node 两种都认。

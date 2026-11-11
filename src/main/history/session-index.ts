@@ -42,12 +42,12 @@ export interface SessionScan {
   skipped: number;
 }
 
-/** omp 的 agent 目录：PI_CODING_AGENT_DIR 覆盖默认 profile；否则 <home>/<PI_CONFIG_DIR 或 .omp>/agent。 */
+/** Pi 的 agent 目录：PI_CODING_AGENT_DIR 覆盖默认 profile；否则 <home>/<PI_CONFIG_DIR 或 .pi>/agent。 */
 export function resolveAgentDir(env: NodeJS.ProcessEnv = process.env, home: string = os.homedir()): string {
   const override = env["PI_CODING_AGENT_DIR"];
   if (override !== undefined && override !== "") return path.resolve(override);
   const configDirName = env["PI_CONFIG_DIR"];
-  return path.join(home, configDirName !== undefined && configDirName !== "" ? configDirName : ".omp", "agent");
+  return path.join(home, configDirName !== undefined && configDirName !== "" ? configDirName : ".pi", "agent");
 }
 
 /** 标题和提示文本：只留第一个非空行，去掉控制字符，限长。 */
@@ -93,6 +93,7 @@ export function parseSessionPrefix(text: string, truncated: boolean): ParsedHead
   if (truncated) lines.pop();
 
   let slotTitle: string | null = null;
+  let infoTitle: string | null = null;
   let header: Record<string, unknown> | null = null;
   let firstPrompt: string | null = null;
 
@@ -116,8 +117,13 @@ export function parseSessionPrefix(text: string, truncated: boolean): ParsedHead
       header = entry;
       continue;
     }
+    if (entry["type"] === "session_info" && typeof entry["name"] === "string") {
+      infoTitle = sanitizeText(entry["name"]);
+    } else if (entry["type"] === "title_change" && typeof entry["title"] === "string") {
+      infoTitle = sanitizeText(entry["title"]);
+    }
     if (entry["type"] === "message" && firstPrompt === null) firstPrompt = userMessageText(entry);
-    if (firstPrompt !== null) break;
+    if (firstPrompt !== null && slotTitle !== null) break;
   }
 
   if (header === null) return null;
@@ -125,7 +131,7 @@ export function parseSessionPrefix(text: string, truncated: boolean): ParsedHead
   const cwd = header["cwd"];
   if (typeof id !== "string" || id === "" || typeof cwd !== "string" || cwd === "") return null;
   const headerTitle = typeof header["title"] === "string" ? sanitizeText(header["title"]) : null;
-  return { id, cwd, title: slotTitle ?? headerTitle, firstPrompt };
+  return { id, cwd, title: infoTitle ?? slotTitle ?? headerTitle, firstPrompt };
 }
 
 /** 读文件前 maxBytes 字节；返回文本和"文件是否比读到的更长"。 */

@@ -7,11 +7,11 @@ import { useDraftSlashCommands } from "../palette/slash-commands.ts";
 import { primaryMod } from "../../app/platform-keys.ts";
 import { matchSlash, slashQuery } from "./slash-match.ts";
 import { findStudioSlash, handledCommands, withStudioSlash } from "./studio-slash.ts";
-import { studioSlashCommands } from "./studio-slash-table.ts";
+import { PI_STUDIO_SLASH_COMMANDS } from "./pi-slash-table.ts";
 
 /** 草稿开头是草稿页能处理的 studio 命令时，返回要执行的动作；否则 null（照常当第一条消息发出）。 */
 export function draftSlashRunner(text: string, t: TFunction): (() => Promise<void> | void) | null {
-  const hit = findStudioSlash(text, handledCommands(studioSlashCommands, "draft"));
+  const hit = findStudioSlash(text, handledCommands(PI_STUDIO_SLASH_COMMANDS, "draft"));
   if (hit === null) return null;
   const { command, args } = hit;
   return () => command.draft?.(args, t);
@@ -37,7 +37,7 @@ export function useDraftSlashMenu(
 ): DraftSlashMenu {
   const omp = useDraftSlashCommands();
   const commands = useMemo(
-    () => (omp.length === 0 ? omp : withStudioSlash(omp, studioSlashCommands, t, "draft")),
+    () => (omp.length === 0 ? omp : withStudioSlash(omp, PI_STUDIO_SLASH_COMMANDS, t, "draft")),
     [omp, t],
   );
   const [index, setIndex] = useState(0);

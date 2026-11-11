@@ -8,13 +8,13 @@ import { appendToDraft, clearDraft, getDraft, restoreDraft } from "./draft-store
 import { buildSubmission, ensureAttachmentTokens } from "./composer-tokens.ts";
 import { stopToasts } from "./stop-outcome.ts";
 import { findStudioSlash, handledCommands, type SlashRunResult } from "./studio-slash.ts";
-import { studioSlashCommands } from "./studio-slash-table.ts";
+import { PI_STUDIO_SLASH_COMMANDS } from "./pi-slash-table.ts";
 
 export type Delivery = "steer" | "followUp";
 
 /**
  * 发送草稿。先清空输入框（乐观），发送失败再放回去并提示；发送后强制吸底。
- * studio 接管的斜杠命令（studio-slash-table.ts）不发给 omp；别的 `/` `!` 开头的文字原样交给 omp（它自己处理并在过程区里画界面）。
+ * studio 接管的斜杠命令（pi-slash-table.ts）不发给 Pi；别的 `/` `!` 开头的文字原样交给 Pi。
  */
 export async function sendDraft(taskId: TaskId, whenBusy: Delivery, t: TFunction): Promise<void> {
   const draft = getDraft(taskId);
@@ -22,7 +22,8 @@ export async function sendDraft(taskId: TaskId, whenBusy: Delivery, t: TFunction
   const submission = buildSubmission(ensureAttachmentTokens(draft));
   const text = submission.text.trim();
   if (text === "" && submission.images.length === 0 && submission.files.length === 0) return;
-  const studio = submission.images.length === 0 ? findStudioSlash(text, handledCommands(studioSlashCommands)) : null;
+  const studio =
+    submission.images.length === 0 ? findStudioSlash(text, handledCommands(PI_STUDIO_SLASH_COMMANDS)) : null;
   clearDraft(taskId);
   if (studio !== null) {
     let outcome: SlashRunResult | void;

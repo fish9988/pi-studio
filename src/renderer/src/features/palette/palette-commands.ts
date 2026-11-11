@@ -2,7 +2,7 @@
 import { reportError } from "../../ui/errors.ts";
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import type { Locale, TaskState, TerminalKey } from "../../../../shared/ipc.ts";
-import { showView } from "../../store/index.ts";
+import { selectTask, showView } from "../../store/index.ts";
 import { openReview } from "../../store/review-store.ts";
 import { archiveWithUndo } from "../sidebar/archive-store.ts";
 import { startDraft } from "../empty/index.ts";
@@ -14,8 +14,6 @@ import { openSessionTree } from "../conversation/session-tree-store.ts";
 import { toggleAgentsPanel } from "../agents/agents-store.ts";
 import { toggleBrowserPanel } from "../browser/browser-store.ts";
 import { openBtw } from "../btw/index.ts";
-import { goalButtons } from "../goal/goal-model.ts";
-import { runGoalOp } from "../goal/goal-actions.ts";
 import type { CommandEntry } from "../../../../shared/ui/palette-model.ts";
 import { emitStudioCommand } from "./studio-command.ts";
 import { setUsageDialogOpen } from "../composer/usage-store.ts";
@@ -30,8 +28,6 @@ export interface CommandContext {
   terminalKey: TerminalKey | null;
   hasWaiting: boolean;
 }
-
-const goalCommandKey = { pause: "goal.cmdPause", resume: "goal.cmdResume", drop: "goal.cmdDrop" } as const;
 
 export function buildCommands({ t, locale, current, terminalKey, hasWaiting }: CommandContext): CommandEntry[] {
   const guard = (promise: Promise<unknown>) => void promise.catch((error: unknown) => reportError(t, error));
@@ -72,21 +68,23 @@ export function buildCommands({ t, locale, current, terminalKey, hasWaiting }: C
     },
     // 压缩：发 omp 的 `/compact`，等压缩分隔出现（TspRunner.compact）；失败（会话太小等）按 omp 的原文报错。
     current && { id: "compact", label: t("cmd.compact"), run: () => guard(window.studio.compactTask(current.id)) },
-    // 重开会话：结束 omp 进程再 `--resume`，重新读 skill、MCP、插件和配置；任务忙时不列。
+    // 重开会话：结束 Pi 进程再恢复会话，重新读 Skill、MCP、扩展包和配置；任务忙时不列。
     current?.restartable && {
       id: "restartSession",
       label: t("task.restart"),
       shortcut: "Ctrl Shift R",
       run: () => void restartSession(t, current),
     },
-    // 目标（`/goal`）：走 omp 的 `/goal pause|resume|drop`（docs/architecture/conversation.md「目标模式」）。
-    ...(current
-      ? goalButtons(current.goal).map((op) => ({
-          id: `goal-${op}`,
-          label: t(goalCommandKey[op]),
-          run: () => void runGoalOp(current.id, op, t),
-        }))
-      : []),
+    current && {
+      id: "cloneSession",
+      label: locale === "zh-CN" ? "克隆当前会话分支 (/clone)" : "Clone session branch (/clone)",
+      run: () =>
+        guard(
+          window.studio.cloneTask(current.id).then((res) => {
+            return selectTask(res.task.id);
+          }),
+        ),
+    },
     current && { id: "sessionTree", label: t("cmd.sessionTree"), run: () => openSessionTree(current.id) },
     // 子代理面板（右栏）。
     current && { id: "agents", label: t("agents.cmd"), run: () => toggleAgentsPanel(current.id) },
@@ -153,13 +151,11 @@ export function buildCommands({ t, locale, current, terminalKey, hasWaiting }: C
         setUsageDialogOpen(true);
       },
     },
-    // 插件、更新检查、快捷键清单在设置页里，直接定位到对应分节。
+    // 扩展包、MCP、工具、Context、快捷键清单在设置页里，直接定位到对应分节。
     { id: "plugins", label: t("cmd.plugins"), run: () => showView("settings", { section: "extensions" }) },
-    // MCP / SSH / 可用工具 / 记忆 / omp 更新日志所在的设置分节。
     { id: "mcp", label: t("integrations.cmd.mcp"), run: () => showView("settings", { section: "extensions" }) },
-    { id: "ssh", label: t("integrations.cmd.ssh"), run: () => showView("settings", { section: "extensions" }) },
     { id: "tools", label: t("integrations.cmd.tools"), run: () => showView("settings", { section: "tools" }) },
-    { id: "memory", label: t("integrations.cmd.memory"), run: () => showView("settings", { section: "context" }) },
+    { id: "context", label: t("settings.context"), run: () => showView("settings", { section: "context" }) },
     { id: "changelog", label: t("integrations.cmd.changelog"), run: () => showView("settings", { section: "about" }) },
     { id: "checkUpdate", label: t("cmd.checkUpdate"), run: () => showView("settings", { section: "about" }) },
     { id: "about", label: t("window.about"), run: () => emitStudioCommand("about") },

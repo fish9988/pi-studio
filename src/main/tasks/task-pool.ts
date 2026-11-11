@@ -28,7 +28,10 @@ import type {
 } from "../../shared/ipc.ts";
 import type { DocBlob } from "../../shared/tsp/document.ts";
 import type { AvailableSlashCommand, GoalOp, ThinkingLevel } from "../../shared/omp-wire/rpc-wire.generated.ts";
+import type { PiCloneResult } from "../../shared/pi-config-types.ts";
 import type { OmpLaunch } from "../omp/omp-connection.ts";
+import type { PiLaunch } from "../pi/discover.ts";
+import { PiTaskRunner, type PiTaskRunnerHost } from "../pi/pi-task-runner.ts";
 import type { BtwHistoryRecord, BtwUiEvent } from "../../shared/btw.ts";
 import type { TspEvent } from "../../shared/tsp/tsp.generated.ts";
 import { titleFromPrompt } from "./convert.ts";
@@ -94,10 +97,14 @@ export interface PoolDeps {
   exportSession?(sessionFile: string, outputPath: string, cwd: string): Promise<void>;
   /** omp 对这个项目的新任务默认值（和草稿页同源）：输入框出现之前用它显示模型和思考强度；没传时不显示。 */
   newTaskDefaults?(project: Project): Promise<NewTaskDefaults>;
-  /** 伪终端里的交互式 omp（TspSession）的依赖。 */
-  tsp: {
+  /** 伪终端里的交互式 omp（TspSession）的依赖（单元测试使用）。 */
+  tsp?: {
     buildLaunch(record: TaskRecord, project: Project): Promise<OmpLaunch>;
     session: TspSessionDeps;
+  };
+  /** 原生 `pi --mode rpc` 任务运行器依赖。 */
+  pi?: {
+    buildPiLaunch(record: TaskRecord, project: Project): Promise<PiLaunch>;
   };
 }
 
@@ -111,33 +118,33 @@ export interface ResumeInput {
   modifiedAt: number;
 }
 
+type PoolRunner = TspRunner | PiTaskRunner;
+
 export class TaskPool {
   readonly #deps: PoolDeps;
-  readonly #runners = new Map<TaskId, TspRunner>();
+  readonly #runners = new Map<TaskId, PoolRunner>();
   readonly #recyclableSince = new Map<TaskId, number>();
   #foreground: TaskId | null = null;
   #sweepTimer: NodeJS.Timeout | undefined;
   #shuttingDown = false;
-  readonly #host: TspRunnerHost;
+  readonly #tspHost: TspRunnerHost | null;
+  readonly #piHost: PiTaskRunnerHost | null;
 
   constructor(deps: PoolDeps) {
     this.#deps = deps;
-    const tsp = deps.tsp;
-    this.#host = {
-      buildLaunch: (record, project) => tsp.buildLaunch(record, project),
-      persist: (id, patch) => deps.registry.updateTask(id, patch),
-      isForeground: (id) => this.#foreground === id,
-      acquireSlot: (id) => this.#acquireSlot(id),
-      onState: (state) => {
+    const sharedHost = {
+      persist: (id: TaskId, patch: Parameters<TaskRegistry["updateTask"]>[1]) => deps.registry.updateTask(id, patch),
+      isForeground: (id: TaskId) => this.#foreground === id,
+      acquireSlot: (id: TaskId) => this.#acquireSlot(id),
+      onState: (state: TaskState) => {
         deps.events.state(state);
         // 进程自己退出或被停止时，退出任务的最后一份快照也要受 SNAPSHOT_LRU_SIZE 约束。
         if (state.status === "stopped" || state.status === "error") this.#trimSnapshots();
       },
-      onTspBatch: (batch) => deps.events.tspBatch?.(batch),
-      onBtw: (taskId, event) => deps.events.btw?.(taskId, event),
-      onComposerPrefill: (taskId, draft) => deps.events.composerPrefill?.(taskId, draft),
-      onNotice: (notice) => deps.events.notice(notice),
-      session: tsp.session,
+      onTspBatch: (batch: TspBatch) => deps.events.tspBatch?.(batch),
+      onBtw: (taskId: TaskId, event: BtwUiEvent) => deps.events.btw?.(taskId, event),
+      onComposerPrefill: (taskId: TaskId, draft: RestoredDraft) => deps.events.composerPrefill?.(taskId, draft),
+      onNotice: (notice: TaskNotice) => deps.events.notice(notice),
       knownModels: () => deps.knownModels?.() ?? [],
       ...(deps.listModels && { listModels: (refresh: boolean) => deps.listModels!(refresh) }),
       ...(deps.newTaskDefaults && { newTaskDefaults: (project: Project) => deps.newTaskDefaults!(project) }),
@@ -147,6 +154,24 @@ export class TaskPool {
           deps.exportSession!(sessionFile, outputPath, cwd),
       }),
     };
+    const pi = deps.pi;
+    const tsp = deps.tsp;
+    this.#piHost = pi
+      ? {
+          ...sharedHost,
+          buildPiLaunch: (record, project) => pi.buildPiLaunch(record, project),
+        }
+      : null;
+    this.#tspHost = tsp
+      ? {
+          ...sharedHost,
+          buildLaunch: (record, project) => tsp.buildLaunch(record, project),
+          session: tsp.session,
+        }
+      : null;
+    if (this.#piHost === null && this.#tspHost === null) {
+      throw new Error("TaskPool requires either deps.pi or deps.tsp");
+    }
   }
 
   /** 载入 tasks.json，为未归档的任务建（还没有进程的）运行时，并开始定时回收。 */
@@ -159,15 +184,17 @@ export class TaskPool {
     this.#sweepTimer.unref();
   }
 
-  #adopt(record: TaskRecord): TspRunner {
+  #adopt(record: TaskRecord): PoolRunner {
     const project = this.#deps.registry.findProject(record.projectId);
     if (!project) throw new Error(`task ${record.id} refers to unknown project ${record.projectId}`);
-    const runner = new TspRunner(record, project, this.#host);
+    const runner: PoolRunner = this.#piHost
+      ? new PiTaskRunner(record, project, this.#piHost)
+      : new TspRunner(record, project, this.#tspHost!);
     this.#runners.set(record.id, runner);
     return runner;
   }
 
-  #runner(id: TaskId): TspRunner {
+  #runner(id: TaskId): PoolRunner {
     const runner = this.#runners.get(id);
     if (!runner) throw new Error(`unknown task ${id}`);
     return runner;
@@ -243,7 +270,7 @@ export class TaskPool {
   }
 
   /** 启动失败时状态已是 error 并已推送；这里不重复抛出（没有调用方在等）。 */
-  #startInBackground(runner: TspRunner): void {
+  #startInBackground(runner: PoolRunner): void {
     runner.start().catch(() => {});
   }
 
@@ -389,9 +416,38 @@ export class TaskPool {
     this.#deps.events.taskRemoved(id);
   }
 
-  /** 压缩上下文：发 `/compact`，等 omp 画出压缩分隔（成功）或 "Error: Compaction failed: …"（失败，原文抛出），见 `TspRunner.compact`。 */
-  async compactTask(id: TaskId): Promise<void> {
-    await this.#runner(id).compact();
+  /** 压缩上下文：发 `/compact`（可选说明），等待压缩完成。 */
+  async compactTask(id: TaskId, instructions?: string): Promise<void> {
+    const runner = this.#runner(id);
+    if (runner instanceof PiTaskRunner) {
+      await runner.compact(instructions);
+      return;
+    }
+    await runner.compact();
+  }
+
+  /** 克隆当前会话分支为新的独立任务与会话文件（对应 Pi `/clone`）。 */
+  async cloneTask(id: TaskId): Promise<PiCloneResult> {
+    const source = this.#runner(id);
+    const sourceFile = source.record.sessionFile;
+    if (sourceFile === null) throw new Error("this task has no session file yet");
+    const { projectId, title, model, thinkingLevel, worktreePath, worktreeBranch, worktreeBase, cwd } = source.record;
+    const record = await this.#deps.registry.addTask({
+      projectId,
+      sessionFile: null,
+      forkFrom: sourceFile,
+      title: title === "" ? title : (this.#deps.forkTitle?.(title) ?? title),
+      model,
+      thinkingLevel,
+      ...(cwd != null && { cwd }),
+      ...(worktreePath !== null &&
+        worktreeBranch !== null &&
+        worktreeBase !== null && { worktree: { path: worktreePath, branch: worktreeBranch, base: worktreeBase } }),
+    });
+    const cloned = this.#adopt(record);
+    this.#deps.events.state(cloned.state);
+    await cloned.start();
+    return { task: { id: cloned.id } };
   }
 
   /** 重开会话（`TspRunner.restart`）：关进程再 `--resume`；任务忙时拒绝。 */
@@ -622,7 +678,7 @@ export class TaskPool {
 
   // ───── 上限和回收 ─────
 
-  #liveRunners(except: TaskId): TspRunner[] {
+  #liveRunners(except: TaskId): PoolRunner[] {
     return [...this.#runners.values()].filter(
       (runner) => runner.id !== except && (runner.hasProcess || runner.status === "starting"),
     );
@@ -641,7 +697,7 @@ export class TaskPool {
     }
   }
 
-  async #recycle(runner: TspRunner): Promise<void> {
+  async #recycle(runner: PoolRunner): Promise<void> {
     await runner.close();
     this.#recyclableSince.delete(runner.id);
     this.#trimSnapshots();

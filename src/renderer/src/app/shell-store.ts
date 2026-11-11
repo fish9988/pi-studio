@@ -29,7 +29,7 @@ const shellStore = createStore<ShellUiState>({
   terminalHeight: defaultTerminalHeight,
   historyOrder: "folder",
   chatWidth: 0,
-  brandStyle: "claude",
+  brandStyle: "pi",
   mascot: "clawd",
   processRows: "column",
   helperModel: "smol",

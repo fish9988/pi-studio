@@ -57,13 +57,15 @@ export interface SetupScript {
  */
 export async function findSetupScript(repoRoot: string): Promise<SetupScript | null> {
   const names = process.platform === "win32" ? ["setup.ps1", "setup.cmd"] : ["setup.sh"];
-  for (const name of names) {
-    const file = path.join(repoRoot, ".omp-studio", name);
-    try {
-      const bytes = await readFile(file);
-      return { name: `.omp-studio/${name}`, file, sha256: createHash("sha256").update(bytes).digest("hex") };
-    } catch {
-      // 不存在，试下一个
+  for (const dirName of [".pi-studio", ".omp-studio"]) {
+    for (const name of names) {
+      const file = path.join(repoRoot, dirName, name);
+      try {
+        const bytes = await readFile(file);
+        return { name: `${dirName}/${name}`, file, sha256: createHash("sha256").update(bytes).digest("hex") };
+      } catch {
+        // 不存在，试下一个
+      }
     }
   }
   return null;
@@ -90,7 +92,13 @@ async function runSetupScript(script: SetupScript, repoRoot: string, worktreePat
     // 输出再多也不让创建失败：只留结尾给错误信息用。
     keepTailBytes: SETUP_OUTPUT_TAIL * 4,
     windowsVerbatimArguments: verbatim,
-    env: { ...process.env, OMP_STUDIO_PROJECT_DIR: repoRoot, OMP_STUDIO_WORKTREE_DIR: worktreePath },
+    env: {
+      ...process.env,
+      PI_STUDIO_PROJECT_DIR: repoRoot,
+      PI_STUDIO_WORKTREE_DIR: worktreePath,
+      OMP_STUDIO_PROJECT_DIR: repoRoot,
+      OMP_STUDIO_WORKTREE_DIR: worktreePath,
+    },
   });
   if (result.code !== 0) {
     const output = `${result.stderr}\n${result.stdout.toString("utf8")}`.trim();
@@ -113,29 +121,41 @@ function runOmp(ompPath: string, cwd: string, args: string[]) {
 }
 
 /**
- * omp 存放 agent 管理的 worktree 的目录，解析顺序和 omp 一致（omp 文档 tools/github.md getWorktreesDir）：
- * `OMP_WORKTREE_DIR`（绝对或 ~ 开头）→ 设置 `worktree.base` → `~/.omp/wt`。
+ * 存放 agent 管理的 worktree 的目录：
+ * `PI_WORKTREE_DIR` / `OMP_WORKTREE_DIR`（绝对或 ~ 开头）→（传了 ompPath 时 `worktree.base`）→ `~/.pi/wt`。
  */
-export async function resolveWorktreesDir(ompPath: string, repoRoot: string): Promise<string> {
+export async function resolveWorktreesDir(ompPath?: string, repoRoot?: string): Promise<string> {
   const expand = (value: string): string | null => {
     const expanded = value === "~" || /^~[\\/]/.test(value) ? path.join(os.homedir(), value.slice(1)) : value;
     return path.isAbsolute(expanded) ? expanded : null;
   };
-  const fromEnv = process.env["OMP_WORKTREE_DIR"];
+  const fromEnv = process.env["PI_WORKTREE_DIR"] ?? process.env["OMP_WORKTREE_DIR"];
   const envDir = fromEnv ? expand(fromEnv) : null;
   if (envDir) return envDir;
-  const result = await runOmp(ompPath, repoRoot, ["config", "get", "worktree.base", "--json"]);
-  if (result.code === 0) {
-    try {
-      const parsed: unknown = JSON.parse(result.stdout.toString("utf8"));
-      const value = typeof parsed === "object" && parsed !== null && "value" in parsed ? parsed.value : null;
-      const configured = typeof value === "string" && value !== "" ? expand(value) : null;
-      if (configured) return configured;
-    } catch {
-      // 输出不是 JSON：当作没设置，用默认值。
+  if (ompPath && repoRoot) {
+    const result = await runOmp(ompPath, repoRoot, ["config", "get", "worktree.base", "--json"]);
+    if (result.code === 0) {
+      try {
+        const parsed: unknown = JSON.parse(result.stdout.toString("utf8"));
+        const value = typeof parsed === "object" && parsed !== null && "value" in parsed ? parsed.value : null;
+        const configured = typeof value === "string" && value !== "" ? expand(value) : null;
+        if (configured) return configured;
+      } catch {
+        // 输出不是 JSON：当作没设置，用默认值。
+      }
     }
+    return path.join(os.homedir(), ".omp", "wt");
   }
-  return path.join(os.homedir(), ".omp", "wt");
+  return path.join(os.homedir(), ".pi", "wt");
+}
+
+async function gitWorktreeAdd(repoRoot: string, branch: string, worktreePath: string): Promise<void> {
+  await mkdir(path.dirname(worktreePath), { recursive: true });
+  const result = await gitRaw(repoRoot, ["worktree", "add", "-b", branch, "-q", worktreePath, "HEAD"]);
+  if (result.code !== 0)
+    throw new Error(
+      `git worktree add failed: ${(result.stderr.trim() || result.stdout.toString("utf8").trim()).slice(-2000)}`,
+    );
 }
 
 /** `omp worktree add -C <repo> -b <branch> <path> HEAD`。omp 在 add 时不自己选目录（必须给 PATH），失败时退出码非 0。 */
@@ -161,8 +181,8 @@ async function ompWorktreeAdd(ompPath: string, repoRoot: string, branch: string,
 export interface CreateWorktreeOptions {
   /** 仓库里有 setup 脚本时必须给：返回 true 才会运行（用户确认过这个项目的这份内容）。没给或返回 false 则创建被拒绝，什么都不留。 */
   approveSetup?: (script: SetupScript) => boolean | Promise<boolean>;
-  /** omp 可执行文件的绝对路径（omp-manager 当前就绪的那份）：worktree 由 `omp worktree add` 创建。 */
-  ompPath: string;
+  /** 可选兼容旧 omp 路径；省略时直接使用原生 `git worktree add` 与 `~/.pi/wt`。 */
+  ompPath?: string;
 }
 
 /**
@@ -170,7 +190,10 @@ export interface CreateWorktreeOptions {
  * setup 脚本失败时回滚（移除 worktree 和分支）并抛错：在没装好依赖的目录里让 agent 干活只会产生误导性的失败。
  * 主仓库里没提交的改动不会带进 worktree。
  */
-export async function createWorktree(projectPath: string, options: CreateWorktreeOptions): Promise<CreatedWorktree> {
+export async function createWorktree(
+  projectPath: string,
+  options: CreateWorktreeOptions = {},
+): Promise<CreatedWorktree> {
   const repoRoot = await requireRepoRootProject(projectPath);
   if (!(await hasCommits(repoRoot)))
     throw new Error("the repository has no commits yet; commit once before using a worktree");
@@ -185,10 +208,12 @@ export async function createWorktree(projectPath: string, options: CreateWorktre
 
   const slug = randomUUID().slice(0, 8);
   const branch = `${BRANCH_PREFIX}${slug}`;
-  // 目录由 omp 的规则决定（环境变量 / worktree.base / 默认 ~/.omp/wt）：这样 omp 的 `omp worktree list` 看得到它。
-  // 目录名 <slug>-<仓库路径哈希>：不同仓库的 slug 即使碰撞也不会重名。
   const worktreePath = path.join(await resolveWorktreesDir(options.ompPath, repoRoot), `${slug}-${repoHash(repoRoot)}`);
-  await ompWorktreeAdd(options.ompPath, repoRoot, branch, worktreePath);
+  if (options.ompPath) {
+    await ompWorktreeAdd(options.ompPath, repoRoot, branch, worktreePath);
+  } else {
+    await gitWorktreeAdd(repoRoot, branch, worktreePath);
+  }
   log.info("worktree created", { branch });
 
   try {

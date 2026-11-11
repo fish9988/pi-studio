@@ -6,7 +6,6 @@ import path from "node:path";
 import { parseDraftKey, type TaskId, type TerminalKey } from "../../shared/ipc.ts";
 import { emitEvent } from "../ipc/events.ts";
 import { log } from "../log/log.ts";
-import { managedOmpBin } from "../omp-manager/index.ts";
 import { withPtyLock } from "../platform/pty-lock.ts";
 import { assignToOwnJob } from "../platform/win32/job-object.ts";
 import { chatsDir } from "../tasks/chats-dir.ts";
@@ -58,7 +57,7 @@ function createManager(pool: TaskPool): TerminalManager {
       ),
     resolveShell: () =>
       resolveShell({ platform: process.platform, env: process.env, which }, getShellState().preferredShell ?? "auto"),
-    buildEnv: () => buildTerminalEnv(process.env, managedOmpBin()),
+    buildEnv: () => buildTerminalEnv(process.env, null),
     async spawn(shell, options) {
       // 原生模块按需加载（见文件头），静态 import 做不到。
       const nodePty = await import("node-pty");

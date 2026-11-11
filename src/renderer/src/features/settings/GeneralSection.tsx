@@ -28,29 +28,18 @@ import { useAppInfo, useSettings } from "../../store/index.ts";
 import { Badge, Button, Row, SectionHead, Segmented, Switch } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { Select } from "../../ui/Select.tsx";
-import { ConfigRow } from "./ConfigRow.tsx";
 import { systemReducesMotion } from "./motion-preference.ts";
 import { refreshOmpKeybindings, useOmpKeybindings } from "./omp-keybindings-store.ts";
-import { useCommonConfigItems } from "./OmpConfigPane.tsx";
+import { PiInteractionCard } from "./pi/index.ts";
 import { ThemeGallery } from "./ThemeGallery.tsx";
 
-/** 通知和回顾：omp 自己的设置（和终端共用），放在"通知与回顾"一节，不混进"任务运行中"。 */
-const notifyKeys: ReadonlySet<string> = new Set([
-  "ask.notify",
-  "completion.notify",
-  "error.notify",
-  "recap.enabled",
-  "recap.idleSeconds",
-]);
-
-/** 转发给 omp 的键的作用文字（omp 动作 ID → i18n）；键位本身来自主进程（默认键位 + 用户 keybindings.yml）。 */
+/** 转发给 Pi 的键的作用文字（动作 ID → i18n）；键位来自主进程（默认键位 + 用户 keybindings.json）。 */
 const ompActionLabels: Readonly<Record<string, MessageKey>> = {
   "app.thinking.cycle": "shortcut.ompThinkingCycle",
   "app.thinking.toggle": "shortcut.ompThinkingToggle",
   "app.model.cycleForward": "shortcut.ompModelForward",
   "app.model.cycleBackward": "shortcut.ompModelBackward",
   "app.model.selectTemporary": "shortcut.ompModelTemporary",
-  "app.plan.toggle": "shortcut.ompPlanToggle",
   "app.history.search": "shortcut.ompHistorySearch",
   "app.retry": "shortcut.ompRetry",
   "app.message.dequeue": "shortcut.ompDequeue",
@@ -88,10 +77,6 @@ export function GeneralSection() {
   const glassSupported = useAppInfo()?.glassSupported ?? false;
   const systemMotion = systemReducesMotion();
   const guard = (promise: Promise<unknown>) => void promise.catch((error: unknown) => reportError(t, error));
-  // omp 的插话 / 稍后消息处理方式（"对话行为"组的常用项），和 Enter 的行为放在一起。
-  const behavior = useCommonConfigItems("behavior");
-  const notifyItems = behavior.filter((item) => notifyKeys.has(item.key));
-  const whileRunning = behavior.filter((item) => !notifyKeys.has(item.key));
   const ompKeybindings = useOmpKeybindings();
   useEffect(() => void refreshOmpKeybindings(), []);
 
@@ -100,8 +85,8 @@ export function GeneralSection() {
     { value: "zh-CN", label: t("settings.language.zh") },
     { value: "en", label: t("settings.language.en") },
   ] as const;
-  const brandStyle = useShellValue("brandStyle") ?? "claude";
-  const brandOptions = (["claude", "deepseek", "omp"] as const).map((value) => ({
+  const brandStyle = useShellValue("brandStyle") ?? "pi";
+  const brandOptions = (["pi", "claude", "deepseek"] as const).map((value) => ({
     value,
     label: t(`settings.brandStyle.${value}`),
   }));
@@ -355,9 +340,6 @@ export function GeneralSection() {
       </div>
       <SectionHead title={t("settings.notifications")} />
       <div className="st-cells" data-testid="notify-settings">
-        {notifyItems.map((item) => (
-          <ConfigRow key={item.key} item={item} />
-        ))}
         <Row label={t("settings.soundOnDone")}>
           {(labelId) => (
             <Switch
@@ -383,10 +365,8 @@ export function GeneralSection() {
             />
           )}
         </Row>
-        {whileRunning.map((item) => (
-          <ConfigRow key={item.key} item={item} />
-        ))}
       </div>
+      <PiInteractionCard />
       <SectionHead title={t("settings.idleTasks")} />
       <div className="st-cells">
         <Row label={t("settings.idleClose")} info={t("settings.idleClose.desc")}>

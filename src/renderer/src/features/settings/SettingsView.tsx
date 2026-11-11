@@ -14,14 +14,17 @@ import {
 import { OverlayScrollbar } from "../../ui/OverlayScrollbar.tsx";
 import { AboutSection } from "./AboutSection.tsx";
 import { GeneralSection } from "./GeneralSection.tsx";
-import { IntegrationsSection } from "./IntegrationsSection.tsx";
-import { MemoryCard } from "./MemoryCard.tsx";
-import { ModelsSection } from "./ModelsSection.tsx";
 import { OmpConfigPane, useOmpConfigLoader } from "./OmpConfigPane.tsx";
 import { PageHeadSlot } from "./PageHeadActions.tsx";
-import { ProvidersSection } from "./ProvidersSection.tsx";
+import {
+  PiContextSection,
+  PiExtensionsSection,
+  PiModelsSection,
+  PiNetworkAdvancedSection,
+  PiProvidersSection,
+  PiToolsSection,
+} from "./pi/index.ts";
 import { onSettingsKeyDown, SettingsCompactNav } from "./SettingsNav.tsx";
-import { ToolsCard } from "./ToolsCard.tsx";
 import "./motion-preference.ts";
 import "./settings.css";
 import "./config.css";
@@ -31,29 +34,18 @@ function PageContent({ page }: { page: SettingsPage }) {
     case "general":
       return <GeneralSection />;
     case "models":
-      return <ModelsSection />;
+      return <PiModelsSection />;
     case "providers":
-      return <ProvidersSection />;
+      return <PiProvidersSection />;
     case "tools":
-      return (
-        <>
-          <OmpConfigPane view={{ kind: "common", group: "tools" }} />
-          <ToolsCard />
-        </>
-      );
+      return <PiToolsSection />;
     case "context":
-      return (
-        <>
-          <OmpConfigPane view={{ kind: "common", group: "context" }} />
-          <MemoryCard />
-        </>
-      );
+      return <PiContextSection />;
     case "agents":
-      return <OmpConfigPane view={{ kind: "common", group: "agents" }} />;
     case "extensions":
-      return <IntegrationsSection />;
+      return <PiExtensionsSection />;
     case "advanced":
-      return <OmpConfigPane view={{ kind: "advanced" }} />;
+      return <PiNetworkAdvancedSection />;
     case "about":
       return <AboutSection />;
   }

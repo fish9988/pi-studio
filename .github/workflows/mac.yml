@@ -53,9 +53,9 @@ jobs:
       - name: 构建
         run: npm run build
 
-      # 真实的 node-pty + TSP 路径：假 omp 回放录制，发一句 prompt 跑完一整轮（不需要真模型）。
+      # 真实的 Pi RPC + TSP 桥接路径：假 pi 回放会话，发一句 prompt 跑完一整轮（不需要真模型）。
       - name: e2e 冒烟
-        run: npx playwright test test/e2e/tsp.e2e.ts -g "完整一轮"
+        run: npx playwright test test/e2e/main-ui.e2e.ts -g "没有项目时直接发送"
 
       - name: 打包（ad-hoc 签名）
         run: npx electron-builder --mac --arm64 --publish never
@@ -64,7 +64,7 @@ jobs:
       # node-pty 的 darwin-arm64 预编译件、spawn-helper 带执行位、签名有效。
       - name: 检查产物
         run: |
-          app="release/mac-arm64/omp-studio.app"
+          app="release/mac-arm64/pi-studio.app"
           node scripts/check-package.ts "$app/Contents/Resources/app.asar" darwin-arm64
           prebuilds="$app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/prebuilds"
           ls -l "$prebuilds"
@@ -77,7 +77,7 @@ jobs:
 
       # 打包版才有的问题（如启动时窗口一直透明，见 scripts/smoke-packaged.ts）上面的 e2e 测不到：启动打包好的应用，等窗口淡入。
       - name: 打包版冒烟
-        run: node scripts/smoke-packaged.ts release/mac-arm64/omp-studio.app/Contents/MacOS/omp-studio
+        run: node scripts/smoke-packaged.ts release/mac-arm64/pi-studio.app/Contents/MacOS/pi-studio
 
       - name: 传到 GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: omp-studio-mac-arm64
+          name: pi-studio-mac-arm64
           if-no-files-found: ignore
           retention-days: 14
           path: |

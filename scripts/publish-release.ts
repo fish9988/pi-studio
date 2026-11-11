@@ -34,7 +34,7 @@ if (!exists()) {
   try {
     execFileSync(
       "gh",
-      ["release", "create", tag, "--verify-tag", "--title", `omp-studio ${version}`, "--notes-file", "-"],
+      ["release", "create", tag, "--verify-tag", "--title", `pi-studio ${version}`, "--notes-file", "-"],
       {
         cwd: root,
         input: notes,

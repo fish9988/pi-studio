@@ -1,10 +1,10 @@
-// "导出诊断信息"：把版本、系统、omp 状态、设置和最近几天的日志写成一个文本文件，用户附在 issue 里。
-// 整份内容再过一遍脱敏（omp 路径、设置里可能有家目录）；日志本身写入时已经脱敏过。
+// "导出诊断信息"：把版本、系统、Pi 状态、设置和最近几天的日志写成一个文本文件，用户附在 issue 里。
+// 整份内容再过一遍脱敏（路径、设置里可能有家目录）；日志本身写入时已经脱敏过。
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { open, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ompManager } from "../omp-manager/index.ts";
+import { piManager } from "../pi/runtime-singleton.ts";
 import { getSettings } from "../settings/settings-store.ts";
 import { flushLog, localDay } from "./log.ts";
 import { redactForLog, recentLogFiles } from "./instance.ts";
@@ -22,7 +22,6 @@ async function tail(file: string): Promise<string> {
     const { bytesRead } = await handle.read(buffer, 0, length, size - length);
     const text = buffer.toString("utf8", 0, bytesRead);
     if (size <= LOG_TAIL_BYTES) return text;
-    // 截断处可能切在一行或一个多字节字符中间：丢掉第一行残行。
     return `…（前面省略）\n${text.slice(text.indexOf("\n") + 1)}`;
   } finally {
     await handle.close();
@@ -31,19 +30,18 @@ async function tail(file: string): Promise<string> {
 
 async function diagnosticsText(): Promise<string> {
   const sections = [
-    "# omp-studio diagnostics",
+    "# pi-studio diagnostics",
     `generated: ${new Date().toISOString()}`,
     `app: ${app.getVersion()} (packaged: ${app.isPackaged})`,
     `runtime: electron ${process.versions.electron}, chrome ${process.versions.chrome}, node ${process.versions.node}`,
     `os: ${process.platform} ${os.release()} ${process.arch}, locale ${app.getLocale()}`,
     "",
-    "## omp",
-    JSON.stringify(ompManager().status, null, 2),
+    "## pi",
+    JSON.stringify(piManager().status, null, 2),
     "",
     "## settings",
     JSON.stringify(getSettings(), null, 2),
   ];
-  // 日志是异步写的：先等队列里的行落盘，诊断里才有刚才的记录。
   await flushLog();
   for (const file of recentLogFiles().slice(0, LOG_DAYS)) {
     sections.push("", `## ${path.basename(file)}`, await tail(file));
@@ -55,7 +53,7 @@ async function diagnosticsText(): Promise<string> {
 export async function exportDiagnostics(): Promise<boolean> {
   const window = BrowserWindow.getFocusedWindow();
   const options = {
-    defaultPath: path.join(app.getPath("desktop"), `omp-studio-diagnostics-${localDay(new Date())}.txt`),
+    defaultPath: path.join(app.getPath("desktop"), `pi-studio-diagnostics-${localDay(new Date())}.txt`),
     filters: [{ name: "Text", extensions: ["txt"] }],
   };
   const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options);

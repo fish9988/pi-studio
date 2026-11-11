@@ -1,0 +1,662 @@
+/* Pi Studio 设置页专属样式（全部以 .pis- 前缀命名，严格使用 tokens.css 已声明的设计变量） */
+
+.pis-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.pis-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+}
+
+.pis-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.pis-card-padded {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3-5) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pis-card-rows > .ui-row + .ui-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pis-card-rows > .ui-row {
+  padding-inline: var(--space-4);
+}
+
+.pis-inline-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pis-inline-end {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pis-scope-bar {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pis-scope-project {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-2);
+  padding: var(--space-0-5) var(--space-2);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+/* ───────── 7 档思考强度分段条 ───────── */
+
+.pis-thinking-bar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-0-5);
+  padding: var(--space-0-5);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.pis-thinking-step {
+  height: var(--control-h-sm);
+  padding-inline: var(--space-1-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.pis-thinking-step:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.pis-thinking-step[aria-checked="true"] {
+  background: var(--control-on);
+  color: var(--accent);
+  font-weight: var(--fw-strong);
+  box-shadow: var(--shadow-1);
+}
+
+.pis-thinking-step:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.pis-thinking-step:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* ───────── 思考预算四宫格 ───────── */
+
+.pis-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-2-5);
+  padding: var(--space-3-5) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pis-budget-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--bg-tool);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.pis-budget-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-2);
+}
+
+/* ───────── 常用模型池 (/scoped-models · enabledModels) ───────── */
+
+.pis-scoped-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pis-scoped-search {
+  flex: 1 1 220px;
+}
+
+.pis-selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+}
+
+.pis-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-h-xs);
+  padding-inline: var(--space-2);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.pis-chip:hover {
+  background: var(--bg-active);
+}
+
+.pis-chip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.pis-model-pool {
+  max-height: 248px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-1-5);
+  padding-right: var(--space-1);
+}
+
+.pis-model-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--bg-tool);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.pis-model-item:hover {
+  background: var(--bg-hover);
+}
+
+.pis-model-item[data-selected="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.pis-model-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.pis-model-star {
+  flex: none;
+  color: var(--text-3);
+  display: inline-flex;
+}
+
+.pis-model-item[data-selected="true"] .pis-model-star {
+  color: var(--accent);
+}
+
+.pis-model-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.pis-model-name {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pis-model-id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ───────── Provider 认证矩阵 ───────── */
+
+.pis-provider-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pis-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-2-5);
+}
+
+.pis-provider-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3-5);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.pis-provider-card[data-active="true"] {
+  border-color: var(--border);
+}
+
+.pis-provider-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2-5);
+}
+
+.pis-provider-logo {
+  width: var(--control-h-md);
+  height: var(--control-h-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--text);
+}
+
+.pis-provider-logo svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+.pis-provider-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.pis-provider-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.pis-provider-name {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-strong);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pis-provider-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pis-provider-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pis-provider-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-left: auto;
+}
+
+.pis-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-h-xs);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.pis-status-pill[data-tone="oauth"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pis-status-pill[data-tone="key"] {
+  background: var(--bg-sunken);
+  color: var(--st-done);
+}
+
+.pis-status-pill[data-tone="env"] {
+  background: var(--st-waiting-soft);
+  color: var(--st-waiting-text);
+  font-family: var(--font-mono);
+}
+
+.pis-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+/* ───────── 内置工具矩阵 & 内置扩展卡片 ───────── */
+
+.pis-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: var(--space-2);
+}
+
+.pis-tool-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2-5) var(--space-3-5);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.pis-tool-card[data-enabled="true"] {
+  border-color: var(--border);
+}
+
+.pis-tool-lead {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+}
+
+.pis-tool-icon {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.pis-tool-card[data-enabled="true"] .pis-tool-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pis-tool-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pis-tool-id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-code-sm);
+  line-height: var(--lh-code-sm);
+  font-weight: var(--fw-strong);
+  color: var(--text);
+}
+
+.pis-tool-desc {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ───────── MCP 暴露模式徽标 & 表单 ───────── */
+
+.pis-exposure-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+
+.pis-exposure-badge[data-exposure="codemode"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pis-exposure-badge[data-exposure="deferred"] {
+  background: var(--st-waiting-soft);
+  color: var(--st-waiting-text);
+}
+
+.pis-exposure-badge[data-exposure="direct"] {
+  background: var(--bg-sunken);
+  color: var(--st-done);
+}
+
+.pis-exposure-badge[data-exposure="hidden"] {
+  background: var(--bg-sunken);
+  color: var(--text-disabled);
+}
+
+.pis-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3-5);
+}
+
+.pis-form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+/* ───────── 扩展包安装栏 & 输出 ───────── */
+
+.pis-pkg-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pis-pkg-input {
+  flex: 1 1 240px;
+}
+
+.pis-cli-output {
+  margin: 0;
+  padding: var(--space-2-5) var(--space-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--fs-code-sm);
+  line-height: var(--lh-code-sm);
+  color: var(--text-2);
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ───────── 系统提示词 Markdown 编辑器 ───────── */
+
+.pis-doc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pis-doc-textarea {
+  min-height: 240px;
+  resize: vertical;
+  width: 100%;
+}
+
+.pis-doc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.pis-muted {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-3);
+}
+
+.pis-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-code-sm);
+  line-height: var(--lh-code-sm);
+}
+
+/* ───────── 配置文件直达栏 & 关于页 Pi CLI 卡 ───────── */
+
+.pis-file-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pis-cli-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2-5);
+  padding: var(--space-3-5) var(--space-4);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.pis-cli-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.pis-cli-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-strong);
+  color: var(--text);
+}
+
+.pis-cli-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--text-disabled);
+}
+
+.pis-cli-dot[data-ready="true"] {
+  background: var(--st-done);
+}
+
+.pis-cli-dot[data-error="true"] {
+  background: var(--st-error);
+}
+
+.pis-cli-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-code-sm);
+  line-height: var(--lh-code-sm);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

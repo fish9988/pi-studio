@@ -326,11 +326,11 @@ describe("buildSessionSummaries", () => {
 });
 
 describe("resolveAgentDir", () => {
-  it("PI_CODING_AGENT_DIR 优先；否则 home 下的 .omp/agent，PI_CONFIG_DIR 可改目录名", () => {
+  it("PI_CODING_AGENT_DIR 优先；否则 home 下的 .pi/agent，PI_CONFIG_DIR 可改目录名", () => {
     expect(resolveAgentDir({ PI_CODING_AGENT_DIR: path.join(root, "自定义 目录") }, "H")).toBe(
       path.join(root, "自定义 目录"),
     );
-    expect(resolveAgentDir({}, "H")).toBe(path.join("H", ".omp", "agent"));
-    expect(resolveAgentDir({ PI_CONFIG_DIR: ".omp-dev" }, "H")).toBe(path.join("H", ".omp-dev", "agent"));
+    expect(resolveAgentDir({}, "H")).toBe(path.join("H", ".pi", "agent"));
+    expect(resolveAgentDir({ PI_CONFIG_DIR: ".pi-dev" }, "H")).toBe(path.join("H", ".pi-dev", "agent"));
   });
 });

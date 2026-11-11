@@ -8,7 +8,7 @@
 // - 没有可用模型 / 回退到确定性信息（智能体出错）时退出码 1。
 import { stripAnsi } from "../../shared/ansi.ts";
 import { splitCommitMessage, type GitCommitMessageResult } from "../../shared/git.ts";
-import { runCommand } from "./exec.ts";
+import { gitText, runCommand } from "./exec.ts";
 import { requireRepoRoot } from "./repo.ts";
 import { statusAt } from "./status.ts";
 
@@ -98,6 +98,66 @@ export async function generateCommitMessage(
     const parsed = parseOmpCommitOutput(result.stdout.toString("utf8"));
     if (parsed === null) return { kind: "failed", message: "omp did not print a commit message" };
     return { kind: "generated", ...parsed };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return { kind: "cancelled" };
+    throw error;
+  }
+}
+
+const MAX_STAGED_DIFF_CHARS = 24_000;
+
+function stripMarkdownFence(raw: string): string {
+  const trimmed = stripAnsi(raw).replace(/\r\n/g, "\n").trim();
+  const fenced = /^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```$/m.exec(trimmed);
+  return (fenced?.[1] ?? trimmed).trim();
+}
+
+/**
+ * 用 `pi -p --no-session --no-tools` 为已暂存的改动生成 Conventional Commit 提交信息。
+ */
+export async function generatePiCommitMessage(
+  cwd: string,
+  pi: OmpCommand,
+  signal: AbortSignal,
+): Promise<GitCommitMessageResult> {
+  const root = await requireRepoRoot(cwd);
+  const { files } = await statusAt(root);
+  if (!files.some((file) => file.staged !== null && file.staged !== "conflicted")) return { kind: "nothing_staged" };
+  try {
+    const [statText, diffText] = await Promise.all([
+      gitText(root, ["diff", "--cached", "--stat"]),
+      gitText(root, ["diff", "--cached"]),
+    ]);
+    const cappedDiff =
+      diffText.length > MAX_STAGED_DIFF_CHARS
+        ? `${diffText.slice(0, MAX_STAGED_DIFF_CHARS)}\n\n[diff truncated]`
+        : diffText;
+    const prompt = [
+      "Write a concise Conventional Commit message for the following staged git changes.",
+      "Output ONLY the raw commit message (first line <= 72 chars summary, optional blank line + bullet points). Do NOT wrap in markdown code fences.",
+      "",
+      "Staged stat:",
+      statText.trim(),
+      "",
+      "Staged diff:",
+      cappedDiff.trim(),
+    ].join("\n");
+
+    const result = await runCommand(pi.command, [...pi.args, "-p", "--no-session", "--no-tools", prompt], {
+      cwd: root,
+      env: pi.env,
+      timeoutMs: GENERATE_TIMEOUT_MS,
+      signal,
+    });
+    const stderr = result.stderr;
+    if (result.code !== 0) {
+      return /No model|No API key|authentication|credentials/i.test(stderr)
+        ? { kind: "no_model" }
+        : { kind: "failed", message: errorLine(stderr) || `pi exited with code ${result.code}` };
+    }
+    const cleaned = stripMarkdownFence(result.stdout.toString("utf8"));
+    if (cleaned === "") return { kind: "failed", message: "pi did not print a commit message" };
+    return { kind: "generated", ...splitMessage(cleaned), split: null };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return { kind: "cancelled" };
     throw error;

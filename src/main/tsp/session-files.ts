@@ -20,6 +20,11 @@ export class SessionTitleTracker implements SessionEntryConsumer {
   #header: string | null = null;
 
   entry(entry: SessionFileEntry): void {
+    if (entry["type"] === "session_info" && typeof entry["name"] === "string") {
+      const trimmed = entry["name"].trim();
+      this.#changed = trimmed === "" ? null : trimmed;
+      return;
+    }
     const title = entry["title"];
     if (typeof title !== "string") return;
     if (entry["type"] === "title_change") this.#changed = title;

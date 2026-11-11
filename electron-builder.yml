@@ -1,5 +1,5 @@
-appId: dev.omp-studio.app
-productName: omp-studio
+appId: dev.pi-studio.app
+productName: pi-studio
 directories:
   output: release
 # Chromium 的界面语言包（locales/*.pak）只留界面会用到的：settings-store.ts 按 app.getLocale() 选中文 / 英文，
@@ -91,8 +91,8 @@ mac:
 linux:
   icon: resources/icon.png
   category: Development
-  executableName: omp-studio
-  synopsis: Desktop app for oh-my-pi (omp)
+  executableName: pi-studio
+  synopsis: Desktop app for Pi (pi-coding-agent)
   target:
     - target: AppImage
       arch: x64
@@ -130,5 +130,5 @@ nsis:
 publish:
   provider: github
   owner: fish9988
-  repo: omp-studio
+  repo: pi-studio
   releaseType: release
