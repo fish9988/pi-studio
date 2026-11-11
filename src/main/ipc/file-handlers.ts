@@ -43,13 +43,54 @@ export const fileHandlers: HandlerGroup<"listProjectFiles" | "readPreviewFile" |
     const parsed = parseFilesTarget(target);
     const cwd = await targetCwd(parsed);
     const raw = parseString(relPath, "relPath", 1024);
-    const direct = await readPreviewFile(cwd, raw);
-    if (direct.kind !== "missing") return direct;
-    if (!path.isAbsolute(raw) && !raw.includes("..") && !raw.startsWith("~")) {
-      const matched = await index.findBySuffix(cwd, raw);
-      if (matched !== null) return readPreviewFile(cwd, matched);
+    try {
+      const direct = await readPreviewFile(cwd, raw);
+      if (direct.kind !== "missing") return direct;
+      if (!path.isAbsolute(raw) && !raw.includes("..") && !raw.startsWith("~")) {
+        const matched = await index.findBySuffix(cwd, raw);
+        if (matched !== null) return readPreviewFile(cwd, matched);
+      }
+      return direct;
+    } catch (err) {
+      if (parsed.kind !== "task" || parsed.root !== undefined) throw err;
+      let cleaned = raw
+        .trim()
+        .replace(/^file:\/\//i, "")
+        .replace(/^\/+(?=[A-Za-z]:[\\/])/, "");
+      try {
+        cleaned = decodeURIComponent(cleaned);
+      } catch {
+        // keep cleaned
+      }
+      cleaned = cleaned.replace(/#L\d+(?:-L?\d+)?.*$/i, "").replace(/(?<!^[A-Za-z]):\d+(?:[:-]\d+)?$/, "");
+      if (!path.isAbsolute(cleaned) && !path.win32.isAbsolute(cleaned)) throw err;
+
+      const pool = await getTaskPool();
+      const candidateRoots = [...pool.taskWorkspaceDirs(parsed.taskId), ...pool.listProjects().map((p) => p.path)];
+      for (const root of candidateRoots) {
+        try {
+          const res = await readPreviewFile(root, cleaned);
+          if (res.kind !== "missing") return res;
+        } catch {
+          // try next root
+        }
+      }
+
+      // 若该绝对路径是当前会话工具调用或输出里真实出现过的文件路径（如默认 chats 目录下跨目录读取/编辑的文件），允许直接预览该文件
+      try {
+        const snap = pool.getTspSnapshot(parsed.taskId);
+        const docJson = JSON.stringify(snap.document).replace(/\\\\/g, "/").toLowerCase();
+        const wantNorm = cleaned.replace(/\\/g, "/").toLowerCase();
+        if (docJson.includes(wantNorm)) {
+          const parentDir = path.dirname(cleaned);
+          const baseName = path.basename(cleaned);
+          return await readPreviewFile(parentDir, baseName);
+        }
+      } catch {
+        // fall through to throw original error
+      }
+      throw err;
     }
-    return direct;
   },
   async listDirectory(target, relDir) {
     const cwd = await targetCwd(parseFilesTarget(target));

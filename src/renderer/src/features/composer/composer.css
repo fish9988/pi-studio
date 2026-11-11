@@ -632,6 +632,37 @@ button.usage-context:hover,
 .ctx-swatch[data-part="toolOutput"] {
   background: #059669;
 }
+
+.ctx-dsh-telemetry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: var(--space-2);
+}
+
+.ctx-telemetry-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.ctx-telemetry-chip b {
+  color: var(--text);
+  font-weight: var(--fw-strong);
+}
+
+.ctx-telemetry-cost {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-raised));
+}
 /* 剩余空间 = 轨道色（最轻的一档，不压过已用的各段）；图例方块再描一圈 --border，暗色里也看得见 */
 .ctx-seg[data-part="free"],
 .ctx-swatch[data-part="free"] {

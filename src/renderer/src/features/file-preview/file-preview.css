@@ -393,3 +393,76 @@
   --btn-h: var(--control-h-xs);
   font-size: var(--fs-xs);
 }
+
+.file-tree-at-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--bg-raised);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-tree-row:hover .file-tree-at-btn {
+  display: inline-flex;
+}
+
+.file-tree-at-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.file-preview-at-glyph {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.file-preview-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  padding: var(--space-1-5) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sidebar);
+  overflow-y: auto;
+}
+
+.file-preview-outline-item {
+  display: block;
+  width: 100%;
+  padding: 3px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.file-preview-outline-item[data-level="2"] {
+  padding-left: var(--space-4);
+}
+
+.file-preview-outline-item[data-level="3"] {
+  padding-left: var(--space-6);
+  color: var(--text-3);
+}
+
+.file-preview-outline-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}

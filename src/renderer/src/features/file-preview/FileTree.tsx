@@ -19,6 +19,7 @@ import { ChevronDown, ChevronRight, FileIcon, Folder } from "../../icons.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { flattenTree, treeKeyAction, type NodeRow, type TreeKey, type TreeRow } from "./tree-model.ts";
 import { treeMemory } from "./tree-state.ts";
+import { insertFileRefIntoComposer } from "./PreviewPage.tsx";
 
 const overscan = 8;
 const treeKeys = new Set<string>(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter", " "]);
@@ -238,6 +239,20 @@ function TreeRowView({ id, row, top, cursor, selected, onClick }: TreeRowViewPro
       </span>
       {row.kind === "dir" ? <Folder size={14} /> : <FileIcon size={14} />}
       <span className="file-tree-name">{row.name}</span>
+      {row.kind === "file" && (
+        <button
+          type="button"
+          className="file-tree-at-btn"
+          tabIndex={-1}
+          title={`@${row.path}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            insertFileRefIntoComposer(row.path);
+          }}
+        >
+          @
+        </button>
+      )}
     </div>
   );
 }

@@ -9,6 +9,25 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-11
+
+### Added
+
+- Redesigned Settings as a parallel window supporting side-by-side docking, draggable floating mode, minimized corner pill, and standalone OS window pop-out without covering the active conversation.
+- Added Pi plugin management and a categorized Plugin Marketplace with curated packages, live npm `keywords:pi-package` search, one-click install/uninstall, and a composer Quick Phrases menu.
+- Upgraded Context breakdown into a 9-category multi-color composition bar (System prompt, Skills, Built-in tools, MCP tools, User messages, Assistant replies, Thinking, Tool calls, Tool results) with live session turn/tool/file/command telemetry chips.
+- Added `@file` composer reference insertion, file content copy, and Markdown heading outline navigation in the right file preview pane, plus automatic update syncing for private GitHub Releases via `gh` CLI.
+
+### Fixed
+
+- Fixed multi-step tool turns being split into separate process boxes by intermediate empty text blocks and per-step usage footers, consolidating all thoughts and tool calls of a turn into a single unified collapsible card with command and query summaries.
+- Fixed smart session rename truncating prompts that start with a Windows drive path (`C:\...`) into a single letter `"C"`.
+- Fixed `readPreviewFile` failing with `path must be relative` when previewing cross-directory files from the default chat folder, and stopped `read` tool calls from generating false deliverable cards.
+
+### Changed
+
+- Streamlined compaction, general, and advanced settings, updated the composer thinking indicator to a pill badge, added folder icons and nested tree guides to the sidebar, and added direct session deletion.
+
 ## [0.1.1] - 2026-11-11
 
 ### Fixed

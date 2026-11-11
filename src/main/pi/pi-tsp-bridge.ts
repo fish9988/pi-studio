@@ -817,6 +817,23 @@ export class PiTspBridge {
       const command = typeof args["command"] === "string" ? args["command"] : "";
       if (command !== "") {
         props.command = command;
+        const lines = command
+          .split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l !== "");
+        const commentLine = lines.find((l) => /^#\s*\S/.test(l));
+        const meaningfulLine =
+          commentLine !== undefined
+            ? commentLine.replace(/^#+\s*/, "")
+            : (lines.find(
+                (l) =>
+                  !/^(?:Set-Location|cd|pushd|\$ErrorActionPreference\s*=|export\s+\w+=)/i.test(l) &&
+                  !l.startsWith("#"),
+              ) ??
+              lines[0] ??
+              command);
+        props.target = meaningfulLine.slice(0, 120);
+        props.targetKind = "command";
       }
       const lang = toolName === "powershell" ? "powershell" : "bash";
       const outId = `${nodeId}/out`;
@@ -962,6 +979,12 @@ export class PiTspBridge {
         });
       }
     } else {
+      const queriesList = Array.isArray(args["queries"])
+        ? (args["queries"] as unknown[]).filter((q): q is string => typeof q === "string" && q.trim() !== "")
+        : [];
+      const urlsList = Array.isArray(args["urls"])
+        ? (args["urls"] as unknown[]).filter((u): u is string => typeof u === "string" && u.trim() !== "")
+        : [];
       const targetCandidate =
         typeof args["path"] === "string"
           ? args["path"]
@@ -969,7 +992,25 @@ export class PiTspBridge {
             ? args["pattern"]
             : typeof args["query"] === "string"
               ? args["query"]
-              : undefined;
+              : queriesList.length > 0
+                ? queriesList.slice(0, 2).join(" · ")
+                : typeof args["url"] === "string"
+                  ? args["url"]
+                  : urlsList.length > 0
+                    ? urlsList[0]
+                    : typeof args["claim"] === "string"
+                      ? args["claim"]
+                      : typeof args["tool"] === "string"
+                        ? args["tool"]
+                        : typeof args["search"] === "string"
+                          ? args["search"]
+                          : typeof args["server"] === "string"
+                            ? args["server"]
+                            : typeof args["memory"] === "string"
+                              ? args["memory"]
+                              : typeof args["findText"] === "string"
+                                ? args["findText"]
+                                : undefined;
       if (targetCandidate !== undefined && targetCandidate !== "") {
         props.target = targetCandidate;
         if (typeof args["path"] === "string") {
@@ -2072,31 +2113,40 @@ export class PiTspBridge {
       return this.emitOps(ops);
     }
 
+    const hasToolCalls =
+      message.stopReason === "toolUse" ||
+      (Array.isArray(message.content) && message.content.some((b) => isRecord(b) && b["type"] === "toolCall"));
+    const textBlocks = Array.isArray(message.content)
+      ? message.content
+          .filter((b): b is PiTextContent => isRecord(b) && b["type"] === "text" && typeof b["text"] === "string")
+          .map((b) => b.text)
+          .filter((t) => t.trim() !== "")
+      : [];
+
     // If an assistant message arrived without prior `text_start` deltas (e.g. direct one-shot message_end), ensure text is present.
     let containerId = this.lastStreamAssistantId;
-    if (containerId === null && Array.isArray(message.content)) {
-      const textBlocks = message.content
-        .filter((b): b is PiTextContent => isRecord(b) && b["type"] === "text" && typeof b["text"] === "string")
-        .map((b) => b.text)
-        .filter((t) => t !== "");
-      if (textBlocks.length > 0) {
-        containerId = this.nextId("asst");
-        ops.push([
-          "add",
-          containerId,
-          "main",
-          null,
-          {
-            id: containerId,
-            k: "col",
-            p: { role: "omp.assistant", gap: "sm" },
-            c: [{ id: `${containerId}/md`, k: "md", p: { text: textBlocks.join("\n\n") } }],
-          },
-        ]);
+    if (containerId !== null && textBlocks.length === 0) {
+      if (this.nodeExists(containerId)) {
+        ops.push(["del", containerId]);
       }
+      containerId = null;
+    } else if (containerId === null && textBlocks.length > 0) {
+      containerId = this.nextId("asst");
+      ops.push([
+        "add",
+        containerId,
+        "main",
+        null,
+        {
+          id: containerId,
+          k: "col",
+          p: { role: "omp.assistant", gap: "sm" },
+          c: [{ id: `${containerId}/md`, k: "md", p: { text: textBlocks.join("\n\n") } }],
+        },
+      ]);
     }
 
-    const usageSummary = formatUsageFooter(message.usage, message.model);
+    const usageSummary = !hasToolCalls ? formatUsageFooter(message.usage, message.model) : null;
     if (usageSummary !== null && containerId !== null) {
       const usageRowId = `${containerId}/usage`;
       ops.push(["add", usageRowId, containerId, null, this.buildUsageRowNode(usageRowId, usageSummary)]);

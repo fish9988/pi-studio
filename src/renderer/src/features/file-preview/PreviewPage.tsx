@@ -1,13 +1,56 @@
 // 文件面板的"预览"页：一条工具栏（文件名、路径、预览/源码、缩放、打开、在文件夹中显示）+ 正文。
 // 内容由主进程 readPreviewFile 读（校验落在根目录内）；这里不拼任何文件路径去加载，避免绕过主进程校验。
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { PreviewFile, ProjectFilesTarget } from "../../../../shared/ipc.ts";
-import { useT } from "../../i18n/use-t.ts";
-import { External, FileIcon, Folder } from "../../icons.tsx";
+import { useLocale, useT } from "../../i18n/use-t.ts";
+import { CopyIcon, External, FileIcon, Folder } from "../../icons.tsx";
 import { Button, Checkbox, IconButton, Segmented } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
+import { pushToast } from "../dialogs/index.ts";
 import { baseName, extension, PreviewContent } from "./PreviewContent.tsx";
 import { getInlineArtifact } from "./preview-store.ts";
+
+export function insertFileRefIntoComposer(filePath: string): void {
+  const el = document.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]');
+  if (!el) return;
+  const normalized = filePath.replace(/\\/g, "/");
+  const token = normalized.includes(" ") ? `@"${normalized}" ` : `@${normalized} `;
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  const before = el.value.slice(0, start);
+  const after = el.value.slice(end);
+  const prefix = before.length > 0 && !/\s$/.test(before) ? " " : "";
+  const nextVal = `${before}${prefix}${token}${after}`;
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(el, nextVal);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.focus();
+  const caret = (before + prefix + token).length;
+  el.setSelectionRange(caret, caret);
+}
+
+interface MarkdownHeading {
+  level: number;
+  text: string;
+  index: number;
+}
+
+function extractMarkdownHeadings(text: string): MarkdownHeading[] {
+  const out: MarkdownHeading[] = [];
+  const lines = text.replace(/```[\s\S]*?```/g, "").split(/\r?\n/);
+  let idx = 0;
+  for (const line of lines) {
+    const m = /^(#{1,3})\s+(.+?)\s*#*$/.exec(line.trim());
+    if (m) {
+      out.push({
+        level: m[1]!.length,
+        text: m[2]!.replace(/[`*_~[\]]/g, "").trim(),
+        index: idx++,
+      });
+    }
+  }
+  return out;
+}
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "done"; file: PreviewFile };
 
 const zoomStep = 1.25;
@@ -25,9 +68,12 @@ interface ZoomAnchor {
 
 export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarget; path: string; hidden: boolean }) {
   const t = useT();
+  const locale = useLocale();
+  const isZh = locale === "zh-CN";
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [source, setSource] = useState(false);
   const [scripts, setScripts] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const [zoom, setZoom] = useState<number | "fit">("fit");
   // 图片以外的内容（文本、Markdown、源码、网页）整体缩放；换文件不复位，面板开着时一直沿用。
   const [textZoom, setTextZoom] = useState(1);
@@ -80,6 +126,11 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
   const toggleable = isMarkdown || isSvg || file?.kind === "html";
   const imageView = file?.kind === "image" && !source;
   const textView = file?.kind === "text" || file?.kind === "html" || (file?.kind === "image" && source);
+  const mdHeadings = useMemo(
+    () =>
+      isMarkdown && file?.kind === "text" && typeof file.text === "string" ? extractMarkdownHeadings(file.text) : [],
+    [isMarkdown, file],
+  );
 
   // Ctrl+滚轮缩放（整页缩放锁在字号档位上，见主进程 main-window.ts）。React 的 onWheel 是 passive，拦不住，只能自己挂。
   useEffect(() => {
@@ -197,6 +248,38 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
               </Button>
             </span>
           )}
+          {isMarkdown && !source && mdHeadings.length > 1 && (
+            <Button
+              variant="quiet"
+              size="sm"
+              testId="file-preview-outline-toggle"
+              onClick={() => setOutlineOpen((v) => !v)}
+            >
+              {isZh ? `大纲 (${mdHeadings.length})` : `Outline (${mdHeadings.length})`}
+            </Button>
+          )}
+          {!path.startsWith("@artifact/") && (
+            <IconButton
+              label={isZh ? "引用 @file 到输入框" : "Insert @file into composer"}
+              testId="file-preview-insert-ref"
+              onClick={() => insertFileRefIntoComposer(file?.path ?? path)}
+            >
+              <span className="file-preview-at-glyph">@</span>
+            </IconButton>
+          )}
+          {file && (file.kind === "text" || file.kind === "html") && typeof file.text === "string" && (
+            <IconButton
+              label={isZh ? "复制文件内容" : "Copy file content"}
+              testId="file-preview-copy"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(file.text ?? "")
+                  .then(() => pushToast({ level: "info", message: isZh ? "已复制文件内容" : "Copied file content" }));
+              }}
+            >
+              <CopyIcon size={13} />
+            </IconButton>
+          )}
           {taskId !== null && !path.startsWith("@artifact/") && file?.canOpen && (
             <IconButton label={t("preview.open")} testId="file-preview-open" onClick={() => run("openTaskFile")}>
               <External size={14} />
@@ -209,6 +292,27 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
           )}
         </span>
       </div>
+      {isMarkdown && !source && outlineOpen && mdHeadings.length > 1 && (
+        <nav className="file-preview-outline" data-testid="file-preview-outline">
+          {mdHeadings.map((h) => (
+            <button
+              key={h.index}
+              type="button"
+              className="file-preview-outline-item"
+              data-level={h.level}
+              onClick={() => {
+                const container = body.current;
+                if (!container) return;
+                const nodes = container.querySelectorAll("h1, h2, h3");
+                const targetEl = nodes[h.index];
+                targetEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              {h.text}
+            </button>
+          ))}
+        </nav>
+      )}
       <div
         ref={body}
         className="file-preview-body"

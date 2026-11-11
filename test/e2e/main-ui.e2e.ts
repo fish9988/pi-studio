@@ -506,7 +506,7 @@ test("侧栏：竖排 搜索 / [新任务] / [打开文件夹]；任务和历史
     await sidebar.locator(".sb-settings").click();
     await expect(page.getByTestId("settings")).toBeVisible();
     await expect(page.getByTestId("settings-nav")).toBeVisible();
-    await expect(page.getByTestId("sidebar")).toHaveCount(0);
+    await expect(page.getByTestId("sidebar")).toBeVisible();
     await page.getByTestId("settings-back").click();
     await expect(page.getByTestId("settings")).toHaveCount(0);
     await expect(page.getByTestId("settings-nav")).toHaveCount(0);
@@ -581,15 +581,9 @@ test("首页 Bento 仪表盘、顶栏对话/轨迹切换与原地改名、右侧
     await bento.getByTestId("empty-usage-tab-overview").click();
     await expect(bento.getByTestId("empty-usage-chart")).toBeVisible();
 
-    // 发出首条消息进入会话页：验证顶栏对话/轨迹胶囊切换、原地点击标题重命名、快捷打开菜单与右侧工作台切换。
+    // 发出首条消息进入会话页：验证原地点击标题重命名、快捷打开菜单与右侧工作台切换。
     await sendFirst(page, "用一句中文回答：2+2 等于几？不要调用任何工具。");
-    const viewSwitch = page.getByTestId("topbar-view-switch");
-    await expect(viewSwitch).toBeVisible();
-    await expect(page.getByTestId("topbar-view-chat")).toHaveAttribute("aria-selected", "true");
-    await page.getByTestId("topbar-view-trajectory").click();
-    await expect(page.getByTestId("topbar-view-trajectory")).toHaveAttribute("aria-selected", "true");
-    await page.getByTestId("topbar-view-chat").click();
-    await expect(page.getByTestId("topbar-view-chat")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("topbar-view-switch")).toHaveCount(0);
 
     // 点击会话标题原地重命名。
     await page.getByTestId("topbar-crumb").locator(".crumb-title-btn").click();

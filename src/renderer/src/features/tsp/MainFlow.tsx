@@ -167,11 +167,11 @@ function toWorkspaceRelative(normalizedPath: string, hrefClean: string): { fileP
     .replace(/^\.\//, "");
 
   let displayRel = candidate;
-  if (/^[A-Za-z]:\//.test(displayRel) || displayRel.startsWith("/")) {
+  if (/probe-user|tern-probe/i.test(displayRel)) {
     const markerMatch = /\/((?:src|docs|test|tests|packages|public|scripts|resources|fixtures)\/.*)$/i.exec(displayRel);
     if (markerMatch?.[1]) {
       displayRel = markerMatch[1];
-    } else if (/probe-user/i.test(displayRel)) {
+    } else {
       const parts = displayRel.split("/").filter(Boolean);
       displayRel = parts[parts.length - 1] ?? displayRel;
     }
@@ -380,8 +380,8 @@ function extractNodeDeliverables(surface: DocSurface, id: string): DeliverableIt
 
   if (node.k === "tool" && node.p["status"] === "done") {
     const toolName = node.p["name"];
-    if (toolName === "write" || toolName === "edit" || toolName === "read") {
-      const op: "write" | "edit" | "read" = toolName === "write" ? "write" : toolName === "edit" ? "edit" : "read";
+    if (toolName === "write" || toolName === "edit") {
+      const op: "write" | "edit" = toolName === "write" ? "write" : "edit";
       const stats = parseToolDiffStats(surface, node);
       const hrefStr = typeof node.p["href"] === "string" ? node.p["href"] : undefined;
       if (typeof node.p["target"] === "string" && node.p["targetKind"] === "path") {
@@ -537,7 +537,32 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
     turnDeliverables = [];
   };
 
-  for (const id of main.c) {
+  // 预先找出每一轮用户对话（从 omp.user 到下一个 omp.user）里最后一个「过程节点」（工具调用或含思考的节点）在 main.c 中的下标：
+  // 只要还没越过本轮最后一个过程节点，中途出现的思考、工具调用、过渡说明文字全部归拢在同一个 ProcessGroup 里（对齐 DSH claude-style），
+  // 绝不拆成多段零碎框，也绝不在中途塞入 usage 脚注行！
+  const lastProcessIdxForTurn = new Map<number, number>();
+  {
+    let scanTurn = -1;
+    for (let idx = 0; idx < main.c.length; idx++) {
+      const cid = main.c[idx]!;
+      const cnode = surface.nodes.get(cid);
+      if (!cnode) continue;
+      if (cnode.k === "card" && cnode.p["role"] === "omp.user") {
+        scanTurn += 1;
+        continue;
+      }
+      if (cnode.k === "tool" && cnode.p["role"] !== "omp.tool.ask") {
+        lastProcessIdxForTurn.set(scanTurn, idx);
+      } else if (cnode.k === "col" && cnode.p["role"] === "omp.assistant") {
+        if (cnode.c.some((subId) => isThinkingSection(surface, subId))) {
+          lastProcessIdxForTurn.set(scanTurn, idx);
+        }
+      }
+    }
+  }
+
+  for (let idx = 0; idx < main.c.length; idx++) {
+    const id = main.c[idx]!;
     const node = surface.nodes.get(id);
     if (!node) continue;
     if (node.k === "card" && node.p["role"] === "omp.user") {
@@ -565,7 +590,7 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
       continue;
     }
     // 3. 助手容器（omp.assistant）：把其中的 omp.thinking 子节点提取进过程组（忽略冗余 media/image 子节点）；
-    //    如果还有正式回答（md / error / usage），先结算过程组，再画助手容器。
+    //    如果本轮后面还有工具调用或思考步骤，中途的过渡文本也一并收进当前过程组，保证整轮只有一个合并过程卡片！
     if (node.k === "col" && node.p["role"] === "omp.assistant") {
       const thinkingIds = node.c.filter((cid) => isThinkingSection(surface, cid));
       const otherIds = node.c.filter((cid) => !isHoistedProcessChild(surface, cid));
@@ -578,8 +603,24 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
         }
       }
       turnDeliverables.push(...extractNodeDeliverables(surface, id));
-      if (otherIds.length === 0) {
-        // 纯思考或仅含工具图片的中间助手容器：留在当前过程组里继续往后合并，不打断过程组！
+
+      const nonUsageContentIds = otherIds.filter((oid) => {
+        const onode = surface.nodes.get(oid);
+        if (!onode || onode.p["role"] === "omp.turn.usage") return false;
+        if (onode.k === "md") {
+          return typeof onode.p["text"] === "string" && onode.p["text"].trim() !== "";
+        }
+        return true;
+      });
+      const hasMoreProcessInTurn = idx < (lastProcessIdxForTurn.get(currentTurnIndex) ?? -1);
+
+      if (nonUsageContentIds.length === 0) {
+        // 纯思考、空流式占位或仅含中途 usage 的中间助手容器：留在当前过程组里继续往后合并，绝不打断过程组！
+        continue;
+      }
+      if (hasMoreProcessInTurn) {
+        // 本轮后面还有工具调用或思考：把中途过渡说明节点也收进同一个过程组，不拆断过程组！
+        runIds.push(...nonUsageContentIds);
         continue;
       }
       let turnUsageMs = 0;

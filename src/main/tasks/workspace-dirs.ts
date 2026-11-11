@@ -18,6 +18,18 @@ export class WorkspaceDirs {
     return true;
   }
 
+  /** 注册任务运行期间工具实际访问过的额外工作目录（去重，忽略任务自身 cwd）。 */
+  addDir(dir: string, taskCwd?: string): boolean {
+    const trimmed = dir.trim();
+    if (trimmed === "") return false;
+    const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+    const targetNorm = norm(trimmed);
+    if (taskCwd !== undefined && norm(taskCwd) === targetNorm) return false;
+    if (this.#dirs.some((d) => norm(d) === targetNorm)) return false;
+    this.#dirs = [...this.#dirs, trimmed];
+    return true;
+  }
+
   /**
    * 用 omp 的一条输出更新列表，返回是否有变化。omp 拒绝（目录不存在、已在工作区…）或输出认不出来时，
    * 以 omp 原文抛错，列表保持不变。

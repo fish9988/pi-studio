@@ -3191,6 +3191,7 @@
   > .tsp-section[data-role^="omp.thinking"]
   > .tsp-section-head
   > .tsp-chev {
+  order: 3;
   margin-left: auto;
 }
 .tsp-process-group-body[data-layout="column"] > .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
@@ -3206,6 +3207,14 @@
 .tsp-process-group-body[data-layout="column"] > .tsp-tool > .tsp-tool-head {
   min-height: 36px;
   padding: var(--space-1-5) var(--space-3);
+}
+.tsp-process-group-body[data-layout="column"] > .tsp-tool > .tsp-tool-head .tsp-tool-title + .tsp-tool-target::before {
+  content: "· ";
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+}
+.tsp-process-group-body[data-layout="column"] > .tsp-tool.collapsed > .tsp-tool-body {
+  display: none;
 }
 .tsp-process-group-body[data-layout="column"] > .tsp-tool > .tsp-tool-head > .tsp-tool-ic {
   display: none;

@@ -14,6 +14,7 @@ import type { PiLaunch } from "../src/main/pi/discover.ts";
 import { PiService } from "../src/main/pi/pi-service.ts";
 import { PiTaskRunner } from "../src/main/pi/pi-task-runner.ts";
 import { computeTextDiffHunks, PI_SURFACE_ID, PiTspBridge } from "../src/main/pi/pi-tsp-bridge.ts";
+import { fallbackSmartTitle } from "../src/main/tasks/ai-helper.ts";
 import type { TaskRecord } from "../src/main/tasks/task-registry.ts";
 
 const FAKE_PI_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fake-pi", "fake-pi.mjs");
@@ -685,5 +686,79 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
     } finally {
       await runner.dispose();
     }
+  });
+
+  it("fallbackSmartTitle strips Windows drive paths and [Image] tags without truncating to 'C'", () => {
+    const title = fallbackSmartTitle(
+      "[Image #1, 1568x311] C:\\pi-project\\正常聊天\\pi-studio 这个迁移自OMP的GUI项目有很多的问题，先重构设置与侧栏。",
+      "已经完成重构。",
+    );
+    expect(title).not.toBe("C");
+    expect(title).toContain("pi-studio");
+    expect(title.length).toBeGreaterThan(4);
+
+    // When firstUser is already corrupted to 'C', falls back to latestUser or answerText
+    const recovered = fallbackSmartTitle("C", "已完成插件市场与并行设置窗口开发。", "加上并行设置窗口和插件市场");
+    expect(recovered).toBe("加上并行设置窗口和插件市场");
+  });
+
+  it("sets command summary target on powershell tools and drops empty assistant containers on tool-calling steps", () => {
+    const bridge = new PiTspBridge("Process Group Test");
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_start", contentIndex: 0 },
+    });
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_start",
+        contentIndex: 1,
+        id: "tc_ps_1",
+        toolName: "powershell",
+      },
+    });
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_end",
+        contentIndex: 1,
+        toolCall: {
+          type: "toolCall",
+          id: "tc_ps_1",
+          name: "powershell",
+          arguments: { command: "Set-Location -LiteralPath 'C:\\repo'\nnpm run check" },
+        },
+      },
+    });
+    bridge.handleRpcEvent({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        stopReason: "toolUse",
+        content: [
+          { type: "text", text: "" },
+          {
+            type: "toolCall",
+            id: "tc_ps_1",
+            name: "powershell",
+            arguments: { command: "Set-Location -LiteralPath 'C:\\repo'\nnpm run check" },
+          },
+        ],
+        usage: { input: 1000, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 1050 },
+        model: "gemini-4-argon-high",
+      },
+    });
+
+    const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
+    const main = surface.nodes.get("main")!;
+    // Empty omp.assistant must have been removed, leaving only the tool node in main
+    const toolNodes = main.c.map((id) => surface.nodes.get(id)!).filter((n) => n?.k === "tool");
+    const asstNodes = main.c
+      .map((id) => surface.nodes.get(id)!)
+      .filter((n) => n?.k === "col" && n.p["role"] === "omp.assistant");
+    expect(toolNodes).toHaveLength(1);
+    expect(toolNodes[0]!.p["target"]).toBe("npm run check");
+    expect(toolNodes[0]!.p["targetKind"]).toBe("command");
+    expect(asstNodes).toHaveLength(0);
   });
 });

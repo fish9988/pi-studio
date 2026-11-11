@@ -16,28 +16,48 @@ import { getTaskPool } from "./runtime.ts";
 
 const HELPER_TIMEOUT_MS = 45_000;
 
+function stripPromptNoise(raw: string): string {
+  return raw
+    .replace(/<supermemory>[\s\S]*?<\/supermemory>/gi, " ")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\[Image\s*#?\d*[^\]]*\]/gi, " ")
+    .replace(/https?:\/\/[^\s)>\]]+/gi, " ")
+    .replace(/[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|]+[\\/])*([^\s\\/:*?"<>|]+)/g, "$1 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function cleanGeneratedTitle(raw: string): string {
   const line =
     stripAnsi(raw)
       .split(/\r?\n/)
       .map((s) => s.trim())
       .find((s) => s.length > 0) ?? "";
-  return line
+  const cleaned = line
     .replace(/^(?:标题|Title)\s*[:：]\s*/i, "")
     .replace(/^[#*"'`「『【（(]+|[*"'`」』】）)。.！!？?]+$/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 32);
+  return cleaned.length >= 2 && !/^[A-Za-z]$/.test(cleaned) ? cleaned : "";
 }
 
-function fallbackSmartTitle(promptText: string, answerText: string): string {
-  const source = (promptText.trim() || answerText.trim()).replace(/```[\s\S]*?```/g, " ");
+export function fallbackSmartTitle(promptText: string, answerText: string, latestUserText = ""): string {
+  const source =
+    [promptText, latestUserText, answerText]
+      .map(stripPromptNoise)
+      .find((s) => s.length >= 2 && !/^[A-Za-z]$/.test(s)) ?? "";
   const cleaned = source
+    .replace(/^[#>*\-\d.\s]+/, "")
     .replace(/^(?:请帮我|帮我|请问|我想|我希望|麻烦|能不能|如何|怎么|please\s+|help\s+me\s+|can\s+you\s+)/i, "")
     .replace(/\s+/g, " ")
     .trim();
-  const firstClause = cleaned.split(/[，。！？；,.!?;:\n]/)[0]?.trim() || cleaned;
-  return firstClause.slice(0, 22) || "新会话";
+  const best =
+    cleaned
+      .split(/[，。！？；!?;|\r\n]+/)
+      .map((s) => s.trim())
+      .find((s) => s.length >= 2 && !/^[A-Za-z]$/.test(s)) ?? cleaned;
+  return Array.from(best).slice(0, 24).join("").trim() || "会话主题总结";
 }
 
 function fallbackEnhancePrompt(raw: string, zh: boolean): string {
@@ -72,15 +92,18 @@ async function runHelperLlm(options: {
       `--system-prompt=${options.systemPrompt}`,
     ];
 
-    if (helperModel === "current" && options.taskModel) {
-      args.push(`--model=${options.taskModel}`);
-    } else if (
-      helperModel !== "default" &&
-      helperModel !== "current" &&
-      helperModel !== "smol" &&
-      helperModel.includes("/")
-    ) {
-      args.push(`--model=${helperModel}`);
+    const chosenSpec =
+      helperModel !== "default" && helperModel !== "current" && helperModel !== "smol" && helperModel.includes("/")
+        ? helperModel
+        : (options.taskModel ?? null);
+
+    if (chosenSpec && chosenSpec.includes("/")) {
+      const slash = chosenSpec.indexOf("/");
+      const provider = chosenSpec.slice(0, slash);
+      const modelId = chosenSpec.slice(slash + 1);
+      if (provider && modelId) {
+        args.push("--provider", provider, "--model", modelId);
+      }
     }
 
     args.push("--", options.userPrompt);
@@ -121,9 +144,9 @@ export async function smartRenameTask(taskId: TaskId): Promise<string> {
     : "You generate concise session titles. Given the conversation summary, output a short, specific title (3 to 7 words). Output ONLY the title text without quotes or punctuation.";
 
   const userPrompt = [
-    `First message: ${firstUser.slice(0, 400)}`,
-    latestUser ? `Latest message: ${latestUser.slice(0, 300)}` : "",
-    answer ? `Assistant reply excerpt: ${answer.slice(0, 400)}` : "",
+    `First message: ${stripPromptNoise(firstUser).slice(0, 400)}`,
+    latestUser ? `Latest message: ${stripPromptNoise(latestUser).slice(0, 300)}` : "",
+    answer ? `Assistant reply excerpt: ${stripPromptNoise(answer).slice(0, 400)}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -136,7 +159,7 @@ export async function smartRenameTask(taskId: TaskId): Promise<string> {
   }
 
   const generated = await runHelperLlm({ systemPrompt, userPrompt, cwd, taskModel });
-  const title = (generated ? cleanGeneratedTitle(generated) : "") || fallbackSmartTitle(firstUser, answer);
+  const title = (generated ? cleanGeneratedTitle(generated) : "") || fallbackSmartTitle(firstUser, answer, latestUser);
   await pool.renameTask(taskId, title);
   return title;
 }

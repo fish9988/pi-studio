@@ -2,7 +2,6 @@
 // 右侧主画布顶栏：左 可点击改名的任务标题 + 重开；中 [对话 | 轨迹] 胶囊切换；
 // 右 工作区快捷打开菜单（Open ▾）+ 任务工具（分支、评审、文件、子代理、浏览器、终端、任务菜单 ⋯），再往右是 titleBarOverlay 绘制的系统三键。
 import { useState } from "react";
-import type { ConversationView } from "../../../shared/ipc.ts";
 import { AgentsToggle } from "../features/agents/index.ts";
 import { BrowserToggle } from "../features/browser/index.ts";
 import { pushToast } from "../features/dialogs/index.ts";
@@ -23,56 +22,11 @@ import { anchorBelowEnd, Menu, type MenuAnchor, type MenuEntry } from "../ui/Men
 import { PixelLogo } from "../ui/PixelLogo.tsx";
 import { SidebarIcon } from "./icons.tsx";
 import { shortcutLabel, withShortcut } from "./platform-keys.ts";
-import { setConversationView, useShellValue } from "./shell-store.ts";
 import { TaskCrumb } from "./TaskCrumb.tsx";
 
 interface TopBarProps {
   sidebarShown: boolean;
   onToggleSidebar(): void;
-}
-
-function ConversationViewSwitch() {
-  const t = useT();
-  const view = useMainView();
-  const taskId = useSelectedTaskId();
-  const mode = useShellValue("conversationView") ?? "chat";
-  if (view !== "conversation" || taskId === null) return null;
-
-  const options: readonly { value: ConversationView; label: string }[] = [
-    { value: "chat", label: t("menu.viewChat") },
-    { value: "trajectory", label: t("menu.viewTrajectory") },
-  ];
-
-  return (
-    <div className="topbar-center">
-      <div
-        className="topbar-view-switch"
-        role="tablist"
-        aria-label={`${t("menu.viewChat")} / ${t("menu.viewTrajectory")}`}
-        data-view={mode}
-        data-testid="topbar-view-switch"
-      >
-        <span className="topbar-view-thumb" aria-hidden="true" />
-        {options.map((opt) => {
-          const active = mode === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className="topbar-view-pill"
-              data-active={active ? "" : undefined}
-              onClick={() => setConversationView(opt.value)}
-              data-testid={`topbar-view-${opt.value}`}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function WorkspaceOpenMenu() {
@@ -209,7 +163,7 @@ export function TopBar(props: TopBarProps) {
       </div>
       <div className="topbar-main">
         <TaskCrumb />
-        <ConversationViewSwitch />
+        <div className="topbar-center" />
         <TaskTools />
       </div>
     </header>

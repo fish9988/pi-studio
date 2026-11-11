@@ -57,7 +57,7 @@ function StudioEntry() {
   if (notes === null) return null;
   return (
     <Entry
-      name="omp-studio"
+      name="pi-studio"
       version={notes.version}
       date={notes.date}
       expanded={expanded}
@@ -83,7 +83,7 @@ function OmpEntry() {
   };
   return (
     <Entry
-      name="omp"
+      name="pi-coding-agent"
       version={latest?.version ?? status.version}
       date={latest?.date ?? null}
       expanded={expanded}
