@@ -41,9 +41,8 @@ import {
   preloadFrequentViews,
   ReviewHost,
   SessionInfoHost,
-  SettingsNav,
-  SettingsView,
 } from "./lazy-views.tsx";
+import { isStandaloneSettingsWindow, SettingsWindow, StandaloneSettingsWindowRoot } from "./SettingsWindow.tsx";
 import { onStudioCommand } from "../features/palette/studio-command.ts";
 import { jumpToWaitingTask, Sidebar, useUnreadTaskSync } from "../features/sidebar/index.ts";
 import { addProjectAsDraft } from "../features/sidebar/sidebar-actions.ts";
@@ -468,7 +467,13 @@ export function App() {
     },
   });
 
-  return (
+  return isStandaloneSettingsWindow() ? (
+    <div id="app" data-testid="app-root" data-locale={appInfo?.locale}>
+      <StandaloneSettingsWindowRoot />
+      <NoticeLayer />
+      <TooltipLayer />
+    </div>
+  ) : (
     <div
       id="app"
       data-testid="app-root"
@@ -505,8 +510,7 @@ export function App() {
           onPointerEnter={peekActive ? onPeekCardEnter : undefined}
           onPointerLeave={peekActive ? onPeekLeave : undefined}
         >
-          {/* 进设置时侧栏位置换成设置导航；窄窗口的抽屉里仍是会话列表，设置导航改成内容顶上的下拉 */}
-          {view === "settings" && !narrow ? <SettingsNav /> : <Sidebar />}
+          <Sidebar />
         </div>
         <main
           ref={mainPanel}
@@ -523,18 +527,13 @@ export function App() {
         >
           {!narrow && sidebarShown && <SidebarResizer width={sidebarWidth} column={sidebarColumn} />}
           {!narrow && view === "conversation" && <ChatWidthResizer width={chatWidth} panel={mainPanel} />}
-          {/* 过程区是 omp 的节点（TspView），输入框是 studio 的 Composer。最近看过的任务的 TspView 都在这里，只有当前任务的显示；
-              进设置、回空状态时也留着。key 带前缀，和下面同一任务 id 的兄弟区分开。
-              进设置时当前任务的过程区不藏进 Activity（parked）：长对话从 display:none 回来要把上万个节点重算样式、重挂所有 effect，
-              返回那一帧卡 100ms 以上。 */}
+          {/* 会话过程区与输入框始终保持挂载与可见，打开设置时以并行窗口方式在旁展示，方便一边看会话一边调设置。 */}
           {kept.map((id) => (
             <Activity key={`tsp:${id}`} mode={id === taskId ? "visible" : "hidden"}>
-              <TspView taskId={id} parked={view !== "conversation"} />
+              <TspView taskId={id} parked={false} />
             </Activity>
           ))}
-          {view === "settings" ? (
-            <SettingsView compactNav={narrow || !sidebarShown} />
-          ) : taskId === null ? (
+          {taskId === null ? (
             <>
               <EmptyState />
               <TerminalPanel key={`terminal:${draftKey}`} terminalKey={draftKey} open={terminalOpen} />
@@ -548,6 +547,7 @@ export function App() {
             </>
           )}
         </main>
+        {view === "settings" && <SettingsWindow compactNav={narrow} />}
         {/* 右栏四个工作台面板互斥，key 均带前缀，切换时绝不会出现同一帧双栏并排。 */}
         {view === "conversation" &&
           (panel?.key === terminalKey ? (

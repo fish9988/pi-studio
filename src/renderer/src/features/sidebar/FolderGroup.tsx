@@ -81,6 +81,36 @@ export function FolderGroup(props: FolderGroupProps) {
             }
           }}
         >
+          <span className="sb-folder-icon" aria-hidden="true">
+            {open ? (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M1.75 4.25A1.5 1.5 0 0 1 3.25 2.75h2.9a1.25 1.25 0 0 1 1 .5l.9 1.2h4.7a1.5 1.5 0 0 1 1.5 1.5v1.3" />
+                <path d="M2.2 13.25h10.55a1.4 1.4 0 0 0 1.35-1.05l1.15-4.45H3.7L2.2 13.25Z" />
+              </svg>
+            ) : (
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M2 4.25A1.5 1.5 0 0 1 3.5 2.75h2.85a1.25 1.25 0 0 1 1 .5l.9 1.2h4.25A1.5 1.5 0 0 1 14 5.95v5.8a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.75v-7.5Z" />
+              </svg>
+            )}
+          </span>
           <span className="sb-group-name">{folder.label}</span>
           <span className="sb-chevron">
             <ChevronIcon />

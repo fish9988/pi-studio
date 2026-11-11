@@ -22,6 +22,7 @@ import { getShellState, setShellState, sidebarWidthRange } from "../window/windo
 import {
   getMainWindow,
   glassSupported,
+  openSettingsWindow,
   revealOnFirstFrame,
   setTitleBarDimmed,
   setTitleBarTheme,
@@ -66,6 +67,7 @@ export const appHandlers: HandlerGroup<
   | "setTitleBarTheme"
   | "windowReady"
   | "editField"
+  | "openSettingsWindow"
 > = {
   getAppInfo: async () => {
     const locale = resolveLocale();
@@ -159,5 +161,10 @@ export const appHandlers: HandlerGroup<
   // 作用于主窗口里当前获得焦点的输入框，和系统编辑菜单的同名命令一样；粘贴由 Chromium 自己读剪贴板、发 paste 事件。
   editField: async (value) => {
     getMainWindow()?.webContents[parseOneOf(value, "command", editCommands)]();
+  },
+  openSettingsWindow: async (section) => {
+    const parsedSection =
+      section === undefined || section === null ? undefined : parseString(section, "section", 64, { allowEmpty: true });
+    openSettingsWindow(parsedSection);
   },
 };

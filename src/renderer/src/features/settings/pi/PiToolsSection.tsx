@@ -57,7 +57,6 @@ export function PiToolsSection() {
   const codeMode = usePiSetting<CodeModeSetting>("codemode.mode", "on", asCodeMode);
   const inlineBudget = usePiSetting("codemode.inlineBudget", 3000, asNumber);
   const autoResize = usePiSetting("images.autoResize", true, asBoolean);
-  const blockImages = usePiSetting("images.blockImages", false, asBoolean);
 
   const activeSet = useMemo(
     () => resolveActiveToolSet(defaultTools.value, defaultTools.modified),
@@ -73,8 +72,8 @@ export function PiToolsSection() {
   };
 
   const codeModeOptions: readonly Option<CodeModeSetting>[] = [
-    { value: "on", label: tr("常规混合 (on)", "Hybrid (on)") },
-    { value: "only", label: tr("仅通过 CodeMode 编排 (only)", "CodeMode only (only)") },
+    { value: "on", label: tr("常规混合", "Hybrid (on)") },
+    { value: "only", label: tr("仅通过 CodeMode 编排", "CodeMode only") },
   ];
 
   return (
@@ -82,7 +81,7 @@ export function PiToolsSection() {
       {/* 1. 内置工具矩阵 */}
       <section className="pis-group">
         <SectionHead
-          title={tr("内置工具矩阵 (defaultTools)", "Built-in tools (defaultTools)")}
+          title={tr("内置工具", "Built-in tools")}
           count={`${activeSet.size}/${PI_BUILTIN_TOOLS.length}`}
           actions={
             defaultTools.modified ? (
@@ -128,7 +127,7 @@ export function PiToolsSection() {
         <SectionHead title={tr("CodeMode 沙箱与内联预算", "CodeMode sandbox & inline budget")} />
         <div className="pis-card pis-card-rows">
           <Row
-            label={tr("工具编排模式 (codemode.mode)", "CodeMode orchestration")}
+            label={tr("工具编排模式", "CodeMode orchestration")}
             modified={codeMode.modified}
             reset={{ tip: "on", onReset: () => void codeMode.reset() }}
             testId="pi-codemode-mode-row"
@@ -145,7 +144,7 @@ export function PiToolsSection() {
             )}
           </Row>
           <Row
-            label={tr("内联输出预算 (codemode.inlineBudget)", "Inline output budget")}
+            label={tr("内联输出预算", "Inline output budget")}
             modified={inlineBudget.modified}
             reset={{ tip: "3000 tok", onReset: () => void inlineBudget.reset() }}
             testId="pi-codemode-budget-row"
@@ -170,7 +169,7 @@ export function PiToolsSection() {
         <SectionHead title={tr("图像输入处理", "Image input handling")} />
         <div className="pis-card pis-card-rows">
           <Row
-            label={tr("自动缩放至 2000×2000 (images.autoResize)", "Auto-resize to 2000×2000")}
+            label={tr("大图自动缩放至 2000×2000", "Auto-resize to 2000×2000")}
             modified={autoResize.modified}
             reset={{ tip: "true", onReset: () => void autoResize.reset() }}
             testId="pi-images-resize-row"
@@ -181,21 +180,6 @@ export function PiToolsSection() {
                 labelledBy={labelId}
                 onChange={(next) => void autoResize.save(next)}
                 testId="pi-images-resize"
-              />
-            )}
-          </Row>
-          <Row
-            label={tr("阻断图片发送 (images.blockImages)", "Block image inputs")}
-            modified={blockImages.modified}
-            reset={{ tip: "false", onReset: () => void blockImages.reset() }}
-            testId="pi-images-block-row"
-          >
-            {(labelId) => (
-              <Switch
-                checked={blockImages.value}
-                labelledBy={labelId}
-                onChange={(next) => void blockImages.save(next)}
-                testId="pi-images-block"
               />
             )}
           </Row>

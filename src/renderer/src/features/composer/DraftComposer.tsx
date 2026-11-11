@@ -35,6 +35,7 @@ import { clearFirstPrompt, setFirstPrompt } from "../tsp/first-prompt-store.ts";
 import { AttachButton } from "./AttachButton.tsx";
 import { ClawdMascot } from "./ClawdMascot.tsx";
 import { EnhancePromptButton } from "./EnhancePromptButton.tsx";
+import { QuickPhrasesButton } from "./QuickPhrasesButton.tsx";
 import "./composer.css";
 /** projectTools：工具行里紧跟审批胶囊的部分（空状态放项目标签）。 */
 export function DraftComposer({ projectId, projectTools }: { projectId: ProjectId | null; projectTools?: ReactNode }) {
@@ -245,6 +246,7 @@ export function DraftComposer({ projectId, projectTools }: { projectId: ProjectI
           {projectTools}
           <span className="composer-spacer" />
           <AttachButton addFiles={attach.addFiles} acceptsImages={model?.acceptsImages} disabled={sending} />
+          <QuickPhrasesButton draftKey={key} disabled={sending} onFocusField={() => fieldRef.current?.focus()} />
           <EnhancePromptButton
             draftKey={key}
             text={draft.text}

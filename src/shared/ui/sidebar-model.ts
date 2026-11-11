@@ -40,6 +40,18 @@ function folderKey(cwd: string): string {
   return cwd.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
+function isScratchChatCwd(normalizedKey: string): boolean {
+  return (
+    normalizedKey.includes("/.t3/scratch/") ||
+    normalizedKey.endsWith("/.pi/agent/chat-workspace") ||
+    normalizedKey.endsWith("/.pi/agent/pideck/defaultproject")
+  );
+}
+
+function isEphemeralTestTempCwd(normalizedKey: string): boolean {
+  return /\/temp\/od-conn-test-[a-z0-9_-]+$/i.test(normalizedKey);
+}
+
 function folderName(cwd: string): string {
   const parts = cwd.split(/[\\/]+/).filter((part) => part !== "");
   return parts[parts.length - 1] ?? cwd;
@@ -131,6 +143,7 @@ export function buildTimeline(input: SidebarInput): SidebarItem[] {
  */
 export function buildFolders(input: SidebarInput): SidebarFolder[] {
   const needle = input.query.trim().toLowerCase();
+  const pinnedDefaultKey = input.defaultCwd == null ? null : folderKey(input.defaultCwd);
   const folders = new Map<string, SidebarFolder>();
   const projectKey = new Map<ProjectId, string>();
   for (const project of input.projects) {
@@ -143,10 +156,23 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
       folders.get(projectKey.get(item.task.projectId) ?? "")?.items.push(item);
       continue;
     }
-    const key = folderKey(item.session.cwd);
+    const rawKey = folderKey(item.session.cwd);
+    if (needle === "" && !folders.has(rawKey) && isEphemeralTestTempCwd(rawKey)) {
+      continue;
+    }
+    const redirectToDefault = pinnedDefaultKey !== null && !folders.has(rawKey) && isScratchChatCwd(rawKey);
+    const key = redirectToDefault ? pinnedDefaultKey : rawKey;
     const folder = folders.get(key);
     if (folder) folder.items.push(item);
-    else
+    else if (redirectToDefault && input.defaultCwd != null) {
+      folders.set(key, {
+        key,
+        cwd: input.defaultCwd,
+        label: folderName(input.defaultCwd),
+        project: null,
+        items: [item],
+      });
+    } else {
       folders.set(key, {
         key,
         cwd: item.session.cwd,
@@ -154,6 +180,7 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
         project: null,
         items: [item],
       });
+    }
   }
   const list = [...folders.values()].filter((folder) => needle === "" || folder.items.length > 0);
   const nameCount = new Map<string, number>();

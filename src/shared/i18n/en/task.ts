@@ -12,6 +12,8 @@ export const task = {
   renameLabel: "Task title",
   archive: "Archive",
   archived: "Archived",
+  delete: "Delete session",
+  deleted: "Session deleted",
   undo: "Undo",
   openFolder: "Open working folder",
   reveal: "Show session file",

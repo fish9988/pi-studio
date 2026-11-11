@@ -12,7 +12,7 @@ const none: readonly SessionSummary[] = [];
 /** 只认最后一次请求的结果：先发的请求晚回来时不覆盖新的。 */
 let latest = 0;
 
-function refreshHistorySessions(): void {
+export function refreshHistorySessions(): void {
   const request = ++latest;
   window.studio.listSessions(null).then(
     (list) => {
@@ -25,6 +25,12 @@ function refreshHistorySessions(): void {
     },
     (error: unknown) => reportErrorNow(error),
   );
+}
+
+export function removeHistorySessionOptimistic(sessionId: string): void {
+  const current = store.get();
+  if (current === null) return;
+  store.set(current.filter((session) => session.id !== sessionId));
 }
 
 /**

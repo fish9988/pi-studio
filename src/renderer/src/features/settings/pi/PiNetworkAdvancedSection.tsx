@@ -1,9 +1,8 @@
-// Pi 网络与高级页（advanced）：传输协议与代理、指数退避重试策略（retry.*）、配置文件直达栏与底层完整配置表。
+// Pi 网络与高级页（advanced）：传输协议与代理、指数退避重试策略、配置文件直达栏。
 import type { PiConfigFileKind } from "../../../../../shared/pi-config-types.ts";
 import { External } from "../../../icons.tsx";
 import { Button, Row, SectionHead, Segmented, Switch, type Option } from "../../../ui/controls.tsx";
 import { reportError } from "../../../ui/errors.ts";
-import { OmpConfigPane } from "../OmpConfigPane.tsx";
 import { piBridge } from "./pi-bridge.ts";
 import {
   asBoolean,
@@ -64,7 +63,7 @@ export function PiNetworkAdvancedSection() {
         <SectionHead title={tr("传输协议与代理", "Transport & HTTP proxy")} />
         <div className="pis-card pis-card-rows">
           <Row
-            label={tr("流式传输协议 (transport)", "Streaming transport")}
+            label={tr("流式传输协议", "Streaming transport")}
             modified={transport.modified}
             reset={{ tip: "auto", onReset: () => void transport.reset() }}
             testId="pi-transport-row"
@@ -83,7 +82,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("HTTP 代理地址 (httpProxy)", "HTTP proxy URL")}
+            label={tr("HTTP 代理地址", "HTTP proxy URL")}
             modified={httpProxy.modified}
             reset={{ tip: tr("空（读取环境变量）", "Empty (use ENV)"), onReset: () => void httpProxy.reset() }}
             testId="pi-http-proxy-row"
@@ -102,7 +101,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("HTTP 空闲超时 (httpIdleTimeoutMs)", "HTTP idle timeout")}
+            label={tr("HTTP 空闲超时", "HTTP idle timeout")}
             modified={httpIdleTimeout.modified}
             reset={{ tip: "60000 ms", onReset: () => void httpIdleTimeout.reset() }}
             testId="pi-http-idle-row"
@@ -121,7 +120,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("WebSocket 握手超时 (websocketConnectTimeoutMs)", "WebSocket connect timeout")}
+            label={tr("WebSocket 握手超时", "WebSocket connect timeout")}
             modified={wsConnectTimeout.modified}
             reset={{ tip: "10000 ms", onReset: () => void wsConnectTimeout.reset() }}
             testId="pi-ws-timeout-row"
@@ -141,12 +140,12 @@ export function PiNetworkAdvancedSection() {
         </div>
       </section>
 
-      {/* 2. 自动重试策略 (retry.*) */}
+      {/* 2. 自动重试策略 */}
       <section className="pis-group">
-        <SectionHead title={tr("自动重试策略 (retry.*)", "Retry & backoff policy (retry.*)")} />
+        <SectionHead title={tr("自动重试策略", "Retry & backoff policy")} />
         <div className="pis-card pis-card-rows">
           <Row
-            label={tr("启用请求失败重试 (retry.enabled)", "Enable automatic retry")}
+            label={tr("启用请求失败自动重试", "Enable automatic retry")}
             modified={retryEnabled.modified}
             reset={{ tip: "true", onReset: () => void retryEnabled.reset() }}
             testId="pi-retry-enabled-row"
@@ -162,7 +161,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("最大重试次数 (retry.maxRetries)", "Max retries")}
+            label={tr("最大重试次数", "Max retries")}
             modified={maxRetries.modified}
             reset={{ tip: "3", onReset: () => void maxRetries.reset() }}
             testId="pi-retry-max-row"
@@ -181,7 +180,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("初始退避延迟 (retry.baseDelayMs)", "Base backoff delay")}
+            label={tr("初始退避延迟", "Base backoff delay")}
             modified={baseDelayMs.modified}
             reset={{ tip: "2000 ms", onReset: () => void baseDelayMs.reset() }}
             testId="pi-retry-base-row"
@@ -200,7 +199,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("单次退避上限 (retry.maxAgentDelayMs)", "Max backoff delay")}
+            label={tr("单次退避上限", "Max backoff delay")}
             modified={maxAgentDelayMs.modified}
             reset={{ tip: "60000 ms", onReset: () => void maxAgentDelayMs.reset() }}
             testId="pi-retry-max-delay-row"
@@ -219,7 +218,7 @@ export function PiNetworkAdvancedSection() {
           </Row>
 
           <Row
-            label={tr("Provider 总请求超时 (retry.provider.timeoutMs)", "Provider request timeout")}
+            label={tr("Provider 总请求超时", "Provider request timeout")}
             modified={providerTimeoutMs.modified}
             reset={{ tip: "300000 ms", onReset: () => void providerTimeoutMs.reset() }}
             testId="pi-retry-provider-timeout-row"
@@ -257,12 +256,6 @@ export function PiNetworkAdvancedSection() {
             ))}
           </div>
         </div>
-      </section>
-
-      {/* 4. 全部底层配置项 */}
-      <section className="pis-group">
-        <SectionHead title={tr("全部设置项 (settings.json)", "All schema settings (settings.json)")} />
-        <OmpConfigPane view={{ kind: "advanced" }} />
       </section>
     </div>
   );

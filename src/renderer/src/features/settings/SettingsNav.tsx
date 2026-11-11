@@ -36,12 +36,20 @@ export function focusSettingsSearch(): void {
   searchInput?.select();
 }
 
+function closeSettings(): void {
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("window") === "settings") {
+    window.close();
+    return;
+  }
+  showView("conversation");
+}
+
 /** Ctrl+F 聚焦搜索；Esc 回到进入设置前的视图（搜索框里有内容时它先自己清掉，已 preventDefault）。导航和内容共用。 */
 export function onSettingsKeyDown(event: KeyboardEvent): void {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
     event.preventDefault();
     focusSettingsSearch();
-  } else if (event.key === "Escape" && !event.defaultPrevented) showView("conversation");
+  } else if (event.key === "Escape" && !event.defaultPrevented) closeSettings();
 }
 
 function SearchBox({ width }: { width: number | string }) {
@@ -101,7 +109,7 @@ export function SettingsNav() {
         className="snav-back"
         icon={<ChevronLeft size={14} />}
         hint="Esc"
-        onClick={() => showView("conversation")}
+        onClick={closeSettings}
         testId="settings-back"
       >
         {t("settings.back")}

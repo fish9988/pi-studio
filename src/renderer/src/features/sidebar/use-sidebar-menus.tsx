@@ -4,8 +4,8 @@ import { useCallback, useState, type ReactNode } from "react";
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import type { Project, SessionSummary, TaskId, TaskState } from "../../../../shared/ipc.ts";
 import { Branch, Folder, Trash } from "../../icons.tsx";
+import { clearSelection } from "../../store/index.ts";
 import { Menu, type MenuAnchor, type MenuEntry } from "../../ui/Menu.tsx";
-import { pushToast } from "../dialogs/index.ts";
 import { cleanupOrphans } from "../git/git-actions.ts";
 import { archivePending, commitPendingArchives } from "./archive-store.ts";
 import { refreshProjects } from "./projects-store.ts";
@@ -77,13 +77,15 @@ export function useSidebarMenus({ t, selectedTaskId, projectTaskIds, onRename }:
           tone: "danger",
           onSelect: () => {
             const taskIds = projectTaskIds(project);
-            if (taskIds.some((taskId) => !archivePending(taskId))) {
-              pushToast({ level: "warning", message: t("project.removeBlocked") });
-              return;
-            }
+            const activeTaskIds = taskIds.filter((taskId) => !archivePending(taskId));
             void attempt(t, async () => {
-              // 刚归档、还在撤销期的任务主进程还当它没归档：先提交，否则移除被拒（issue #8）。
+              if (selectedTaskId !== null && taskIds.includes(selectedTaskId)) {
+                clearSelection();
+              }
               await commitPendingArchives(taskIds, t);
+              for (const taskId of activeTaskIds) {
+                await window.studio.archiveTask(taskId);
+              }
               await window.studio.removeProject(project.id);
               await refreshProjects();
             });

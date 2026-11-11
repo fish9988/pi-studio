@@ -1,5 +1,5 @@
 // 会话历史：只读 omp 的会话目录建索引（src/main/history），恢复会话交给任务池。参数一律是 unknown，先校验再用。
-import { stat } from "node:fs/promises";
+import { stat, unlink } from "node:fs/promises";
 import { shell } from "electron";
 import type { HandlerGroup } from "../../shared/ipc.ts";
 import { readSessionHead, resolveAgentDir, SessionIndex } from "../history/session-index.ts";
@@ -30,6 +30,8 @@ export const historyHandlers: HandlerGroup<
   | "getTaskSessionRef"
   | "getSessionModelUsage"
   | "listSlashCommands"
+  | "deleteTask"
+  | "deleteSession"
 > = {
   async listSlashCommands(taskId) {
     const pool = await getTaskPool();
@@ -89,5 +91,27 @@ export const historyHandlers: HandlerGroup<
 
   async getSessionModelUsage(taskId) {
     return readSessionUsage((await getTaskPool()).sessionFileOf(parseTaskId(taskId)));
+  },
+
+  async deleteTask(taskId) {
+    const id = parseTaskId(taskId);
+    const pool = await getTaskPool();
+    let sessionFile: string | null = null;
+    try {
+      sessionFile = pool.sessionFileOf(id);
+    } catch {
+      sessionFile = null;
+    }
+    await pool.archiveTask(id).catch(() => {});
+    if (sessionFile !== null) {
+      await unlink(sessionFile).catch(() => {});
+    }
+  },
+
+  async deleteSession(sessionId) {
+    const id = parseString(sessionId, "sessionId", 200);
+    const { sessions } = await index.scan();
+    const matches = sessions.filter((s) => s.id === id);
+    await Promise.all(matches.map((s) => unlink(s.file).catch(() => {})));
   },
 };

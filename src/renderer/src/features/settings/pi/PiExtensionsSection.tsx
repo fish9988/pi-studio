@@ -12,15 +12,36 @@ import {
   type PiResourcesSnapshot,
 } from "../../../../../shared/pi-config-types.ts";
 import {
+  cleanPiPackageName,
+  CURATED_PI_PLUGINS,
+  findCuratedPiPlugin,
+  formatPluginNumber,
+  PI_PLUGIN_CATEGORIES,
+  piPluginHue,
+  piPluginInitial,
+  type PiMarketplacePlugin,
+  type PiPluginCategory,
+} from "../../../../../shared/pi-plugin-catalog.ts";
+import { setAutoSmartRename, useShellValue } from "../../../app/shell-store.ts";
+import {
+  addQuickPhrase,
+  removeQuickPhrase,
+  resetQuickPhrases,
+  setQuickPhrasesEnabled,
+  useQuickPhrases,
+} from "../../composer/QuickPhrasesButton.tsx";
+import {
+  Bolt,
   Code,
   External,
   FileIcon,
   Pencil,
   Plug,
   Plus,
-  Puzzle,
   Restart,
+  Search,
   Sparkle,
+  Star,
   Terminal,
   Trash,
 } from "../../../icons.tsx";
@@ -188,6 +209,18 @@ export function PiExtensionsSection() {
   const [pkgBusy, setPkgBusy] = useState<"install" | "update" | string | null>(null);
   const [pkgOutput, setPkgOutput] = useState("");
 
+  // 插件市场状态
+  const [marketQuery, setMarketQuery] = useState("");
+  const [marketCategory, setMarketCategory] = useState<"all" | PiPluginCategory>("all");
+  const [marketItems, setMarketItems] = useState<PiMarketplacePlugin[]>(() => [...CURATED_PI_PLUGINS]);
+  const [marketLoading, setMarketLoading] = useState(false);
+
+  // DSH 灵感工作台插件（快捷短语库 + 智能重命名）
+  const quickPhrases = useQuickPhrases();
+  const [phraseTitle, setPhraseTitle] = useState("");
+  const [phrasePrompt, setPhrasePrompt] = useState("");
+  const autoSmartRename = useShellValue("autoSmartRename") ?? false;
+
   // 自定义扩展路径
   const [extPathDraft, setExtPathDraft] = useState("");
 
@@ -210,6 +243,26 @@ export function PiExtensionsSection() {
     void loadResources();
   }, [loadResources]);
 
+  useEffect(() => {
+    let alive = true;
+    const timer = setTimeout(() => {
+      setMarketLoading(true);
+      void piBridge()
+        .searchPiPlugins(marketQuery)
+        .then((items) => {
+          if (alive) setMarketItems(items);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (alive) setMarketLoading(false);
+        });
+    }, 180);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [marketQuery]);
+
   const builtinStateMap = useMemo(() => {
     const map = new Map<PiBuiltinExtensionId, boolean>();
     for (const item of resources.builtinExtensions) map.set(item.id, item.enabled);
@@ -230,6 +283,20 @@ export function PiExtensionsSection() {
     () => resources.prompts.filter((p) => (scope === "global" ? p.scope === "global" : true)),
     [resources.prompts, scope],
   );
+
+  const installedPkgNames = useMemo(() => {
+    const map = new Map<string, PiPackageItem>();
+    for (const pkg of visiblePackages) {
+      map.set(cleanPiPackageName(pkg.source), pkg);
+      map.set(pkg.source, pkg);
+    }
+    return map;
+  }, [visiblePackages]);
+
+  const filteredMarketItems = useMemo(() => {
+    if (marketCategory === "all") return marketItems;
+    return marketItems.filter((item) => item.category === marketCategory);
+  }, [marketItems, marketCategory]);
 
   const toggleBuiltinExtension = async (id: PiBuiltinExtensionId, enabled: boolean) => {
     try {
@@ -335,16 +402,33 @@ export function PiExtensionsSection() {
     }
   };
 
+  const installPackageSpec = async (rawSource: string) => {
+    const source = rawSource.trim().replace(/^\$?\s*pi\s+install\s+/i, "");
+    if (source === "") return;
+    setPkgBusy(`install:${source}`);
+    try {
+      const { output } = await piBridge().runPiPackageAction("install", source, scope, scopedProjectId);
+      setPkgOutput(output.trim());
+      await loadResources();
+      pushToast({ level: "info", message: tr(`已安装 ${cleanPiPackageName(source)}`, `Installed ${source}`) });
+    } catch (error) {
+      reportError(t, error);
+    } finally {
+      setPkgBusy(null);
+    }
+  };
+
   const installPackage = async () => {
     const source = pkgSource.trim();
     if (source === "") return;
     setPkgBusy("install");
     try {
-      const { output } = await piBridge().runPiPackageAction("install", source, scope, scopedProjectId);
+      const cleaned = source.replace(/^\$?\s*pi\s+install\s+/i, "");
+      const { output } = await piBridge().runPiPackageAction("install", cleaned, scope, scopedProjectId);
       setPkgOutput(output.trim());
       setPkgSource("");
       await loadResources();
-      pushToast({ level: "info", message: tr(`已安装 ${source}`, `Installed ${source}`) });
+      pushToast({ level: "info", message: tr(`已安装 ${cleanPiPackageName(cleaned)}`, `Installed ${cleaned}`) });
     } catch (error) {
       reportError(t, error);
     } finally {
@@ -427,7 +511,389 @@ export function PiExtensionsSection() {
         </IconButton>
       </div>
 
-      {/* 1. 内置扩展 (builtin:*) */}
+      {/* 1. 已安装插件与扩展包管理 (pi install / update / remove) */}
+      <section className="pis-group" data-testid="pi-installed-plugins-section">
+        <SectionHead
+          title={tr("已安装插件与扩展包", "Installed plugins & packages")}
+          count={visiblePackages.length}
+          actions={
+            <Button
+              size="sm"
+              icon={<Restart size={14} />}
+              loading={pkgBusy === "update"}
+              disabled={pkgBusy !== null}
+              onClick={() => void updateAllPackages()}
+              testId="pi-pkg-update-all"
+            >
+              {tr("全部更新", "Update all")}
+            </Button>
+          }
+        />
+        <div className="pis-card-padded">
+          <div className="pis-pkg-bar">
+            <TextField
+              size="sm"
+              mono
+              width="100%"
+              className="pis-pkg-input"
+              value={pkgSource}
+              onChange={setPkgSource}
+              placeholder={tr(
+                "输入插件包来源：npm:pi-web-access · git:github.com/user/repo · ./local-pkg",
+                "npm:@foo/bar · git:github.com/user/repo · ./local-pkg",
+              )}
+              aria-label={tr("扩展包来源", "Package source")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && pkgSource.trim() !== "") void installPackage();
+              }}
+              testId="pi-pkg-input"
+            />
+            <Button
+              size="sm"
+              variant="primary"
+              loading={pkgBusy === "install"}
+              disabled={pkgBusy !== null || pkgSource.trim() === ""}
+              onClick={() => void installPackage()}
+              testId="pi-pkg-install"
+            >
+              {tr("安装插件", "Install")}
+            </Button>
+          </div>
+
+          {pkgOutput !== "" && (
+            <pre className="pis-cli-output" data-testid="pi-pkg-output">
+              {pkgOutput}
+            </pre>
+          )}
+
+          {visiblePackages.length === 0 ? (
+            <p className="pis-muted">
+              {tr(
+                "当前范围尚未安装外部插件包，可在下方「Pi 插件市场」一键浏览安装。",
+                "No external Pi packages installed yet. Browse the marketplace below to install in one click.",
+              )}
+            </p>
+          ) : (
+            <div className="pis-plugin-installed-list">
+              {visiblePackages.map((pkg) => {
+                const displayName = cleanPiPackageName(pkg.source);
+                const curated = findCuratedPiPlugin(pkg.source);
+                const hue = piPluginHue(displayName);
+                const initial = piPluginInitial(displayName);
+                return (
+                  <div
+                    key={`${pkg.scope}:${pkg.source}`}
+                    className="pis-plugin-installed-row"
+                    data-testid={`pi-pkg-row-${pkg.source}`}
+                  >
+                    <span className="pis-plugin-avatar" style={{ "--pl-hue": hue } as React.CSSProperties}>
+                      {initial}
+                    </span>
+                    <div className="pis-plugin-installed-body">
+                      <div className="pis-plugin-installed-head">
+                        <span className="pis-plugin-title">{displayName}</span>
+                        <Badge>{pkg.kind}</Badge>
+                        {curated?.version && <Badge>v{curated.version}</Badge>}
+                        {scope === "project" && (
+                          <Badge>{pkg.scope === "project" ? tr("项目", "project") : tr("全局", "global")}</Badge>
+                        )}
+                      </div>
+                      <span className="pis-plugin-desc">
+                        {curated ? tr(curated.zhDescription, curated.description) : pkg.source}
+                      </span>
+                    </div>
+                    <div className="pis-plugin-installed-actions">
+                      {(curated?.repoUrl ?? curated?.npmUrl) && (
+                        <IconButton
+                          label={tr("打开主页", "Open homepage")}
+                          onClick={() =>
+                            void piBridge()
+                              .openExternal((curated?.repoUrl ?? curated?.npmUrl)!)
+                              .catch((err: unknown) => reportError(t, err))
+                          }
+                        >
+                          <External size={13} />
+                        </IconButton>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        loading={pkgBusy === pkg.source}
+                        disabled={pkgBusy !== null}
+                        onClick={() => void removePackage(pkg)}
+                        testId={`pi-pkg-remove-${pkg.source}`}
+                      >
+                        {tr("卸载", "Remove")}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 2. Pi 插件市场 (精选推荐 + npm keywords:pi-package 实时检索) */}
+      <section className="pis-group" data-testid="pi-marketplace-section">
+        <SectionHead
+          title={tr("Pi 插件市场", "Pi Plugin Marketplace")}
+          count={filteredMarketItems.length}
+          note={tr(
+            "收录社区高 Star 精选插件与 npm 实时插件库，点一下直接安装到当前范围。",
+            "Curated high-star Pi extensions and live npm registry search with one-click install.",
+          )}
+        />
+        <div className="pis-card-padded">
+          <div className="pis-market-toolbar">
+            <TextField
+              size="sm"
+              type="search"
+              width="100%"
+              className="pis-market-search"
+              leading={<Search size={14} />}
+              value={marketQuery}
+              onChange={setMarketQuery}
+              placeholder={tr(
+                "搜索插件名称、功能或标签（如 MCP、压缩、记忆、安全）…",
+                "Search plugins by name or tag…",
+              )}
+              aria-label={tr("搜索插件市场", "Search plugin marketplace")}
+              testId="pi-market-search"
+            />
+          </div>
+
+          <div className="pis-market-cats" role="tablist" aria-label={tr("插件分类", "Plugin categories")}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={marketCategory === "all"}
+              className="pis-market-cat"
+              data-active={marketCategory === "all" || undefined}
+              onClick={() => setMarketCategory("all")}
+              data-testid="pi-market-cat-all"
+            >
+              {tr("全部", "All")}
+            </button>
+            {PI_PLUGIN_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                role="tab"
+                aria-selected={marketCategory === cat}
+                className="pis-market-cat"
+                data-active={marketCategory === cat || undefined}
+                onClick={() => setMarketCategory(cat)}
+                data-testid={`pi-market-cat-${cat}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {filteredMarketItems.length === 0 ? (
+            <p className="pis-muted">
+              {marketLoading
+                ? tr("正在检索插件市场…", "Searching plugin marketplace…")
+                : tr("没有找到匹配的插件。", "No matching plugins found.")}
+            </p>
+          ) : (
+            <div className="pis-market-grid" data-testid="pi-marketplace-grid">
+              {filteredMarketItems.map((item) => {
+                const installedPkg = installedPkgNames.get(item.name) ?? installedPkgNames.get(item.installSpec);
+                const hue = piPluginHue(item.name);
+                const initial = piPluginInitial(item.name);
+                const installingThis = pkgBusy === `install:${item.installSpec}`;
+                const removingThis = installedPkg !== undefined && pkgBusy === installedPkg.source;
+                return (
+                  <div
+                    key={item.name}
+                    className="pis-market-card"
+                    data-installed={installedPkg !== undefined || undefined}
+                    data-testid={`pi-market-card-${item.name}`}
+                  >
+                    <div className="pis-market-card-top">
+                      <span className="pis-plugin-avatar" style={{ "--pl-hue": hue } as React.CSSProperties}>
+                        {initial}
+                      </span>
+                      <div className="pis-market-card-title-wrap">
+                        <div className="pis-market-card-title-row">
+                          <span className="pis-market-card-name">{item.name}</span>
+                          <Badge>v{item.version}</Badge>
+                        </div>
+                        <div className="pis-market-card-stats">
+                          <span>@{item.author}</span>
+                          {item.stars !== undefined && (
+                            <span className="pis-market-stat-star">
+                              <Star size={11} />
+                              {formatPluginNumber(item.stars)}
+                            </span>
+                          )}
+                          {item.downloads > 0 && <span>↓ {formatPluginNumber(item.downloads)}</span>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="pis-market-card-desc">{tr(item.zhDescription, item.description)}</p>
+
+                    <div className="pis-market-card-foot">
+                      <div className="pis-market-tags">
+                        <span className="pis-market-tag" data-featured={item.featured || undefined}>
+                          {item.category}
+                        </span>
+                        {(item.tags ?? []).slice(0, 2).map((tag) => (
+                          <span key={tag} className="pis-market-tag">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="pis-market-actions">
+                        {(item.repoUrl ?? item.npmUrl) && (
+                          <IconButton
+                            label={tr("查看仓库", "View repository")}
+                            onClick={() =>
+                              void piBridge()
+                                .openExternal((item.repoUrl ?? item.npmUrl)!)
+                                .catch((err: unknown) => reportError(t, err))
+                            }
+                          >
+                            <External size={13} />
+                          </IconButton>
+                        )}
+                        {installedPkg ? (
+                          <Button
+                            size="sm"
+                            loading={removingThis}
+                            disabled={pkgBusy !== null}
+                            onClick={() => void removePackage(installedPkg)}
+                            testId={`pi-market-remove-${item.name}`}
+                          >
+                            {tr("已装 · 卸载", "Installed · Remove")}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            loading={installingThis}
+                            disabled={pkgBusy !== null}
+                            onClick={() => void installPackageSpec(item.installSpec)}
+                            testId={`pi-market-install-${item.name}`}
+                          >
+                            {tr("安装", "Install")}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 3. 工作台增强插件 (灵感源于热门工作台插件：快捷短语 ⚡ + 自动智能命名 ✨) */}
+      <section className="pis-group" data-testid="pi-workbench-enhancements">
+        <SectionHead
+          title={tr("工作台内置增强插件", "Workbench enhancements")}
+          note={tr(
+            "内置的会话效率与界面增强组件，无需额外占模型 Context Token。",
+            "Built-in Studio productivity enhancements with zero context token overhead.",
+          )}
+        />
+        <div className="pis-card pis-card-rows">
+          <Row
+            label={tr("输入框 ⚡ 快捷指令短语菜单", "Composer ⚡ quick phrases menu")}
+            reset={{ tip: tr("恢复默认短语", "Reset defaults"), onReset: resetQuickPhrases }}
+            testId="pi-quick-phrases-row"
+          >
+            {(labelId) => (
+              <Switch
+                checked={quickPhrases.enabled}
+                labelledBy={labelId}
+                onChange={setQuickPhrasesEnabled}
+                testId="pi-quick-phrases-switch"
+              />
+            )}
+          </Row>
+          <Row
+            label={tr("新对话首轮完成后自动智能生成标题", "Auto smart-rename new session title")}
+            testId="pi-workbench-smart-rename-row"
+          >
+            {(labelId) => (
+              <Switch
+                checked={autoSmartRename}
+                labelledBy={labelId}
+                onChange={setAutoSmartRename}
+                testId="pi-workbench-smart-rename"
+              />
+            )}
+          </Row>
+        </div>
+
+        {quickPhrases.enabled && (
+          <div className="pis-card-padded">
+            <div className="pis-pkg-bar">
+              <TextField
+                size="sm"
+                width={180}
+                value={phraseTitle}
+                onChange={setPhraseTitle}
+                placeholder={tr("短语标题（如：精简重构）", "Phrase title")}
+                aria-label={tr("短语标题", "Phrase title")}
+                testId="pi-phrase-title-input"
+              />
+              <TextField
+                size="sm"
+                width="100%"
+                className="pis-pkg-input"
+                value={phrasePrompt}
+                onChange={setPhrasePrompt}
+                placeholder={tr("点击后插入输入框的提示词正文…", "Prompt text to insert…")}
+                aria-label={tr("短语内容", "Phrase prompt")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && phraseTitle.trim() !== "" && phrasePrompt.trim() !== "") {
+                    addQuickPhrase(phraseTitle, phrasePrompt);
+                    setPhraseTitle("");
+                    setPhrasePrompt("");
+                  }
+                }}
+                testId="pi-phrase-prompt-input"
+              />
+              <Button
+                size="sm"
+                icon={<Plus size={14} />}
+                disabled={phraseTitle.trim() === "" || phrasePrompt.trim() === ""}
+                onClick={() => {
+                  addQuickPhrase(phraseTitle, phrasePrompt);
+                  setPhraseTitle("");
+                  setPhrasePrompt("");
+                }}
+                testId="pi-phrase-add-btn"
+              >
+                {tr("添加短语", "Add")}
+              </Button>
+            </div>
+            <div className="pis-selected-chips">
+              {quickPhrases.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="pis-chip"
+                  onClick={() => removeQuickPhrase(item.id)}
+                  title={`${item.prompt}\n(${tr("点击移除", "Click to remove")})`}
+                >
+                  <Bolt size={11} />
+                  <span>{item.title}</span>
+                  <Trash size={11} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 4. 内置扩展 (builtin:*) */}
       <section className="pis-group">
         <SectionHead title={tr("内置扩展 (builtin:*)", "Built-in extensions (builtin:*)")} />
         <div className="pis-tool-grid" data-testid="pi-builtin-extensions">
@@ -506,7 +972,7 @@ export function PiExtensionsSection() {
         </div>
       </section>
 
-      {/* 2. MCP 服务器 (mcp.json) */}
+      {/* 5. MCP 服务器 (mcp.json) */}
       <section className="pis-group">
         <SectionHead
           title={tr("MCP 服务器 (mcp.json)", "MCP servers (mcp.json)")}
@@ -602,100 +1068,11 @@ export function PiExtensionsSection() {
         </div>
       </section>
 
-      {/* 3. Pi 扩展包 (packages · pi install) */}
-      <section className="pis-group">
-        <SectionHead
-          title={tr("Pi 扩展包 (pi install)", "Pi packages (pi install)")}
-          count={visiblePackages.length}
-          actions={
-            <Button
-              size="sm"
-              icon={<Restart size={14} />}
-              loading={pkgBusy === "update"}
-              disabled={pkgBusy !== null}
-              onClick={() => void updateAllPackages()}
-              testId="pi-pkg-update-all"
-            >
-              {tr("全部更新", "Update all")}
-            </Button>
-          }
-        />
-        <div className="pis-card-padded">
-          <div className="pis-pkg-bar">
-            <TextField
-              size="sm"
-              mono
-              width="100%"
-              className="pis-pkg-input"
-              value={pkgSource}
-              onChange={setPkgSource}
-              placeholder="npm:@foo/bar · git:github.com/user/repo · ./local-pkg"
-              aria-label={tr("扩展包来源", "Package source")}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && pkgSource.trim() !== "") void installPackage();
-              }}
-              testId="pi-pkg-input"
-            />
-            <Button
-              size="sm"
-              variant="primary"
-              loading={pkgBusy === "install"}
-              disabled={pkgBusy !== null || pkgSource.trim() === ""}
-              onClick={() => void installPackage()}
-              testId="pi-pkg-install"
-            >
-              {tr("安装", "Install")}
-            </Button>
-          </div>
-
-          {pkgOutput !== "" && (
-            <pre className="pis-cli-output" data-testid="pi-pkg-output">
-              {pkgOutput}
-            </pre>
-          )}
-
-          {visiblePackages.length === 0 ? (
-            <p className="pis-muted">{tr("尚未安装任何 Pi 扩展包。", "No Pi packages installed.")}</p>
-          ) : (
-            <div>
-              {visiblePackages.map((pkg) => (
-                <ListRow
-                  key={`${pkg.scope}:${pkg.source}`}
-                  icon={<Puzzle />}
-                  title={pkg.source}
-                  testId={`pi-pkg-row-${pkg.source}`}
-                  badges={
-                    <>
-                      <Badge>{pkg.kind}</Badge>
-                      {scope === "project" && (
-                        <Badge>{pkg.scope === "project" ? tr("项目", "project") : tr("全局", "global")}</Badge>
-                      )}
-                    </>
-                  }
-                  actions={
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      loading={pkgBusy === pkg.source}
-                      disabled={pkgBusy !== null}
-                      onClick={() => void removePackage(pkg)}
-                      testId={`pi-pkg-remove-${pkg.source}`}
-                    >
-                      {tr("移除", "Remove")}
-                    </Button>
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 4. Skills 与提示词模板 (skills & prompts/*.md) */}
+      {/* 6. Skills 与提示词模板 (skills & prompts/*.md) */}
       <section className="pis-group">
         <div className="pis-card pis-card-rows">
           <Row
-            label={tr("注册 /skill:name 斜杠命令 (enableSkillCommands)", "Register /skill:name commands")}
+            label={tr("注册 /skill:name 斜杠命令", "Register /skill:name commands")}
             modified={enableSkillCommands.modified}
             reset={{ tip: "true", onReset: () => void enableSkillCommands.reset() }}
             testId="pi-enable-skill-cmds-row"

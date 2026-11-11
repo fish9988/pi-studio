@@ -8,7 +8,7 @@ export const settings = {
   tools: "工具与终端",
   context: "会话与 Context",
   agents: "Subagent 与规划",
-  extensions: "扩展、包与 Skill",
+  extensions: "插件、市场与 Skill",
   advanced: "网络与高级",
   about: "关于",
   language: "语言",

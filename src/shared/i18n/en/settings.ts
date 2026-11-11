@@ -9,7 +9,7 @@ export const settings = {
   tools: "Tools & shell",
   context: "Context & prompts",
   agents: "Subagents & planning",
-  extensions: "Packages, MCP & skills",
+  extensions: "Plugins, marketplace & skills",
   advanced: "Network & advanced",
   about: "About",
   language: "Language",

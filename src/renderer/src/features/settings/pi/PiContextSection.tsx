@@ -1,41 +1,25 @@
-// Pi 上下文与指令文档页（context）：自动压缩与分支摘要参数 + 全局/项目指令文档编辑器（AGENTS.md / SYSTEM.md / APPEND_SYSTEM.md）。
+// Pi 上下文与指令文档页（context）：自动压缩开关 + 全局/项目指令文档编辑器（AGENTS.md / SYSTEM.md / APPEND_SYSTEM.md）。
 import { useCallback, useEffect, useState } from "react";
 import { PI_SYSTEM_DOC_KINDS, type PiSystemDocKind } from "../../../../../shared/pi-config-types.ts";
 import { Button, Row, SectionHead, Segmented, Switch, Textarea, type Option } from "../../../ui/controls.tsx";
 import { reportError } from "../../../ui/errors.ts";
 import { pushToast } from "../../dialogs/toast-store.ts";
 import { piBridge } from "./pi-bridge.ts";
-import {
-  asBoolean,
-  asNumber,
-  PiNumberCommitField,
-  PiScopeBar,
-  usePiScopeState,
-  usePiSetting,
-  usePiText,
-} from "./pi-shared.tsx";
-
-type ShareDestination = "auto" | "gist" | "radius";
-
-const asShareDest = (raw: unknown, fallback: ShareDestination): ShareDestination =>
-  raw === "auto" || raw === "gist" || raw === "radius" ? raw : fallback;
+import { asBoolean, asNumber, PiScopeBar, usePiScopeState, usePiSetting, usePiText } from "./pi-shared.tsx";
 
 export function PiContextSection() {
   const { tr, t } = usePiText();
 
-  // 1. 自动压缩与分支摘要
+  // 1. 自动压缩
   const compactionEnabled = usePiSetting("compaction.enabled", true, asBoolean);
   const reserveTokens = usePiSetting("compaction.reserveTokens", 16384, asNumber);
   const keepRecentTokens = usePiSetting("compaction.keepRecentTokens", 20000, asNumber);
-  const branchReserveTokens = usePiSetting("branchSummary.reserveTokens", 16384, asNumber);
-  const branchSkipPrompt = usePiSetting("branchSummary.skipPrompt", false, asBoolean);
-  const shareDest = usePiSetting<ShareDestination>("sessionShareDestination", "auto", asShareDest);
+  const hasCustomThresholds = reserveTokens.modified || keepRecentTokens.modified;
 
-  const shareOptions: readonly Option<ShareDestination>[] = [
-    { value: "auto", label: "auto" },
-    { value: "gist", label: "GitHub Gist" },
-    { value: "radius", label: "Radius" },
-  ];
+  const resetCustomThresholds = async () => {
+    if (reserveTokens.modified) await reserveTokens.reset();
+    if (keepRecentTokens.modified) await keepRecentTokens.reset();
+  };
 
   // 2. 全局与项目指令文档 (AGENTS.md / SYSTEM.md / APPEND_SYSTEM.md)
   const { scope, setScope, projects, projectId, setProjectId } = usePiScopeState();
@@ -92,12 +76,21 @@ export function PiContextSection() {
 
   return (
     <div className="pis-stack" data-testid="pi-context-section">
-      {/* 1. 自动压缩与分支摘要 */}
+      {/* 1. 自动压缩 */}
       <section className="pis-group">
-        <SectionHead title={tr("自动压缩与分支摘要", "Auto-compaction & branch summaries")} />
+        <SectionHead
+          title={tr("自动压缩", "Auto-compaction")}
+          actions={
+            hasCustomThresholds ? (
+              <Button size="sm" onClick={() => void resetCustomThresholds()} testId="pi-compaction-thresholds-reset">
+                {tr("恢复默认压缩阈值", "Reset custom thresholds")}
+              </Button>
+            ) : undefined
+          }
+        />
         <div className="pis-card pis-card-rows">
           <Row
-            label={tr("启用上下文自动压缩 (compaction.enabled)", "Enable auto-compaction")}
+            label={tr("启用自动压缩", "Enable auto-compaction")}
             modified={compactionEnabled.modified}
             reset={{ tip: "true", onReset: () => void compactionEnabled.reset() }}
             testId="pi-compaction-enabled-row"
@@ -108,97 +101,6 @@ export function PiContextSection() {
                 labelledBy={labelId}
                 onChange={(next) => void compactionEnabled.save(next)}
                 testId="pi-compaction-enabled"
-              />
-            )}
-          </Row>
-
-          <Row
-            label={tr("压缩预留缓冲区 (compaction.reserveTokens)", "Compaction reserve tokens")}
-            modified={reserveTokens.modified}
-            reset={{ tip: "16384 tok", onReset: () => void reserveTokens.reset() }}
-            testId="pi-compaction-reserve-row"
-          >
-            {(labelId) => (
-              <PiNumberCommitField
-                value={reserveTokens.value}
-                min={1024}
-                max={200000}
-                unit="tok"
-                labelledBy={labelId}
-                onCommit={(next) => void reserveTokens.save(next)}
-                testId="pi-compaction-reserve"
-              />
-            )}
-          </Row>
-
-          <Row
-            label={tr("压缩保留最近上下文 (compaction.keepRecentTokens)", "Keep recent tokens")}
-            modified={keepRecentTokens.modified}
-            reset={{ tip: "20000 tok", onReset: () => void keepRecentTokens.reset() }}
-            testId="pi-compaction-keep-row"
-          >
-            {(labelId) => (
-              <PiNumberCommitField
-                value={keepRecentTokens.value}
-                min={1024}
-                max={500000}
-                unit="tok"
-                labelledBy={labelId}
-                onCommit={(next) => void keepRecentTokens.save(next)}
-                testId="pi-compaction-keep"
-              />
-            )}
-          </Row>
-
-          <Row
-            label={tr("分支摘要预留预算 (branchSummary.reserveTokens)", "Branch summary reserve tokens")}
-            modified={branchReserveTokens.modified}
-            reset={{ tip: "16384 tok", onReset: () => void branchReserveTokens.reset() }}
-            testId="pi-branch-reserve-row"
-          >
-            {(labelId) => (
-              <PiNumberCommitField
-                value={branchReserveTokens.value}
-                min={1024}
-                max={200000}
-                unit="tok"
-                labelledBy={labelId}
-                onCommit={(next) => void branchReserveTokens.save(next)}
-                testId="pi-branch-reserve"
-              />
-            )}
-          </Row>
-
-          <Row
-            label={tr("切分支跳过摘要确认弹窗 (branchSummary.skipPrompt)", "Skip branch summary prompt")}
-            modified={branchSkipPrompt.modified}
-            reset={{ tip: "false", onReset: () => void branchSkipPrompt.reset() }}
-            testId="pi-branch-skip-row"
-          >
-            {(labelId) => (
-              <Switch
-                checked={branchSkipPrompt.value}
-                labelledBy={labelId}
-                onChange={(next) => void branchSkipPrompt.save(next)}
-                testId="pi-branch-skip"
-              />
-            )}
-          </Row>
-
-          <Row
-            label={tr("会话分享目标 (sessionShareDestination)", "Session share destination")}
-            modified={shareDest.modified}
-            reset={{ tip: "auto", onReset: () => void shareDest.reset() }}
-            testId="pi-share-dest-row"
-          >
-            {(labelId) => (
-              <Segmented
-                size="sm"
-                value={shareDest.value}
-                options={shareOptions}
-                labelledBy={labelId}
-                onChange={(next) => void shareDest.save(next)}
-                testId="pi-share-dest"
               />
             )}
           </Row>

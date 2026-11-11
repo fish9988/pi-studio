@@ -72,6 +72,7 @@ import type {
   PiSystemDoc,
   PiSystemDocKind,
 } from "./pi-config-types.ts";
+import type { PiMarketplacePlugin } from "./pi-plugin-catalog.ts";
 
 // ───────── 标识 ─────────
 
@@ -1640,6 +1641,10 @@ export interface StudioInvokeApi {
     projectId: ProjectId | null,
   ): Promise<void>;
   openPiConfigFile(kind: PiConfigFileKind): Promise<void>;
+  openSettingsWindow(section?: string): Promise<void>;
+  deleteTask(taskId: TaskId): Promise<void>;
+  deleteSession(sessionId: string): Promise<void>;
+  searchPiPlugins(query: string): Promise<PiMarketplacePlugin[]>;
 }
 
 export interface StudioEventPayloads {
@@ -1948,6 +1953,10 @@ export const invokeNames = {
   getPiSystemDoc: true,
   savePiSystemDoc: true,
   openPiConfigFile: true,
+  openSettingsWindow: true,
+  deleteTask: true,
+  deleteSession: true,
+  searchPiPlugins: true,
 } satisfies Record<keyof StudioInvokeApi, true>;
 
 /** StudioEventPayloads 的全部事件名；订阅函数叫 `on` + 首字母大写的名字。 */

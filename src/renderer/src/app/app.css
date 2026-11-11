@@ -492,13 +492,13 @@ html[data-platform="darwin"] .topbar-left {
   background: var(--border);
 }
 
-/* 对话列左右两缘的宽度拖拽手柄（ChatWidthResizer.tsx，照 dsh-claude-style width-handle.css）：
-   14px 命中带贴着对话列左右边缘，悬停或拖动中露出 2px 导轨线与中点胶囊握把，支持 480px～面板全宽自由缩放。 */
+/* 对话列左右两缘的宽度拖拽手柄（ChatWidthResizer.tsx）：
+   仅在会话显示区的垂直中段区域（约 28%–64% 高度）激活与显示，绝不延伸到底部输入框或顶部标题栏。 */
 .chat-width-handle {
   position: absolute;
-  top: var(--space-8);
-  bottom: var(--space-8);
-  z-index: calc(var(--z-sticky) + 2);
+  top: 28%;
+  bottom: 36%;
+  z-index: var(--z-sticky);
   width: 14px;
   cursor: col-resize;
   user-select: none;
@@ -689,4 +689,194 @@ html[data-platform="darwin"] .topbar-left {
     opacity: 0;
     transform: translateY(var(--travel-sm)) scale(var(--scale-pop));
   }
+}
+
+/* ───────── 并行设置窗口 & 独立操作系统设置窗口 ───────── */
+
+.body:has(> .settings-win[data-mode="dock"]:not([data-minimized])) > .panel {
+  min-width: 320px;
+}
+
+.settings-win {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-app);
+  color: var(--text);
+  overflow: hidden;
+  z-index: calc(var(--z-sticky) + 3);
+}
+
+.settings-win[data-mode="dock"]:not([data-minimized]) {
+  flex: 0 1 clamp(560px, 56vw, 880px);
+  border-left: 1px solid var(--border);
+}
+
+.settings-win[data-mode="float"]:not([data-minimized]) {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  bottom: 12px;
+  width: min(860px, calc(100% - 32px));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2);
+}
+
+.settings-win[data-minimized] {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: auto;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+}
+
+@media (max-width: 1080px) {
+  .settings-win[data-mode="dock"]:not([data-minimized]) {
+    position: absolute;
+    inset: 0;
+    border-left: 0;
+  }
+}
+
+.settings-win-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-2-5) 0 var(--space-3);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+}
+
+.settings-win[data-mode="float"] .settings-win-bar {
+  cursor: grab;
+}
+
+.settings-win[data-mode="float"] .settings-win-bar:active {
+  cursor: grabbing;
+}
+
+.settings-win[data-minimized] .settings-win-bar {
+  border-bottom: 0;
+  background: transparent;
+}
+
+.settings-win-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-win-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.settings-win-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.settings-win-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.settings-win-close {
+  padding: 0 6px;
+}
+
+.settings-win-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-win-nav {
+  flex: 0 0 188px;
+  min-width: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
+  overflow-y: auto;
+}
+
+.settings-win-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-win-content > .settings {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-standalone-root {
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-app);
+}
+
+.settings-standalone-topbar {
+  display: flex;
+  align-items: center;
+  height: var(--titlebar-h);
+  padding: 0 var(--space-4);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.settings-standalone-brand {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-strong);
+  color: var(--text-2);
+}
+
+.settings-standalone-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }

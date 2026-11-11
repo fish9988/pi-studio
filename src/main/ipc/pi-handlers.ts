@@ -12,6 +12,7 @@ import {
   type PiConfigScope,
   type PiMcpServerSaveInput,
 } from "../../shared/pi-config-types.ts";
+import { mergeNpmSearchWithCurated } from "../../shared/pi-plugin-catalog.ts";
 import { resolveAgentDir } from "../history/session-index.ts";
 import {
   deleteNestedValue,
@@ -154,6 +155,7 @@ export const piHandlers: HandlerGroup<
   | "getPiSystemDoc"
   | "savePiSystemDoc"
   | "openPiConfigFile"
+  | "searchPiPlugins"
 > = {
   listPiProviderStatuses: async () => {
     const models = await listModelOptions(false).catch(() => startupCache().models());
@@ -272,5 +274,23 @@ export const piHandlers: HandlerGroup<
     const target = existsSync(filePath) ? filePath : agentDir;
     const failure = await shell.openPath(target);
     if (failure !== "") throw new Error(failure);
+  },
+
+  searchPiPlugins: async (query) => {
+    const q = query === undefined || query === null ? "" : parseString(query, "query", 200, { allowEmpty: true });
+    const searchText = ["keywords:pi-package", q.trim()].filter(Boolean).join(" ");
+    const params = new URLSearchParams({ text: searchText, size: "48" });
+    const url = `https://registry.npmjs.org/-/v1/search?${params.toString()}`;
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(6_000),
+      });
+      if (!response.ok) return mergeNpmSearchWithCurated(null, q);
+      const json: unknown = await response.json();
+      return mergeNpmSearchWithCurated(json, q);
+    } catch {
+      return mergeNpmSearchWithCurated(null, q);
+    }
   },
 };

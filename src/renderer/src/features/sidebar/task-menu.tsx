@@ -2,7 +2,8 @@
 // 第一组是任务本身（重命名、保持运行、会话信息、请求记录、分享链接），第二组是文件（工作目录、会话文件、复制、导出），最后是归档。
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import type { SessionSummary, TaskId } from "../../../../shared/ipc.ts";
-import { CopyIcon, External, FileIcon, Folder, Info, Pencil, Pin } from "../../icons.tsx";
+import { CopyIcon, External, FileIcon, Folder, Info, Pencil, Pin, Trash } from "../../icons.tsx";
+import { clearSelection } from "../../store/index.ts";
 import { reportError } from "../../ui/errors.ts";
 import type { MenuEntry } from "../../ui/Menu.tsx";
 import { pushToast } from "../dialogs/index.ts";
@@ -11,6 +12,7 @@ import { openSessionInfo, openShareDialog } from "../session-info/session-info-s
 import { archiveWithUndo } from "./archive-store.ts";
 import { ArchiveIcon, ExportIcon, ProcessIcon } from "./icons.tsx";
 import { isItemPinned, isTaskUnread, toggleItemPinned, toggleTaskUnread } from "./sidebar-prefs-store.ts";
+import { refreshHistorySessions, removeHistorySessionOptimistic } from "./use-history-sessions.ts";
 export async function attempt(t: TFunction, action: () => Promise<void>): Promise<void> {
   try {
     await action();
@@ -170,6 +172,19 @@ export function buildTaskMenu(options: {
       shortcut: "Del",
       onSelect: () => archiveWithUndo(taskId, options.selectedTaskId, t),
     },
+    {
+      id: "delete",
+      label: t("task.delete"),
+      icon: <Trash />,
+      tone: "danger",
+      onSelect: () =>
+        void attempt(t, async () => {
+          if (options.selectedTaskId === taskId) clearSelection();
+          await window.studio.deleteTask(taskId);
+          refreshHistorySessions();
+          pushToast({ level: "info", message: t("task.deleted") });
+        }),
+    },
   ];
 }
 
@@ -203,6 +218,21 @@ export function buildSessionMenu(options: { t: TFunction; session: SessionSummar
         void attempt(t, async () => {
           await navigator.clipboard.writeText(`#${session.id}`);
           pushToast({ level: "info", message: t("task.copiedRef", { id: session.id.slice(0, 8) }) });
+        }),
+    },
+    { kind: "separator", id: "sep-delete-session" },
+    {
+      id: "deleteSession",
+      label: t("task.delete"),
+      icon: <Trash />,
+      tone: "danger",
+      shortcut: "Del",
+      onSelect: () =>
+        void attempt(t, async () => {
+          removeHistorySessionOptimistic(session.id);
+          await window.studio.deleteSession(session.id);
+          refreshHistorySessions();
+          pushToast({ level: "info", message: t("task.deleted") });
         }),
     },
   ];

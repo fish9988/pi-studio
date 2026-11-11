@@ -166,7 +166,7 @@ export function ModelChip(task: ModelChipProps) {
               onClick={() => setEffortOpen((value) => !value)}
             >
               {fastBolt}
-              <EffortBars total={efforts.length} lit={lit} />
+              <ThinkingPillBadge levelText={levelText} total={efforts.length} lit={lit} />
             </button>
             <EffortPopover
               open={effortOpen}
@@ -195,17 +195,49 @@ export function ModelChip(task: ModelChipProps) {
   );
 }
 
-/** 档位刻度：每档一根 2px 宽的竖条、间隔 2px，从低到高 4 → 12px（取整，落在整像素上不发虚）；前 `lit` 根亮着。
- *  `--i` 给逐根点亮和波动错开用，`--t`（0-1）给 xhigh / max 的渐变取色。
- *  竖条是 HTML 元素不是 SVG <rect>：运行中的波动是 opacity 动画，HTML 元素的交给合成器，SVG 内部元素的每帧都要主线程重算样式。 */
-function EffortBars({ total, lit }: { total: number; lit: number }) {
+/** 主流 AI 界面风格的思考强度胶囊徽标：思考图标 + 档位文字 + 下拉箭头（同时保留隐藏的 .effort-bars 供自动化状态断言读取）。 */
+function ThinkingPillBadge({ levelText, total, lit }: { levelText: string | null; total: number; lit: number }) {
   return (
-    <span className="effort-bars" aria-hidden="true">
-      {Array.from({ length: total }, (_, i) => {
-        const height = total === 1 ? 10 : Math.round(4 + (6 * i) / (total - 1));
-        const style = { "--i": i, "--t": total === 1 ? 1 : i / (total - 1), height } as CSSProperties;
-        return <span key={i} className="effort-bar" data-lit={i < lit || undefined} style={style} />;
-      })}
-    </span>
+    <>
+      <span className="effort-pill-icon" aria-hidden="true">
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M8 1.75a4.75 4.75 0 0 0-3.15 8.3c.52.46.9 1.07 1.02 1.75h4.26c.12-.68.5-1.29 1.02-1.75A4.75 4.75 0 0 0 8 1.75Z" />
+          <path d="M6.25 13.75h3.5" />
+          <path d="M8 5v2.5" />
+          <path d="M6.75 6.25h2.5" />
+        </svg>
+      </span>
+      <span className="effort-pill-label">{levelText}</span>
+      <svg
+        className="effort-pill-caret"
+        width="10"
+        height="10"
+        viewBox="0 0 12 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 4.5 6 7.5 9 4.5" />
+      </svg>
+      <span className="effort-bars" aria-hidden="true">
+        {Array.from({ length: total }, (_, i) => {
+          const height = total === 1 ? 10 : Math.round(4 + (6 * i) / (total - 1));
+          const style = { "--i": i, "--t": total === 1 ? 1 : i / (total - 1), height } as CSSProperties;
+          return <span key={i} className="effort-bar" data-lit={i < lit || undefined} style={style} />;
+        })}
+      </span>
+    </>
   );
 }

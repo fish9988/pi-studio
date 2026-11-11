@@ -228,19 +228,41 @@
   display: flex;
   flex: 1;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-1-5);
   min-width: 0;
   height: 100%;
   /* 右侧常驻一个 ＋（在此项目新建任务），＋ 左边一格是行数或 ⋯；名称始终让出这两格，展开/折叠时名称不跳 */
   padding: 0 calc(2 * var(--control-h-sm) + var(--space-1)) 0 var(--space-2);
   border-radius: var(--radius-sm);
-  color: var(--text-2);
-  font-weight: var(--fw-medium);
+  color: var(--text);
+  font-weight: 600;
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
 }
+.sb-group-toggle[data-collapsed="true"] {
+  color: var(--text-2);
+  font-weight: var(--fw-medium);
+}
 .sb-group-toggle:hover {
   background: var(--bg-hover);
+  color: var(--text);
+}
+.sb-folder-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--accent);
+  opacity: 0.9;
+}
+.sb-group-toggle[data-collapsed="true"] .sb-folder-icon {
+  color: var(--text-3);
+  opacity: 0.85;
+}
+.sb-group-body {
+  position: relative;
+  margin: 2px 0 4px 13px;
+  padding-left: 7px;
+  border-left: 1px solid var(--border-subtle);
 }
 /* 箭头跟在名称后面（2026-10-27 仓库所有者）：展开朝下，折叠朝右；名称太长被省略时箭头不被挤掉 */
 .sb-chevron {

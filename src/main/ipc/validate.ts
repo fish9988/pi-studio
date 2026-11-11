@@ -23,7 +23,7 @@ import {
 } from "../../shared/omp-output/index.ts";
 import type { ThinkingLevel } from "../../shared/omp-wire/rpc-wire.generated.ts";
 import type { TspEvent } from "../../shared/tsp/tsp.generated.ts";
-import { getMainWindow, isAppUrl } from "../window/main-window.ts";
+import { isAppUrl, isTrustedWindowSender } from "../window/main-window.ts";
 
 export class IpcValidationError extends Error {
   constructor(message: string) {
@@ -32,17 +32,10 @@ export class IpcValidationError extends Error {
   }
 }
 
-/** 只放行主窗口的顶层页面，并且页面地址是应用自己的。 */
+/** 只放行受信任应用窗口的顶层页面，并且页面地址是应用自己的。 */
 export function assertTrustedSender(event: IpcMainInvokeEvent): void {
-  const window = getMainWindow();
   const frame = event.senderFrame;
-  if (
-    !window ||
-    event.sender !== window.webContents ||
-    !frame ||
-    frame !== event.sender.mainFrame ||
-    !isAppUrl(frame.url)
-  ) {
+  if (!isTrustedWindowSender(event.sender) || !frame || frame !== event.sender.mainFrame || !isAppUrl(frame.url)) {
     throw new IpcValidationError("发送方不是应用主窗口");
   }
 }

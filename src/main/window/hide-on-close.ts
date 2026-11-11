@@ -6,7 +6,7 @@ import { app, Notification } from "electron";
 import { resolveLocale } from "../settings/settings-store.ts";
 import { t } from "../../shared/i18n/index.ts";
 import { retainNotification } from "../tasks/gate-notifier.ts";
-import { concealWindow } from "./main-window.ts";
+import { concealWindow, getMainWindow } from "./main-window.ts";
 import { showMainWindow } from "./show-window.ts";
 import { finishShutdown, isQuitting } from "./shutdown.ts";
 import { markTrayNoticeShown, trayNoticeShown } from "./window-state.ts";
@@ -32,7 +32,7 @@ function announceTray(): void {
 export function installHideOnClose(): void {
   app.on("browser-window-created", (_event, window) => {
     window.on("close", (event) => {
-      if (isQuitting()) return;
+      if (isQuitting() || window !== getMainWindow()) return;
       event.preventDefault();
       void concealWindow(window);
       announceTray();

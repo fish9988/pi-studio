@@ -301,4 +301,22 @@ describe("buildFolders / buildTimeline", () => {
     expect(sessionTitle(past("c", "E:/x", 1, { title: null, firstPrompt: null }))).toBeNull();
     expect(taskTitle({ title: " \ue000 任务 " })).toBe("任务");
   });
+
+  it("纯聊天临时目录（.t3/scratch/*、chat-workspace）自动归入默认文件夹，不拆出按会话命名的伪文件夹；自动化连接测试临时目录默认隐藏", () => {
+    const folders = buildFolders(
+      input({
+        projects: [project("p1", "C:\\work\\app", "app")],
+        defaultCwd: "C:\\Users\\someone\\pi-studio\\chats",
+        sessions: [
+          past("s1", "C:\\Users\\someone\\.t3\\scratch\\2026-11-11-https-aistudio-g", 100),
+          past("s2", "C:\\Users\\someone\\.pi\\agent\\chat-workspace", 90),
+          past("s3", "C:\\Users\\someone\\AppData\\Local\\Temp\\od-conn-test-cM8tFR", 80),
+        ],
+      }),
+    );
+    expect(folders.map((f) => [f.label, ids(f.items)])).toEqual([
+      ["chats", ["session:s1", "session:s2"]],
+      ["app", []],
+    ]);
+  });
 });

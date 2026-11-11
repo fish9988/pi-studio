@@ -45,6 +45,7 @@ import { useShellValue } from "../../app/shell-store.ts";
 import { AttachButton } from "./AttachButton.tsx";
 import { ClawdMascot } from "./ClawdMascot.tsx";
 import { EnhancePromptButton } from "./EnhancePromptButton.tsx";
+import { QuickPhrasesButton } from "./QuickPhrasesButton.tsx";
 import { SessionTelemetry } from "./SessionTelemetry.tsx";
 
 export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDraft?: boolean }) {
@@ -472,6 +473,11 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
             addFiles={attach.addFiles}
             acceptsImages={shownModel?.acceptsImages}
             disabled={tooOld === true || worktreeGone}
+          />
+          <QuickPhrasesButton
+            draftKey={taskId}
+            disabled={tooOld === true || worktreeGone}
+            onFocusField={() => fieldRef.current?.focus()}
           />
           <EnhancePromptButton
             draftKey={taskId}

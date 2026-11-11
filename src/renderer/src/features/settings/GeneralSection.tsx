@@ -30,7 +30,6 @@ import { reportError } from "../../ui/errors.ts";
 import { Select } from "../../ui/Select.tsx";
 import { systemReducesMotion } from "./motion-preference.ts";
 import { refreshOmpKeybindings, useOmpKeybindings } from "./omp-keybindings-store.ts";
-import { PiInteractionCard } from "./pi/index.ts";
 import { ThemeGallery } from "./ThemeGallery.tsx";
 
 /** 转发给 Pi 的键的作用文字（动作 ID → i18n）；键位来自主进程（默认键位 + 用户 keybindings.json）。 */
@@ -366,7 +365,6 @@ export function GeneralSection() {
           )}
         </Row>
       </div>
-      <PiInteractionCard />
       <SectionHead title={t("settings.idleTasks")} />
       <div className="st-cells">
         <Row label={t("settings.idleClose")} info={t("settings.idleClose.desc")}>

@@ -30,6 +30,7 @@ import {
   type PiSystemDoc,
   type PiSystemDocKind,
 } from "../../../../../shared/pi-config-types.ts";
+import { CURATED_PI_PLUGINS, type PiMarketplacePlugin } from "../../../../../shared/pi-plugin-catalog.ts";
 
 export interface PiStudioApi {
   // 既有 window.studio 接口
@@ -96,6 +97,7 @@ export interface PiStudioApi {
     projectId: ProjectId | null,
   ): Promise<void>;
   openPiConfigFile(kind: PiConfigFileKind): Promise<void>;
+  searchPiPlugins(query: string): Promise<PiMarketplacePlugin[]>;
 }
 
 const emptyResources = (): PiResourcesSnapshot => ({
@@ -190,5 +192,7 @@ export function piBridge(): PiStudioApi {
       if (kind === "models.json" && raw.openModelsFile) return raw.openModelsFile();
       return notWired("openPiConfigFile");
     },
+    searchPiPlugins: (query) =>
+      raw.searchPiPlugins ? raw.searchPiPlugins(query) : Promise.resolve([...CURATED_PI_PLUGINS]),
   };
 }

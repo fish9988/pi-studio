@@ -430,6 +430,29 @@ export function EffortPopover({
             {activeText}
           </span>
         </div>
+        <div className="effort-pop-steps" role="radiogroup" aria-label={t("composer.effortTitle")}>
+          {levels.map((lvl) => {
+            const label = thinkingLabel[lvl] ? t(thinkingLabel[lvl] as MessageKey) : lvl;
+            const selected = lvl === activeLevel;
+            return (
+              <button
+                key={lvl}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className="effort-pop-step"
+                data-selected={selected || undefined}
+                data-testid={`effort-step-${lvl}`}
+                onClick={() => {
+                  onSelect(lvl);
+                  onClose();
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
         <div className="effort-pop-ends" aria-hidden="true">
           <span>{t("composer.effortFaster")}</span>
           <span>{t("composer.effortSmarter")}</span>

@@ -262,6 +262,11 @@ export function setTitleBarTheme(theme: ThemePreference, crossfade: boolean): vo
   const duration = reducedMotion() ? themeFade.reducedMs : themeFade.ms;
   themeTween = crossfade ? { from, start: now, duration, curve: themeFade.curve } : null;
   paintTitleBar(window);
+  const settingsWin = getSettingsWindow();
+  if (settingsWin !== null) {
+    settingsWin.setBackgroundColor(windowBackground());
+    if (!isMac) applyOverlay(settingsWin, currentOverlay(Date.now()));
+  }
 }
 
 /**
@@ -356,9 +361,22 @@ registerShutdownHook(async () => {
 });
 
 let mainWindow: BrowserWindow | null = null;
+let settingsWindow: BrowserWindow | null = null;
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+}
+
+export function getSettingsWindow(): BrowserWindow | null {
+  return settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null;
+}
+
+export function isTrustedWindowSender(sender: Electron.WebContents): boolean {
+  const main = getMainWindow();
+  if (main !== null && sender === main.webContents) return true;
+  const settings = getSettingsWindow();
+  if (settings !== null && sender === settings.webContents) return true;
+  return false;
 }
 
 /** 应用自己的页面地址：开发（未打包）时可由 ELECTRON_RENDERER_URL 指向 Vite 开发服务器；打包后只有 app://studio/。 */
@@ -506,4 +524,117 @@ export function createMainWindow(): BrowserWindow {
 
   void window.loadURL(rendererEntryUrl());
   return window;
+}
+
+/** 打开或聚焦独立的设置窗口（与主会话窗口并行展示）。 */
+export function openSettingsWindow(section?: string): BrowserWindow {
+  const existing = getSettingsWindow();
+  if (existing !== null) {
+    if (existing.isMinimized()) existing.restore();
+    showWindow(existing);
+    existing.focus();
+    if (section && section.trim() !== "") {
+      existing.webContents
+        .executeJavaScript(
+          `window.dispatchEvent(new CustomEvent("studio:settings-section", { detail: ${JSON.stringify(section)} }));`,
+        )
+        .catch(() => {});
+    }
+    return existing;
+  }
+
+  const initialColors = overlayColors(pageThemeSpec(), 0);
+  const main = getMainWindow();
+  const mainBounds = main?.getBounds();
+  const win = new BrowserWindow({
+    width: 960,
+    height: 700,
+    ...(mainBounds
+      ? {
+          x: Math.max(20, mainBounds.x + Math.round((mainBounds.width - 960) / 2) + 32),
+          y: Math.max(20, mainBounds.y + Math.round((mainBounds.height - 700) / 2) + 24),
+        }
+      : {}),
+    ...(e2eBackground ? { skipTaskbar: true } : {}),
+    minWidth: 680,
+    minHeight: 480,
+    show: false,
+    ...(isMac ? {} : { icon: windowIconPath() }),
+    titleBarStyle: "hidden",
+    ...(isMac
+      ? { trafficLightPosition }
+      : {
+          titleBarOverlay: {
+            color: overlayBackground(initialColors.color),
+            symbolColor: formatHex(initialColors.symbolColor),
+            height: titleBarHeight,
+          },
+        }),
+    backgroundColor: windowBackground(),
+    ...(glassOn() ? { backgroundMaterial: "acrylic" as const } : {}),
+    webPreferences: {
+      preload: path.join(import.meta.dirname, "..", "preload", "index.cjs"),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webviewTag: false,
+      webSecurity: true,
+    },
+  });
+
+  if (e2eBackground && process.platform === "win32")
+    loadWin32().dwmapi.cloakWindow(Number(win.getNativeWindowHandle().readBigUInt64LE()));
+  if (!app.isPackaged && process.platform === "win32")
+    win.setAppDetails({ appId: "dev.pi-studio.app.dev", appIconPath: windowIconPath() });
+
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAppUrl(url)) event.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  win.once("ready-to-show", () => {
+    if (win.isDestroyed()) return;
+    showWindow(win);
+  });
+
+  const onNativeTheme = () => {
+    if (pageTheme !== "system" || win.isDestroyed()) return;
+    win.setBackgroundColor(windowBackground());
+    if (!isMac) applyOverlay(win, currentOverlay(Date.now()));
+  };
+  nativeTheme.on("updated", onNativeTheme);
+  win.once("closed", () => nativeTheme.off("updated", onNativeTheme));
+
+  applyFontSize(win);
+  win.webContents.on("did-finish-load", () => applyFontSize(win));
+  let shownGlass = glassOn();
+  const onSettings = () => {
+    if (win.isDestroyed()) return;
+    const glass = glassOn();
+    if (glass !== shownGlass) {
+      shownGlass = glass;
+      win.setBackgroundMaterial(glass ? "acrylic" : "none");
+      win.setBackgroundColor(windowBackground());
+    }
+    applyFontSize(win);
+  };
+  onSettingsChanged(onSettings);
+  win.once("closed", () => offSettingsChanged(onSettings));
+  blockZoom(win.webContents);
+
+  win.on("closed", () => {
+    if (settingsWindow === win) settingsWindow = null;
+  });
+  settingsWindow = win;
+
+  const targetUrl = new URL(rendererEntryUrl());
+  targetUrl.searchParams.set("window", "settings");
+  if (section && section.trim() !== "") {
+    targetUrl.searchParams.set("section", section);
+  }
+  void win.loadURL(targetUrl.toString());
+  return win;
 }

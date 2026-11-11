@@ -11,6 +11,8 @@ export const task = {
   renameLabel: "任务标题",
   archive: "归档",
   archived: "已归档",
+  delete: "删除会话",
+  deleted: "已删除会话",
   undo: "撤销",
   openFolder: "打开工作目录",
   reveal: "显示会话文件",

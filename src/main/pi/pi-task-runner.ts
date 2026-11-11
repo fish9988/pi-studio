@@ -66,8 +66,22 @@ import {
   type LeafOverride,
   type RewindTarget,
 } from "../tsp/session-tree-file.ts";
+import { resolveAgentDir } from "../history/session-index.ts";
+import {
+  listPiMcpServers,
+  listPiSkills,
+  readPiSettingsObject,
+  piSettingsFilePath,
+  readPiSystemDoc,
+} from "../pi-config/index.ts";
 import { discoverPi, formatError as errorMessage, type PiLaunch } from "./discover.ts";
-import { PiRpcClient, type PiImageContent, type PiRpcEvent, type PiSessionStats } from "./pi-rpc-client.ts";
+import {
+  PiRpcClient,
+  type PiAgentMessage,
+  type PiImageContent,
+  type PiRpcEvent,
+  type PiSessionStats,
+} from "./pi-rpc-client.ts";
 import {
   extractEfforts,
   toAvailableSlashCommand,
@@ -749,16 +763,129 @@ export class PiTaskRunner {
     if (ctx === null || ctx.contextWindow <= 0) {
       return null;
     }
-    const used = Math.max(0, ctx.tokens);
+
+    const estTokens = (text: string): number => (text.length > 0 ? Math.max(1, Math.ceil(text.length / 3.6)) : 0);
+    const agentDir = resolveAgentDir();
+
+    // 1. 系统提示词、指令文档 (AGENTS.md / SYSTEM.md)、Skills 与工具定义估算
+    let sysTokens = 1180;
+    let skillsTokens = 0;
+    let builtInToolsTokens = 1520;
+    let customToolsTokens = 0;
+    let configuredReserve = 16_384;
+
+    try {
+      const [globalSettings, globalAgents, projAgents, globalSys, skills, mcpServers] = await Promise.all([
+        readPiSettingsObject(piSettingsFilePath(agentDir, "global"), false),
+        readPiSystemDoc(agentDir, null, "global", "AGENTS.md"),
+        readPiSystemDoc(agentDir, this.cwd, "project", "AGENTS.md").catch(() => ({ content: "" })),
+        readPiSystemDoc(agentDir, null, "global", "SYSTEM.md"),
+        listPiSkills(agentDir, this.cwd).catch(() => []),
+        listPiMcpServers(agentDir, this.cwd).catch(() => []),
+      ]);
+      sysTokens += estTokens(globalAgents.content) + estTokens(projAgents.content) + estTokens(globalSys.content);
+      const enabledSkills = skills.filter((s) => !s.disabled);
+      skillsTokens = enabledSkills.reduce((acc, s) => acc + 24 + estTokens(s.name) + estTokens(s.description ?? ""), 0);
+      const enabledMcp = mcpServers.filter((m) => m.enabled && m.exposure !== "hidden");
+      customToolsTokens = enabledMcp.length * 260;
+      const compactionObj = globalSettings.data["compaction"];
+      if (
+        typeof compactionObj === "object" &&
+        compactionObj !== null &&
+        typeof (compactionObj as Record<string, unknown>)["reserveTokens"] === "number"
+      ) {
+        const val = (compactionObj as Record<string, number>)["reserveTokens"]!;
+        if (Number.isFinite(val) && val > 0) configuredReserve = val;
+      }
+    } catch {
+      // ignore config read errors
+    }
+
+    // 2. 会话消息与工具调用拆解
+    let userTokens = 0;
+    let assistantTokens = 0;
+    let thinkingTokens = 0;
+    let toolCallTokens = 0;
+    let toolOutputTokens = 0;
+
+    let messages: PiAgentMessage[] = [];
+    if (this.#client !== null && this.#client.alive) {
+      try {
+        const res = await this.#client.getMessages();
+        messages = res.messages;
+      } catch {
+        messages = [];
+      }
+    }
+
+    for (const msg of messages) {
+      if (msg.role === "user") {
+        if (typeof msg.content === "string") {
+          userTokens += estTokens(msg.content);
+        } else if (Array.isArray(msg.content)) {
+          for (const part of msg.content) {
+            if (part.type === "text") userTokens += estTokens(part.text);
+            else if (part.type === "image") userTokens += 850;
+          }
+        }
+      } else if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part.type === "text") assistantTokens += estTokens(part.text);
+          else if (part.type === "thinking") thinkingTokens += estTokens(part.thinking);
+          else if (part.type === "toolCall") {
+            toolCallTokens += 16 + estTokens(part.name) + estTokens(JSON.stringify(part.arguments ?? {}));
+          }
+        }
+      } else if (msg.role === "toolResult" && Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part.type === "text") toolOutputTokens += estTokens(part.text);
+          else if (part.type === "image") toolOutputTokens += 850;
+        }
+      } else if (msg.role === "bashExecution") {
+        if (!msg.excludeFromContext) {
+          toolOutputTokens += estTokens(msg.command) + estTokens(msg.output);
+        }
+      }
+    }
+
+    const rawUsed =
+      sysTokens +
+      skillsTokens +
+      builtInToolsTokens +
+      customToolsTokens +
+      userTokens +
+      assistantTokens +
+      thinkingTokens +
+      toolCallTokens +
+      toolOutputTokens;
+
+    const reportedUsed = Math.max(0, ctx.tokens);
+    const used = reportedUsed > 0 ? reportedUsed : rawUsed;
+    const scale = reportedUsed > 0 && rawUsed > 0 ? reportedUsed / rawUsed : 1;
+    const scaled = (v: number) => Math.round(v * scale);
+
     const reserve = this.#autoCompactionEnabled
-      ? Math.min(ctx.contextWindow - used, Math.max(16_384, Math.round(ctx.contextWindow * 0.15)))
+      ? Math.min(Math.max(0, ctx.contextWindow - used), configuredReserve)
       : 0;
-    const free = Math.max(0, ctx.contextWindow - used - Math.max(0, reserve));
+    const free = Math.max(0, ctx.contextWindow - used - reserve);
+
     return {
       rows: [
-        { key: "messages", label: "Conversation & context", tokens: used },
-        ...(reserve > 0 ? [{ key: "buffer", label: "Auto-compaction buffer", tokens: reserve }] : []),
+        { key: "piSystemPrompt", label: "系统提示词与指令", tokens: scaled(sysTokens) },
+        { key: "piSkills", label: "Skills 索引", tokens: scaled(skillsTokens) },
+        { key: "builtInTools", label: "内置工具定义", tokens: scaled(builtInToolsTokens) },
+        ...(customToolsTokens > 0
+          ? [{ key: "customTools", label: "MCP 与扩展工具", tokens: scaled(customToolsTokens) }]
+          : []),
+        { key: "userMessages", label: "用户消息", tokens: scaled(userTokens) },
+        { key: "assistantMessages", label: "助手回复", tokens: scaled(assistantTokens) },
+        ...(thinkingTokens > 0
+          ? [{ key: "assistantThinking", label: "思考过程", tokens: scaled(thinkingTokens) }]
+          : []),
+        { key: "toolCalls", label: "工具调用", tokens: scaled(toolCallTokens) },
+        { key: "toolOutput", label: "工具返回结果", tokens: scaled(toolOutputTokens) },
         { key: "free", label: "Free context", tokens: free },
+        ...(reserve > 0 ? [{ key: "buffer", label: "Auto-compaction buffer", tokens: reserve }] : []),
       ],
       used,
       window: ctx.contextWindow,

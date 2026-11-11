@@ -25,10 +25,13 @@ test("Pi 8 大设置分区与 / 斜杠命令菜单端到端验证", async () => 
     await expect(slashPopup).not.toContainText("/vibe");
     await input.fill("");
 
-    // 2. 通过快捷键打开重做后的 Pi 设置中心，逐节校验 8 大分区挂载与真实读写。
+    // 2. 通过快捷键打开重做后的 Pi 并行设置窗口，验证不覆盖左侧栏与主会话面板，且 8 大分区挂载与真实读写正常。
     await page.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");
+    await expect(page.getByTestId("settings-window")).toBeVisible();
     await expect(page.getByTestId("settings")).toBeVisible();
     await expect(page.getByTestId("settings-nav")).toBeVisible();
+    await expect(page.getByTestId("sidebar")).toBeVisible();
+    await expect(page.getByTestId("main-panel")).toBeVisible();
 
     // Models 分区：切换默认思考强度并写入 <agentDir>/settings.json
     await page.getByTestId("settings-nav-models").click();
@@ -49,8 +52,12 @@ test("Pi 8 大设置分区与 / 斜杠命令菜单端到端验证", async () => 
     await page.getByTestId("settings-nav-tools").click();
     await expect(page.getByTestId("pi-tools-section")).toBeVisible();
 
-    // Extensions 分区：内置扩展、Packages、Skills、MCP 管理渲染
+    // Extensions 分区：已装插件、插件市场、内置增强、内置扩展、Skills、MCP 管理渲染
     await page.getByTestId("settings-nav-extensions").click();
+    await expect(page.getByTestId("pi-installed-plugins-section")).toBeVisible();
+    await expect(page.getByTestId("pi-marketplace-section")).toBeVisible();
+    await expect(page.getByTestId("pi-marketplace-grid")).toBeVisible();
+    await expect(page.getByTestId("pi-workbench-enhancements")).toBeVisible();
     await expect(page.getByTestId("pi-builtin-extensions")).toBeVisible();
 
     // Context 分区：自动压缩参数与 AGENTS.md 文档保存
