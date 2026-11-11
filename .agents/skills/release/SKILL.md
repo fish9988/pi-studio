@@ -1,69 +1,65 @@
 ---
 name: release
-description: 发一个新版本：结束占着 release\ 的进程、跑发版脚本、推送 main 和 tag、上传 GitHub Release、确认 mac / Linux 构建。只在仓库所有者明确说"发版"时用；平时改完只收尾（skill finish），不发版。
+description: 发一个新版本：结束占着 release\ 的进程、更新 CHANGELOG 与版本号、打 Windows 安装包、推送 main 和 tag、上传 GitHub Release、确认 Windows / macOS / Linux 三端构建全绿。只在仓库所有者明确要求发版时使用。
 ---
 
 # 发版
 
-**只在仓库所有者说"发版"时才做**（2026-10-21 起）。只改了测试、文档、开发脚本（安装包内容不变）时不发版。先按 skill `finish` 把这一轮的改动提交干净：发版脚本要求工作区没有未提交的改动。
+**只在仓库所有者明确要求发版时执行**。只改了测试、文档、开发脚本（安装包内容不变）时不发版。发版前确保工作区干净并通过 `npm run check`、相关单测与 E2E 冒烟。
 
-## 1. 定版本号
+## 1. 定版本号与更新日志
 
-修 bug 和小改动升第三位（0.3.16 → 0.3.17），加功能升第二位。版本号必须比已发布的高：同一个版本重新打包，装好的应用不会当成更新。`CHANGELOG.md` 的「未发布」和 `CHANGELOG.en.md` 的「Unreleased」都不能是空的，两边写的是同一批改动。
+修 bug 升第三位（如 `0.1.1` → `0.1.2`），加功能升第二位（如 `0.1.x` → `0.2.0`）。版本号必须高于已发布的最新 Release（同版本号重打不会触发客户端自动更新）。确认 `CHANGELOG.md` 与 `CHANGELOG.en.md` 均已补好本版本的更新条目（中英文一一对应）。
 
 ## 2. 结束占着 `release\` 的进程
 
-从仓库 `release\` 下启动的 omp-studio（多半是 `release\win-unpacked\` 里打出来测的）会占着文件，直接结束，不用先问。**装好的版本（`%LOCALAPPDATA%\Programs\omp-studio`）不碰**：那是仓库所有者在用的，里面可能有任务在跑，它也不占 `release\`。
-
-在仓库根目录，按路径筛，不按名字：
+从仓库 `release\` 下启动的 `pi-studio.exe`（如 `release\win-unpacked\pi-studio.exe`）会占着文件导致打包 `EBUSY`，按路径精确结束；**装好的版本（`%LOCALAPPDATA%\Programs\pi-studio`）绝不能碰**：
 
 ```bash
-powershell -NoProfile -Command '$r = (Resolve-Path release).Path; Get-Process omp-studio -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$r\*" } | Stop-Process -Force'
+powershell -NoProfile -Command '$r = (Resolve-Path release).Path; Get-Process pi-studio -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$r\*" } | Stop-Process -Force'
 ```
 
-再用同样的筛选（去掉 `Stop-Process`，改成 `Measure-Object`）确认数量是 0。
+## 3. 版本升级、检查与打包
 
-- bash 里整条命令用单引号，否则 `$_`、`$r` 被 bash 先展开，筛选作废。
-- 不用 `taskkill //IM ...`：参数会被改坏、什么也不结束（只回"键入 TASKKILL /?"），而且按名字会连装好的版本一起结束。
-- eval 内核里读过 exe（`pefile`）的话先 `pe.close()`，否则内核一直映射着文件。
+- 若本地存在 `.githooks/no-mention.local.txt`，可直接运行：
+  ```bash
+  npm run release -- <版本> --dry-run
+  npm run release -- <版本>
+  ```
+- 若当前克隆环境无 `.githooks/no-mention.local.txt`：
+  1. 将 `CHANGELOG.md` 的 `## [未发布]` 与 `CHANGELOG.en.md` 的 `## [Unreleased]` 推进为 `## [<版本>] - YYYY-MM-DD`（保留空的未发布标题供后续使用）；
+  2. 运行 `npm version <版本> --no-git-tag-version`；
+  3. 运行 `npm run check`、`npx vitest run`、`npm run dist`（产出 `release/pi-studio-<版本>-setup.exe`、`.blockmap`、`latest.yml` 并自动通过 `scripts/check-package.ts` 校验 `app.asar`）；
+  4. 清理 `release/` 下旧版本的 `pi-studio-*-setup.exe*`；
+  5. 提交 `chore(release): v<版本>` 并创建附注标签 `git tag -a v<版本> -m "v<版本>"`。
+- **注意**：绝不在本机运行 `scripts/smoke-packaged.ts`（它会读写用户真实的 `%APPDATA%\pi-studio`，仅在 CI 干净环境中跑）。
 
-没结束干净的话，脚本已经提交并打了 tag 才在打包时 EBUSY，要手动补跑 `npm run dist` 和删旧安装包（v0.4.0、v0.4.19 都是这样）。
+## 4. 推送并上传 Windows 安装包到 GitHub Release
 
-## 3. 跑发版脚本
-
-```bash
-npm run release -- <版本> --dry-run
-npm run release -- <版本>
-```
-
-脚本会：要求本地名单 `.githooks/no-mention.local.txt` 在（不在直接失败），查两个更新日志的「未发布」里有没有名单里的名字 → 跑 `scripts/check.ts`（lint、格式、类型检查、仓库扫描）和受改动影响的单测（`vitest --changed`，不跑 e2e）→ 把两个文件的「未发布」改成这个版本（任一边没有条目就停下） → 改版本号 → 提交 `chore(release): v<版本>` 并打 tag → `npm run dist`（`release\` 里的 `latest.yml`、安装包、`.blockmap`，`scripts/check-package.ts` 检查 `app.asar`）→ 删掉 `release\` 里旧版本的安装包。只在本地做，不推送。
-
-- **打包时 makensis 报 `Can't open output file`**，又查不到占用的进程：commit 和 tag 已经打好，**不要重跑 `npm run release`**；直接重跑 `npm run dist`，再删 `release\` 里旧版本的安装包和 `.blockmap`。
-- 其他打包排障见 `docs/architecture/auto-update.md`「发版排障」。
-
-## 4. 推送和上传
-
-本机环境变量里的 `GITHUB_TOKEN` 不是仓库所有者的账号、写不了这个仓库：`gh` 和发布脚本前面一律加 `env -u GITHUB_TOKEN`，用 `gh auth` 登录的账号。
+先清掉环境变量里可能无权限的 `GITHUB_TOKEN`，让 `gh` 使用 keyring 登录的 `fish9988` 账号；先推 `main`，再推 `v<版本>` 标签，然后上传 Windows 更新源与安装包：
 
 ```bash
 git push origin main
 git push origin v<版本>
-env -u GITHUB_TOKEN node scripts/publish-release.ts <版本> release/latest.yml release/omp-studio-<版本>-setup.exe release/omp-studio-<版本>-setup.exe.blockmap
+env -u GITHUB_TOKEN node scripts/publish-release.ts <版本> release/latest.yml release/pi-studio-<版本>-setup.exe release/pi-studio-<版本>-setup.exe.blockmap
 ```
 
-最后一条是发版脚本最后打印的命令，前面加上 `env -u GITHUB_TOKEN`。它把三个文件传到这个版本的 GitHub Release（没有就建，说明是 `CHANGELOG.en.md` 和 `CHANGELOG.md` 里这一版，英文在前、中文在后；仓库所有者 2026-10-25 批准），`latest.yml` 最后传。装着的旧版本从这个 Release 自动更新（`docs/architecture/auto-update.md`），三个文件缺一不可。
+（PowerShell 下用 `Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue` 代替 `env -u GITHUB_TOKEN`。）
 
-## 5. 确认 mac 和 Linux 构建
+## 5. 确认 Windows / macOS / Linux 三端 GitHub Actions 与产物齐全
 
-推 tag 会触发 `.github/workflows/mac.yml`（dmg / zip）和 `linux.yml`（AppImage、`latest-linux.yml`），它们传到同一个 Release。确认那次构建通过：
+推送 `v<版本>` 标签会自动触发：
+- `.github/workflows/windows.yml`（检查 + 单测 + E2E + 打包校验 + 窗口冒烟）
+- `.github/workflows/mac.yml`（构建并自动上传 `pi-studio-<版本>-arm64.dmg` 与 `pi-studio-<版本>-arm64-mac.zip` 到该 Release）
+- `.github/workflows/linux.yml`（构建并自动上传 `pi-studio-<版本>-x86_64.AppImage` 与 `latest-linux.yml` 到该 Release）
+
+核查构建状态与最终 Release 附件列表：
 
 ```bash
-env -u GITHUB_TOKEN gh run list --limit 5
-env -u GITHUB_TOKEN gh run watch <run id>
+env -u GITHUB_TOKEN gh run list --repo fish9988/pi-studio --limit 6
+env -u GITHUB_TOKEN gh release view v<版本> --repo fish9988/pi-studio --json tagName,url,assets
 ```
-
-失败了先看日志找原因，修好后按 skill `finish` 提交；不删 tag、不强推。
 
 ## 6. 报告
 
-写明版本号、提交号和 tag、Release 上的文件、三个 workflow 的结果，以及没做或没确认的步骤。
+写明版本号、提交号和 tag、Release 链接与三端全部安装包清单，以及三端 GitHub Actions 的结果。

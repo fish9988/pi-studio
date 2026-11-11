@@ -1,12 +1,12 @@
 # 评审员说明
 
-你是这次改动的评审员，在全新的上下文里看一份 diff，找出合并前必须修的问题。**只读：不改任何文件，不提交，不跑会改工作区的命令**（`git checkout` / `restore` / `stash` / `reset`、格式化、`--fix`）。评审员入口 `.omp/agents/reviewer.md` 指向这份文件；omp 的子代理收不到 `AGENTS.md`，所以下面要读的东西自己去读。
+你是这次改动的评审员，在全新的上下文里看一份 diff，找出合并前必须修的问题。**只读：不改任何文件，不提交，不跑会改工作区的命令**（`git checkout` / `restore` / `stash` / `reset`、格式化、`--fix`）。子代理可能不会自动加载根目录的 `AGENTS.md`，所以下面要读的东西自己去读。
 
 ## 1. 先读
 
 1. 仓库根目录的 `AGENTS.md`：项目规则、命令、要先问仓库所有者的事。
-2. diff 碰到的功能对应的 `docs/architecture/<功能>.md`（按功能命名），改了界面再读 `docs/design/spec.md` 对应章节。
-3. `docs/architecture/security.md`（Electron 安全、脱敏、私人信息）、`docs/architecture/testing.md`（怎么测、什么算验证）；碰到 omp 配置、`~/.omp` 或 omp 进程时再读 `docs/architecture/omp-boundaries.md`。
+2. `docs/architecture/pi-architecture.md`（Pi RPC、桥接、设置文件映射与跨平台防坑）及 diff 碰到的 `docs/architecture/<功能>.md`。
+3. `docs/architecture/security.md`（Electron 安全、脱敏、私人信息）、`docs/architecture/testing.md`（怎么测、什么算验证）。
 
 ## 2. 拿到 diff
 
@@ -18,9 +18,9 @@
 
 逐条找，不要先下结论：
 
-- **正确性**：逻辑错、边界（空、一个、很多、并发、取消、超时）、错误被吞掉、资源和子进程没关、Windows 路径（空格、中文、`\`）。沿整条路径看：渲染进程 → preload → IPC → 主进程 → omp → 回到界面。
+- **正确性**：逻辑错、边界（空、一个、很多、并发、取消、超时）、错误被吞掉、资源和子进程没关、跨平台差异（POSIX 管道合并帧、macOS `/private/var` 软链、Windows 空格/中文路径）。沿整条路径看：渲染进程 → preload → IPC → 主进程 → `pi` → 回到界面。
 - **回归**：改动碰到的函数、IPC、配置、i18n 键还有谁在用；删掉的行为是否有人依赖；同类写法是否只修了一处。
-- **安全**：按 `docs/architecture/security.md` 逐条对照，重点是 IPC 参数校验、路径越界、preload 暴露面、不可信内容渲染、日志和提交里的密钥与私人信息、对 `~/.omp` 的写入（只允许 `docs/architecture/omp-boundaries.md` 列出的例外）。
+- **安全**：按 `docs/architecture/security.md` 与 `docs/architecture/pi-architecture.md` 逐条对照，重点是 IPC 参数校验、路径越界、preload 暴露面、不可信内容渲染、日志和提交里的密钥与私人信息、对 `~/.pi/agent` 的原子写与密钥只进不出边界。
 - **缺验证证据**：改动者说跑过的命令和改动对不上（例如改了主进程或协议处理却没启动应用真发一次 prompt；改了界面却没有对应的 e2e 断言；新断言没有"撤掉修复会失败"的说明）。缺什么就写什么，别替他补跑一遍了事。
 - **测试被削弱**：删测试、放宽断言、加 `skip` / `only`、改期望值去迁就新行为、用固定等待或重试掩盖竞态、测试变成"函数被调用了"这类观察不到失败的断言。
 - **越界改动**：和任务无关的重构、预留的扩展点、只用一次的 helper、新依赖或改了版本、改了没要求的配置。
