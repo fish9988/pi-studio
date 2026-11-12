@@ -9,6 +9,8 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-13
+
 ### Added
 
 - Redesigned Settings: the nav is grouped (Appearance / Intelligence / Capabilities / Session / System) with icons, the section title sticks while you scroll, and each group of settings sits in its own card; in narrow windows (docked or standalone) container queries stack labels above controls.
