@@ -154,10 +154,12 @@ test("没有项目时直接发送：在 chats 目录里建项目和任务，侧�
     await expect(page.getByTestId("sidebar")).not.toContainText("chats");
     await expect(page.getByTestId("sidebar-new-task")).not.toHaveAttribute("aria-current", "page");
 
-    // 之后 Ctrl/Cmd N 还是默认文件夹（不沿用刚才的项目也一样是它）；项目标签直接写它的路径。
+    // 之后 Ctrl/Cmd N 还是默认文件夹（不沿用刚才的项目也一样是它）；工具行的轻标签写“默认文件夹”，完整路径在 title 上。
     await page.keyboard.press(process.platform === "darwin" ? "Meta+n" : "Control+n");
     await expect(page.getByTestId("empty-state")).toHaveAttribute("data-kind", "no-project");
-    await expect(page.getByTestId("empty-project")).toHaveText(chats);
+    const projectLabel = page.getByTestId("empty-project");
+    await expect(projectLabel).toHaveText(/默认文件夹|Default folder/);
+    await expect(projectLabel).toHaveAttribute("title", chats);
   } finally {
     await launched.close();
   }
@@ -414,7 +416,7 @@ test("空状态、对话里的用量", async () => {
     await expect(page.getByTestId("empty-state")).toHaveAttribute("data-kind", "no-project");
     await expect(page.getByTestId("empty-task")).toHaveCount(0);
     await expect(page.getByTestId("empty-session")).toHaveCount(0);
-    await expect(page.getByTestId("empty-project")).toHaveText(/[\\/]chats$/);
+    await expect(page.getByTestId("empty-project")).toHaveText(/默认文件夹|Default folder/);
     // 文件夹头部常驻的 ＋：在这个文件夹里开新任务，工具行的项目标签换成项目的路径。
     await expect(page.getByTestId("sidebar-project-new").first()).toBeVisible();
     await page.getByTestId("sidebar-project-new").first().click();
