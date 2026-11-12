@@ -82,6 +82,14 @@ interface MascotSheet {
 
 const CRAB_URLS = crabUrlsRaw as Record<string, { body: string; ink: string }>;
 
+/** 精灵表地址：下面两张表里写的是公开目录的相对路径（`./mascot/x.svg`），但自定义属性是在 composer.css 里被
+ *  `background-image: var(--mascot-sheet)` 消费的，相对 url() 会按**那份样式表**解析——开发时 CSS 由 Vite 注入文档，
+ *  基址是 `http://localhost:5173/` 所以能用；打包后样式表在 `app://studio/assets/index-xxx.css`，就变成
+ *  `app://studio/assets/mascot/x.svg`（404，鲸鱼娘和小鲸鱼都不显示）。这里一律换成绝对地址，两边都对得上。 */
+function sheetUrl(url: string): string {
+  return new URL(url, document.baseURI).href;
+}
+
 const DEEPY_SHEET_URLS: Record<string, string> = {
   idle: "./mascot/22360387d0e1.svg",
   "idle-look": "./mascot/ae2250afa4d4.svg",
@@ -444,14 +452,14 @@ export function ClawdMascot({
 
     if (character === "clawd") {
       const urls = CRAB_URLS[effectiveKey] ?? CRAB_URLS["idle"]!;
-      root.style.setProperty("--mascot-sheet", `url("${urls.body}")`);
-      root.style.setProperty("--crab-ink", `url("${urls.ink}")`);
+      root.style.setProperty("--mascot-sheet", `url("${sheetUrl(urls.body)}")`);
+      root.style.setProperty("--crab-ink", `url("${sheetUrl(urls.ink)}")`);
     } else if (character === "deepy") {
       const url = DEEPY_SHEET_URLS[effectiveKey] ?? DEEPY_SHEET_URLS["idle"]!;
-      root.style.setProperty("--mascot-sheet", `url("${url}")`);
+      root.style.setProperty("--mascot-sheet", `url("${sheetUrl(url)}")`);
     } else {
       const url = WHALE_GIRL_SHEET_URLS[effectiveKey] ?? WHALE_GIRL_SHEET_URLS["idle"]!;
-      root.style.setProperty("--mascot-sheet", `url("${url}")`);
+      root.style.setProperty("--mascot-sheet", `url("${sheetUrl(url)}")`);
     }
 
     const frameOffset = (frame: number) =>

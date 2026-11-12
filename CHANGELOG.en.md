@@ -9,6 +9,10 @@ How to write it:
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed the whale-girl and little-whale desktop pets not appearing in the installed build (they worked in dev; the packaged app only found the sprite sheets under `assets/mascot/`).
+
 ## [0.1.3] - 2026-11-13
 
 ### Fixed
