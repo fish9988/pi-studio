@@ -3,6 +3,7 @@
 // 每个主题家族（默认 / Claude Code / Pi / DeepSeek / Gemini / OpenAI / 樱粉 / 水墨）都完整兼容浅色与深色：
 //  - 选择「跟随系统」时，每张卡片左右对半同时预览该主题的浅色与深色效果；
 //  - 选择「浅色」或「深色」时，所有卡片实时切换为对应深浅色板的迷你界面预览。
+// 卡片：仓库里现成的 thumbs/*.webp 缩略图 + 名称；选中态是强调色描边 + 名字后的勾号（不只靠颜色区分，见 settings.css）。
 import {
   familyOfTheme,
   themeFamilies,
@@ -13,6 +14,7 @@ import {
   type ThemePreference,
 } from "../../../../shared/themes.ts";
 import { useT } from "../../i18n/use-t.ts";
+import { Check } from "../../icons.tsx";
 import { setAppearanceTheme } from "../../store/index.ts";
 import { reportError } from "../../ui/errors.ts";
 
@@ -67,7 +69,14 @@ export function ThemeGallery({ value, colorMode = "system" }: { value: ThemePref
                 <MiniUi theme={colorMode === "dark" ? pair.dark : pair.light} />
               )}
             </span>
-            <span className="st-theme-name">{t(`settings.theme.${family}`)}</span>
+            <span className="st-theme-meta">
+              <span className="st-theme-name">{t(`settings.theme.${family}`)}</span>
+              {selected && (
+                <span className="st-theme-check" aria-hidden="true">
+                  <Check size={11} />
+                </span>
+              )}
+            </span>
           </button>
         );
       })}

@@ -4,12 +4,13 @@
 /* ───────── 设置导航（占侧栏的位置） ───────── */
 
 .snav {
+  --snav-item-h: 30px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-3);
   height: 100%;
   min-height: 0;
-  padding: var(--space-0-5) var(--space-2) var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2);
   overflow-y: auto;
   font-size: var(--fs-sm);
   color: var(--text);
@@ -21,10 +22,17 @@
   display: none;
 }
 
+/* 返回 + 搜索固定在上面，8 节自己滚 */
+.snav-top {
+  display: grid;
+  flex: none;
+  gap: var(--space-2);
+}
+
 .snav .snav-back {
   justify-content: flex-start;
   width: 100%;
-  margin-bottom: var(--space-1);
+  height: var(--control-h-sm);
   padding: 0 var(--space-2);
 }
 
@@ -32,59 +40,160 @@
   margin-left: auto;
 }
 
+/* 搜索框：图标在框里（TextField 的 leading），外框就是输入框本身，不再套一层 */
+.snav-search {
+  display: block;
+}
+
 .snav .ui-field {
-  margin-bottom: var(--space-2);
+  width: 100%;
 }
 
 .snav .ui-field input[type="search"]::-webkit-search-cancel-button {
   display: none;
 }
 
+.snav-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 分组：组间一条细分隔线（不是只靠留白），组名 11px 淡色小字 */
+.snav-group {
+  display: grid;
+  gap: 1px;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.snav-group:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.snav-group-label {
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+
 .snav-item {
+  position: relative;
   display: flex;
   flex: none;
+  gap: var(--space-2);
   align-items: center;
-  height: var(--row-task);
-  padding: 0 var(--space-2-5);
+  height: var(--snav-item-h);
+  padding: 0 var(--space-2);
   overflow: hidden;
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--text-2);
   text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   cursor: default;
   background: transparent;
-  border: 0;
+  /* 透明描边给选中态的描边留位置（尺寸不变） */
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 .snav-item:hover {
+  color: var(--text);
   background: var(--bg-hover);
 }
 
-.snav-item[aria-current="page"] {
-  color: var(--text);
-  background: var(--bg-active);
+.snav-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
-/* 版本号：和关于页里的版本一样用等宽（2026-10-29 审计 SET-16） */
+/* 当前节：胶囊底 + 描边 + 左侧强调色条 + 图标变色（形状与图标都在说话，不只靠颜色） */
+.snav-item[aria-current="page"] {
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  background: var(--bg-active);
+  border-color: var(--border-subtle);
+}
+
+.snav-item[aria-current="page"]::before {
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-start: 0;
+  width: 2px;
+  content: "";
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.snav-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+}
+
+.snav-item-icon svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+.snav-item[aria-current="page"] .snav-item-icon {
+  color: var(--accent);
+}
+
+.snav-item-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 版本号：和关于页里的版本一样用等宽（2026-10-29 审计 SET-16），上边一条细分隔线 */
 .snav-foot {
+  flex: none;
   margin-top: auto;
-  padding: var(--space-2) var(--space-2-5) 0;
+  padding: var(--space-3) 0 var(--space-1);
   text-align: center;
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   color: var(--text-3);
+  border-top: 1px solid var(--border-subtle);
 }
 
-/* 侧栏不可见时内容顶上的导航：节下拉 + 搜索框 */
+/* 侧栏不可见时内容顶上的导航：节下拉 + 搜索框，放在一条浅色条里 */
 .snav-compact {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
   margin-bottom: var(--space-4);
+  padding: var(--space-2);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.snav-compact .ui-select {
+  flex: 1 1 150px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.snav-compact-search {
+  display: block;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.snav-compact .ui-field {
+  width: 100%;
 }
 /* ───────── 过程行可视化三卡选择器（复刻 process-column.css） ───────── */
 .st-process-cards {
@@ -103,22 +212,29 @@
   padding: var(--space-2-5);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--bg-raised);
+  background: var(--bg-tool);
   color: var(--text-2);
   font: inherit;
   text-align: left;
   cursor: pointer;
   transition:
     border-color var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
+    background-color var(--dur-fast) var(--ease-out);
 }
 .st-process-card:hover {
   border-color: var(--border-strong);
 }
+/* 选中：强调色描边（outline，不动布局，forced-colors 下会变成系统色）+ 标签前一个勾号 */
 .st-process-card[data-active] {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
   color: var(--text);
+}
+.st-process-card[data-active] .st-process-card-label::before {
+  content: "✓" / "";
+  margin-right: var(--space-1);
+  color: var(--accent);
 }
 .st-process-card-label {
   font-size: var(--fs-xs);
@@ -237,24 +353,44 @@
 }
 
 .settings-content {
-  /* 不设宽度上限：内容随窗口变宽，格子靠下面的 container query 加列（不靠留白），右侧不再空着。 */
-  padding: var(--space-6) var(--space-10) var(--space-12);
-  container-type: inline-size; /* 格子（.st-cells、快捷键）按内容宽度增减列 */
+  /* 不设宽度上限：内容随窗口变宽，格子靠下面的 container query 加列（不靠留白）。
+     左右内边距小一点，窄窗口（停靠、独立窗口缩到很小）里控件才有余量。 */
+  --settings-pad-x: var(--space-6);
+  /* 吸顶的节标题条高度：目录（.st-adv）和滚动定位都按它算偏移 */
+  --st-head-h: 56px;
+  /* 行里标签列的统一宽度（ui/Row 读它，不在每行各写一处） */
+  --row-label-w: 160px;
+  padding: 0 var(--settings-pad-x) var(--space-12);
+  container-type: inline-size; /* 卡片网格、行、主题图框按内容宽度增减列 / 换排法 */
 }
 
+/* 节标题：吸顶条。内容在它下面滚，背景不透，底部一条 1px 分隔线把标题和内容分开；
+   左右出血到内容区边缘，滚动时不会有内容从它旁边露出来。 */
 .st-page-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   align-items: center;
-  min-height: 36px;
-  margin-bottom: var(--space-3);
+  height: var(--st-head-h);
+  margin-inline: calc(-1 * var(--settings-pad-x));
+  padding-inline: var(--settings-pad-x);
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.st-page-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
 }
 
 .settings-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--fs-xl);
-  line-height: var(--lh-xl);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
   font-weight: var(--fw-strong);
   letter-spacing: var(--ls-tight);
 }
@@ -272,49 +408,94 @@
   margin-left: auto;
 }
 
-/* 一节里的分组：分组标题自带上边距，但包在 section 里时它是第一个孩子（上边距被清掉），所以由 section 给 */
+/* 一节里的分组：分组标题自带上下边距；包在 section 里时它是第一个孩子，上边距由 section 自己给 */
 .st-section {
   margin-top: var(--space-6);
+}
+
+/* 内容从吸顶条下面开始，不在标题下边线上贴着（`.settings .settings-section` 带父级：
+   motion.css 里已有 `.settings-section` 的换节淡入，不在这里重复“定义”这个类） */
+.settings .settings-section {
+  padding-top: var(--space-5);
 }
 
 .settings-section > :first-child {
   margin-top: 0;
 }
-/* 没有分组标题、直接是格子的页（子代理）：第一行和页标题之间补上分组标题那一段的空，各页内容起点一致（2026-10-29 审计 SET-22） */
+/* 没有分组标题、直接是格子的页（子代理）：第一行和节标题之间补上分组标题那一段的空，各页内容起点一致（2026-10-29 审计 SET-22） */
 .settings-section > .st-cells:first-child {
   margin-top: var(--space-3);
 }
 
-/* 行：标签列 200，控件紧跟（ui/Row；关于页的 omp 路径、记忆卡片的项目） */
+/* ────── 分组标题：12px 小字（卡片的标题在卡内或卡上方都是这一种）────── */
+.settings-content .ui-section-head {
+  min-height: 0;
+  margin: var(--space-5) 0 var(--space-2);
+}
+
+.settings-content .ui-section-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.settings-content .ui-section-head:first-child {
+  margin-top: 0;
+}
+
+.settings-content .ui-section-note {
+  margin: 0 0 var(--space-2);
+}
+
+/* ────── 卡片：一组相关设置 = 一张卡；卡与卡之间 16px ────── */
+.settings-content :is(.st-cells, .st-kb-grid) {
+  padding: var(--space-1) var(--space-4);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.settings-content :is(.st-cells, .st-kb-grid) + :is(.st-cells, .st-kb-grid) {
+  margin-top: var(--space-2);
+}
+
+/* 行：标签列宽度统一在 .settings-content 的 --row-label-w（关于页的 omp 路径、记忆卡片的项目用 .st-rows） */
 .st-rows {
   --row-label-w: 200px;
 }
 
-/* 格子：大框架是 --cols 列；每格是一条 ui/Row，标签和控件放得下一行就并排（标签靠左、控件靠右），放不下控件才换到标签下面（仍靠右）。
-   "恢复默认"夹在标签和控件之间，出现时控件不动。
+/* 格子：大框架是 --cols 列；每格是一条 ui/Row，标签和控件左右两列。
    列数随容器宽度（设置内容区；高级页是它右栏）：≤640 一列、到 1100 两列、到 1500 三列、再宽四列。
    快捷键表用同一个 --cols：上下两张表的列边界对齐（2026-10-29 审计：原来快捷键固定三列，和上面两列的格子错开）。 */
 .st-cells,
 .st-kb-grid {
-  --cols: 2;
+  --cols: 1;
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   column-gap: var(--space-6);
 }
-/* 整行（各节页面上的文本框、标签输入，排在格子后面）：也是格子的排法，只是一行一格；控件靠右，右边和格子的控件对齐，不再从 200 的标签列后面起头 */
+/* 整行（各节页面上的文本框、标签输入，排在格子后面）：也是格子的排法，只是一行一格 */
 .st-cells.st-wide {
   --cols: 1;
 }
-/* 换不换行按"标签不折行的宽 + 控件的宽"放不放得下来定（2026-10-23 仓库所有者：原来三段以上的分段、文本框、标签输入一律另起一行）。
-   标签不收缩、占满余下的宽，控件被推到右边；标签比整格还长时自己折行（omp 的长 key 只在点后面断开），控件换到下一行。 */
+/* 行内左右两列用同一个 grid 模板（标签 | 控件 | 恢复默认 | 余下留白），不在每行各写宽度：
+   标签列统一读 --row-label-w，控件紧跟其后，改过的“恢复默认”在控件右边（没改过时那一列宽度为 0，不白占地方）。
+   控件本身仍是 flex-wrap：宽分段、文本框、标签输入再宽也只在控件那一格里折行，不会撑破卡片。 */
 .st-cells .ui-row {
-  display: flex;
-  flex-wrap: wrap;
-  row-gap: var(--space-1-5);
-  padding: var(--space-1-5) 0;
+  grid-template-columns: var(--row-label-w, 160px) minmax(0, max-content) auto 1fr;
+  column-gap: var(--space-3);
+  padding-block: var(--space-2);
+  /* 卡里不再每行一条底边：换行后上下两列的线会错开 */
+  border-bottom: 0;
 }
-/* 5 段以上的宽分段（桌面宠物）与双卡预览选择器（过程行）横跨整行，避免在双列/三列窄格里溢出重叠 */
-.st-cells .ui-row:has([data-testid="setting-mascot"]),
+/* 5 段以上的宽分段（桌面宠物）与双卡预览选择器（过程行）横跨整行，避免在双列/三列窄格里溢出重叠；
+   桌面宠物的分段在窄格里换行很难看，标签放在它上面，分段占满整行 */
+.st-cells .ui-row:has([data-testid="setting-mascot"]) {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-1-5);
+}
 .st-cells .ui-row:has([data-testid="setting-process-rows"]) {
   grid-column: 1 / -1;
 }
@@ -325,7 +506,6 @@
   gap: var(--space-1);
 }
 .st-cells .ui-row-label {
-  flex: 1 0 auto;
   max-width: 100%;
   overflow-wrap: anywhere;
 }
@@ -337,13 +517,9 @@
   display: none;
 }
 .st-cells .ui-row-control {
-  order: 1;
-  flex: 0 1 auto;
   max-width: 100%;
-  margin-left: auto; /* 换到标签下面时也靠右，和同一列别的控件对齐 */
 }
 .st-cells .ui-row-control:has(> .st-process-cards) {
-  flex: 0 1 760px;
   width: min(760px, 100%);
 }
 .st-cells .ui-row-control > .ui-seg {
@@ -368,23 +544,70 @@
 .st-cells .ui-row-control > .ui-field:not(.ui-number, .ui-select) {
   width: 100%;
 }
-/* 整行只有一格，宽得很：文本框、标签输入保持原来的宽，靠右 */
+/* 整行只有一格，宽得很：文本框、标签输入保持原来的宽 */
 .st-wide .ui-row-control:has(> .st-tags, > .ui-field:not(.ui-number, .ui-select)) {
   flex-grow: 0;
+}
+/* 改过的值：标签左侧一道强调色竖线（在卡片里贴卡片内侧，不压住卡片描边） */
+.settings-content .st-cells .ui-row[data-modified]::before {
+  inset-block: 8px;
+  left: calc(-1 * var(--space-4) + 1px);
+}
+
+/* 7 档思考强度条：标签在上、条横跨整行（7 档等宽按钮才不会被挤成省略号） */
+.settings-content .ui-row:has(> .ui-row-control > .pis-thinking-bar) {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-1-5);
+}
+
+.settings-content .ui-row:has(> .ui-row-control > .pis-thinking-bar) > .ui-row-control > .pis-thinking-bar {
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+/* 窄窗（停靠、独立窗口缩到最小）：标签列堆到控件上方（控件在左、恢复默认在右），不是只缩字号 */
+@container (max-width: 560px) {
+  .st-cells .ui-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: var(--space-1-5);
+    padding-block: var(--space-2-5);
+  }
+  .st-cells .ui-row-label {
+    grid-column: 1 / -1;
+  }
+  .st-cells .ui-row-control {
+    grid-column: 1;
+    justify-self: start;
+  }
+  .st-cells .ui-row > :last-child:not(.ui-row-control) {
+    grid-column: 2;
+  }
 }
 @container (max-width: 640px) {
   .st-cells,
   .st-kb-grid {
     --cols: 1;
   }
+  /* 一列时行是上下排的，行间补一条细分隔线 */
+  .st-cells .ui-row + .ui-row {
+    border-top: 1px solid var(--border-subtle);
+  }
 }
-@container (min-width: 1100px) {
+/* 一格里要同时放下“标签列 160 + 控件”（三段以上的分段、下拉差不多 230）：格子太窄时少一列，不拆控件。
+   两列 ≥ 860（每格约 418）、三列 ≥ 1300、四列 ≥ 1750。 */
+@container (min-width: 860px) {
+  .st-cells,
+  .st-kb-grid {
+    --cols: 2;
+  }
+}
+@container (min-width: 1300px) {
   .st-cells,
   .st-kb-grid {
     --cols: 3;
   }
 }
-@container (min-width: 1500px) {
+@container (min-width: 1750px) {
   .st-cells,
   .st-kb-grid {
     --cols: 4;
@@ -399,7 +622,6 @@
     --cols: 1;
   }
 }
-
 /* 模型页的角色表（ModelsSection）：一行两个角色格，按阅读顺序从左到右填；分隔线和格子一样。默认思考强度不在表里，是表上面的一格普通设置。
    每格占外层四列（subgrid），同一列的格子共用列宽：角色名 | 模型 | 思考强度 | 删除。
    角色名列定宽 88（两半、对话角色表和特定能力表都一样，下拉的左边线上下对齐；更长的自定义角色名折行），
@@ -589,33 +811,37 @@
 
 /* ───────── 通用 → 外观：主题画廊（ThemeGallery.tsx） ───────── */
 
-/* 卡片按宽度自动排列（每张至少 120 宽），窄窗口自己少几列。预览块挂 data-theme，下面的颜色都是那个主题自己的变量。 */
+/* 卡片网格：每张卡 = 缩略图 + 名称，至少 148 宽，宽了自动加列；容器窄到 560 以下降成两列。
+   预览块挂 data-theme，下面的颜色都是那个主题自己的变量。 */
 .st-theme-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
   gap: var(--space-2);
-  margin: var(--space-2) 0 var(--space-3);
+  margin: var(--space-3) 0 var(--space-1);
 }
 
 .st-theme-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1-5);
+  display: grid;
+  grid-template-rows: auto auto;
+  gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-1) var(--space-1) var(--space-1-5);
+  padding: var(--space-2);
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--text-2);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
-  background: transparent;
-  border: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 .st-theme-card:hover {
-  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .st-theme-card:focus-visible {
@@ -623,8 +849,12 @@
   outline-offset: 2px;
 }
 
+/* 选中：强调色描边 + 名字后的勾号（描边用 outline，不占布局、forced-colors 下会变成系统色）；不只靠颜色 */
 .st-theme-card[aria-pressed="true"] {
+  font-weight: var(--fw-medium);
   color: var(--text);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-raised));
+  border-color: var(--accent);
 }
 
 /* 迷你界面：底色 = 侧栏 / 顶栏，主区面板在右下（主区底 + 主题插图），右上一个你的消息气泡，左下一个强调色点 */
@@ -632,12 +862,32 @@
   display: flex;
   aspect-ratio: 16 / 10;
   overflow: hidden;
+  background: var(--bg-app);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  box-shadow: 0 0 0 1px var(--border);
 }
 
 .st-theme-card[aria-pressed="true"] .st-theme-preview {
-  box-shadow: 0 0 0 2px var(--accent);
+  border-color: var(--accent);
+}
+
+/* 名称行：名字 + 勾号；名字长了一行省略 */
+.st-theme-meta {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-width: 0;
+}
+
+.st-theme-check {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-on-accent);
+  background: var(--accent);
+  border-radius: var(--radius-pill);
 }
 
 .st-theme-mini {
@@ -686,7 +936,17 @@
 }
 
 .st-theme-name {
-  overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container (max-width: 560px) {
+  .st-theme-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* ───────── 工具与权限：工具网格，每格一样 ───────── */
@@ -786,7 +1046,7 @@
 /* 目录吸顶的位置就是它不滚动时的位置（内容区上内边距 + 页头 36 + 页头下边距），点小组时目录不跟着上下跳；
    小组标题滚到和目录顶端齐平（scroll-margin-top 同值）。 */
 .st-adv {
-  --st-adv-top: calc(var(--space-6) + 36px + var(--space-3));
+  --st-adv-top: calc(var(--st-head-h, 56px) + var(--space-4));
   display: grid;
   grid-template-columns: 196px minmax(0, 1fr);
   gap: 28px;
@@ -878,4 +1138,114 @@
 
 .st-adv-sub .ui-section-head .ui-count {
   margin-left: auto;
+}
+
+/* ───────── 设置窗口外壳（模态 / 停靠 / 独立窗口） ───────── */
+/* app.css 给的是尺寸与结构，这里换成新布局：标题带上当前节，动作用胶囊按钮 */
+
+.settings-win > .settings-win-bar {
+  height: 48px;
+  padding-inline: var(--space-4) var(--space-3);
+}
+
+.settings-win .settings-win-title {
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.settings-win .settings-win-title > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.settings-win-name {
+  flex: none;
+}
+
+/* 当前节：跟标题同一行，灰、可省略 */
+.settings-win-crumb {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-win-crumb::before {
+  margin-inline: var(--space-2) var(--space-1-5);
+  content: "/";
+  color: var(--border-strong);
+}
+
+.settings-win .settings-win-actions {
+  gap: var(--space-0-5);
+}
+
+.settings-win .settings-win-btn {
+  height: 26px;
+  padding-inline: var(--space-2);
+  font-size: var(--fs-2xs);
+  color: var(--text-2);
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+}
+
+.settings-win .settings-win-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.settings-win .settings-win-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.settings-win .settings-win-close {
+  padding-inline: var(--space-1-5);
+}
+
+/* 导航略宽一点：图标 + 文字一行放得下（模态、停靠、独立窗口同宽） */
+.settings-win > .settings-win-body > .settings-win-nav,
+.settings-standalone-body > .settings-win-nav {
+  flex-basis: 204px;
+}
+
+/* ───────── 换节动效 ───────── */
+/* 淡入 + 4px 上移（motion.css 的 view-in，--travel-sm 在减少动效时归零）。
+   系统级 prefers-reduced-motion 下只留透明度，位置完全不动。 */
+@keyframes st-section-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings .settings-section {
+    animation-name: st-section-fade;
+  }
+}
+
+/* ───────── 高对比度（forced-colors）───────── */
+/* 系统会清掉 box-shadow、重写作者色：选中态一律靠 border / outline + 勾号，不靠发光 */
+@media (forced-colors: active) {
+  .snav-item[aria-current="page"],
+  .st-theme-card[aria-pressed="true"],
+  .st-process-card[data-active] {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .snav-item[aria-current="page"]::before {
+    background: Highlight;
+  }
+
+  .st-theme-check {
+    color: HighlightText;
+    background: Highlight;
+  }
 }

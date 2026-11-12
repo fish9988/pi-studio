@@ -1,7 +1,7 @@
 // DSH 风格居中模态设置弹窗（默认弹出居中圆角对话框 `min(880px, 90vw) × min(640px, 85vh)`，带通透暗化与微毛玻璃遮罩，
 // 支持 Esc 或点击遮罩关闭；右上角保留可选的「停靠至侧边」与「独立新窗口」按钮）。
 import { useCallback, useEffect, useState } from "react";
-import { Close, External } from "../icons.tsx";
+import { Close, External, Sliders } from "../icons.tsx";
 import { useLocale, useT } from "../i18n/use-t.ts";
 import { setSettingsPage, showView, useSettingsPage, type SettingsPage } from "../store/index.ts";
 import { SettingsNav, SettingsView } from "./lazy-views.tsx";
@@ -100,7 +100,9 @@ export function SettingsWindow({ compactNav }: { compactNav: boolean }) {
     >
       <div className="settings-win-bar">
         <div className="settings-win-title">
-          <span>{isZh ? "设置" : "Settings"}</span>
+          <Sliders size={14} />
+          <span className="settings-win-name">{isZh ? "设置" : "Settings"}</span>
+          {!compactNav && <span className="settings-win-crumb">{t(`settings.${currentSection}`)}</span>}
         </div>
 
         <div className="settings-win-actions">

@@ -3,6 +3,7 @@
 // Esc 回到进入前的视图和焦点（顶栏的后退按钮也能回去）；命令面板可以直接定位到某一节（ui-store 的 settingsSection）。
 // 导出名和 props 是 App.tsx 的约定。
 import { useEffect, useRef, useState } from "react";
+import { Search } from "../../icons.tsx";
 import { useT } from "../../i18n/use-t.ts";
 import {
   clearSettingsSection,
@@ -24,7 +25,7 @@ import {
   PiProvidersSection,
   PiToolsSection,
 } from "./pi/index.ts";
-import { onSettingsKeyDown, SettingsCompactNav } from "./SettingsNav.tsx";
+import { onSettingsKeyDown, settingsPageIcon, SettingsCompactNav } from "./SettingsNav.tsx";
 import "./motion-preference.ts";
 import "./settings.css";
 import "./config.css";
@@ -91,12 +92,23 @@ export function SettingsView({ compactNav }: { compactNav: boolean }) {
   const searching = query.trim() !== "";
   const heading = searching ? t("settings.search") : t(`settings.${section}`);
   return (
-    <div ref={root} className="settings" tabIndex={-1} onKeyDown={onSettingsKeyDown} data-testid="settings">
+    <div
+      ref={root}
+      className="settings"
+      tabIndex={-1}
+      onKeyDown={onSettingsKeyDown}
+      data-testid="settings"
+      data-page={searching ? "search" : section}
+    >
       <div className="settings-scroll-host">
         <div ref={scroller} className="settings-scroll">
           <div className="settings-content">
             {compactNav && <SettingsCompactNav />}
+            {/* 节标题：吸顶条（样式在 settings.css 的 .st-page-head）；左侧图标和导航里同节的那个一致 */}
             <div className="st-page-head">
+              <span className="st-page-icon" aria-hidden="true">
+                {searching ? <Search size={16} /> : settingsPageIcon(section)}
+              </span>
               <h1 ref={title} tabIndex={-1} className="settings-title">
                 {heading}
               </h1>

@@ -9,6 +9,16 @@ How to write it:
 
 ## [Unreleased]
 
+### Added
+
+- Redesigned Settings: the nav is grouped (Appearance / Intelligence / Capabilities / Session / System) with icons, the section title sticks while you scroll, and each group of settings sits in its own card; in narrow windows (docked or standalone) container queries stack labels above controls.
+- The theme gallery is now a card grid: preview, name and a check mark on the selected one; light/dark stays a separate switch.
+
+### Changed
+
+- Rebuilt the Pi / DeepSeek / Gemini / OpenAI / Sakura / Ink palettes for both light and dark ("Default" and Claude Code are unchanged): every pair measured against WCAG (body text ≥4.5:1, control borders ≥3:1), code blocks keep a visible step from the page, and border weight is now consistent across all twelve palettes.
+- Redrew those themes' background art: no more details that compete with the text, only gradients, grids, glows, stars, a cherry branch and mountain silhouettes — you notice the mood, not the picture.
+
 ## [0.1.5] - 2026-11-13
 
 ### Added
