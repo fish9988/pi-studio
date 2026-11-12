@@ -3484,6 +3484,65 @@
   overflow-x: hidden;
   overflow-y: auto;
 }
+/* 过程行的三种排布（设置 › 通用 › 过程行）：
+   经典（默认）＝ 现在这个样子：每步一行、无外框、无分隔线、2px 行距、左侧微缩进；
+   平铺 ＝ 去掉左侧缩进和行距，每步之间一条极淡分隔线，图标保留（不分层、不包框）；
+   单列 ＝ 整个步骤列表装进一个带边框的盒子，一行一条 24px、行间极淡分隔线。
+   以前 data-layout 只写到 DOM 上、CSS 里没人用它，所以那个设置点了和没点一样（只剩设置页里的预览）。 */
+.tsp-process-group[data-layout="flat"] .tsp-process-group-body {
+  gap: 0;
+  padding-left: 0;
+}
+.tsp-process-group[data-layout="flat"] .tsp-process-group-body > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+.tsp-process-group[data-layout="flat"] .tsp-tool.card,
+.tsp-process-group[data-layout="flat"] .tsp-tool.card.st-running,
+.tsp-process-group[data-layout="flat"] .tsp-tool.card.st-error {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.tsp-process-group[data-layout="flat"] .tsp-tool > .tsp-tool-head {
+  padding-inline: var(--space-1-5);
+}
+.tsp-process-group[data-layout="flat"] .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
+  margin: 2px 0 4px;
+  padding: 0 0 0 var(--space-2);
+  border-left: 0;
+}
+
+/* 单列：整份步骤装进一个框，一行一条、行间分隔线；行内不要再畳卡片框。 */
+.tsp-process-group[data-layout="column"] .tsp-process-group-body {
+  gap: 0;
+  padding: 2px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-app);
+}
+.tsp-process-group[data-layout="column"] .tsp-process-group-body > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+.tsp-process-group[data-layout="column"] .tsp-tool.card,
+.tsp-process-group[data-layout="column"] .tsp-tool.card.st-running,
+.tsp-process-group[data-layout="column"] .tsp-tool.card.st-error {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.tsp-process-group[data-layout="column"] .tsp-tool > .tsp-tool-head {
+  min-height: 24px;
+  padding-inline: var(--space-2);
+}
+.tsp-process-group[data-layout="column"] .tsp-section[data-role^="omp.thinking"] > .tsp-section-head {
+  min-height: 24px;
+  padding-inline: var(--space-2);
+}
+.tsp-process-group[data-layout="column"] .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
+  margin: 0 0 4px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-left: 0;
+}
 .tsp-process-group-body:hover::-webkit-scrollbar-thumb,
 .tsp-section[data-role^="omp.thinking"] > .tsp-section-body:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);

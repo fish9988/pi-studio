@@ -1382,7 +1382,7 @@ function ProcessGroup({
   const [folded, applyFold] = useGroupFold(groupFoldKey(ctx.taskId, ctx.sf, turnIndex, ordinal), initialCollapsed);
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
-  const layout = useShellValue("processRows") ?? "column";
+  const layout = useShellValue("processRows") ?? "classic";
   const conversationView = useShellValue("conversationView") ?? "chat";
   const isTrajectory = conversationView === "trajectory";
   const effectiveSectionOpen = isTrajectory ? true : sectionOpen;

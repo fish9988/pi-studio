@@ -1069,8 +1069,8 @@ export const brandStyles: readonly BrandStyle[] = ["pi", "claude", "deepseek", "
 export type MascotCharacter = "clawd" | "deepy" | "whalegirl" | "omp" | "off";
 export const mascotCharacters: readonly MascotCharacter[] = ["clawd", "deepy", "whalegirl", "omp", "off"];
 
-export type ProcessRowsLayout = "column" | "flat";
-export const processRowsLayouts: readonly ProcessRowsLayout[] = ["column", "flat"];
+export type ProcessRowsLayout = "flat" | "column" | "classic";
+export const processRowsLayouts: readonly ProcessRowsLayout[] = ["flat", "column", "classic"];
 
 export type HelperThinking = "off" | "minimal" | "low" | "medium" | "high";
 export const helperThinkingLevels: readonly HelperThinking[] = ["off", "minimal", "low", "medium", "high"];
@@ -1677,6 +1677,8 @@ export interface StudioEventPayloads {
   login: LoginEvent;
   ompStatus: OmpStatus;
   settings: StudioSettings;
+  /** 另一个窗口（设置窗口 / 主窗口）改了外壳状态（侧栏宽度、桌宠、过程行排布…）：当前窗口跟着改，不用等重启。 */
+  shellState: Partial<ShellState>;
   /** 用户把文件夹拖进了窗口，主进程已把它加入项目。 */
   projectDropped: Project;
   /** 用户把文件拖进了输入框 / 粘贴了文件：preload 取到路径交给主进程，主进程校验是普通文件后登记并推送（渲染进程拿不到路径）。 */
@@ -1996,6 +1998,7 @@ export const eventNames = {
   login: true,
   ompStatus: true,
   settings: true,
+  shellState: true,
   projectDropped: true,
   composerFilesAdded: true,
   defaultModel: true,

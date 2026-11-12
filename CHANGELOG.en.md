@@ -9,6 +9,14 @@ How to write it:
 
 ## [Unreleased]
 
+### Added
+
+- Added a "Classic" process-row layout (the default — exactly what you saw before) and made "Flat" and "Column" genuinely different: Flat removes the left indent and puts a hairline between steps, Column wraps the whole step list in a bordered box.
+
+### Fixed
+
+- Fixed shell settings such as the process-row layout and the desktop pet not taking effect: they now apply to the conversation immediately from any window (including the standalone settings window) without a restart.
+
 ## [0.1.4] - 2026-11-13
 
 ### Fixed

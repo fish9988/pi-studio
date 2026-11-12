@@ -31,7 +31,7 @@ const shellStore = createStore<ShellUiState>({
   chatWidth: 0,
   brandStyle: "pi",
   mascot: "clawd",
-  processRows: "column",
+  processRows: "classic",
   helperModel: "smol",
   helperThinking: "off",
   autoSmartRename: false,
@@ -53,6 +53,9 @@ export function startShellStore(): void {
     (state) => update(state),
     (error: unknown) => console.error("getShellState 失败", error),
   );
+  // 设置可以开成独立窗口（或在主窗口里分屏）：别的窗口改了外壳状态就跟着改，
+  // 否则主窗口会一直停在启动时读到的那份值上（「过程行」点了和没点一样就是这个）。
+  window.studio.onShellState((patch) => update(patch));
 }
 
 function persist(patch: Partial<ShellState>): void {

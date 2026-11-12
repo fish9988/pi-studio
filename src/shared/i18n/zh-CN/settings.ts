@@ -43,6 +43,7 @@ export const settings = {
   processRows: "过程行",
   "processRows.flat": "平铺",
   "processRows.column": "单列",
+  "processRows.classic": "经典",
   "processRows.sampleHead": "执行 2 次思考，调用 1 次工具",
   "processRows.sampleThought": "思考",
   "processRows.sampleThought1": "先看清工作区里有哪些文件",

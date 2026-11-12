@@ -101,7 +101,7 @@ export function GeneralSection() {
     label: t(`settings.mascot.${value}`),
   }));
   const homeRipple = useShellValue("homeRipple") ?? true;
-  const processRows = useShellValue("processRows") ?? "column";
+  const processRows = useShellValue("processRows") ?? "classic";
   const backdrop = settings?.backdrop ?? "theme";
   const backdropOptions = (["theme", "custom", "none"] as const).map((value) => ({
     value,
@@ -176,7 +176,7 @@ export function GeneralSection() {
               aria-labelledby={labelId}
               data-testid="setting-process-rows"
             >
-              {(["flat", "column"] as const).map((layout) => {
+              {(["flat", "column", "classic"] as const).map((layout) => {
                 const active = processRows === layout;
                 return (
                   <button

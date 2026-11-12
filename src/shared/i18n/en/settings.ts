@@ -44,6 +44,7 @@ export const settings = {
   processRows: "Process rows",
   "processRows.flat": "Flat",
   "processRows.column": "Column",
+  "processRows.classic": "Classic",
   "processRows.sampleHead": "2 thoughts, 1 tool call",
   "processRows.sampleThought": "Thought",
   "processRows.sampleThought1": "First see what the workspace holds",

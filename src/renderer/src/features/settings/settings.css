@@ -86,12 +86,12 @@
   align-items: center;
   margin-bottom: var(--space-4);
 }
-/* ───────── 过程行可视化双卡选择器（复刻 process-column.css） ───────── */
+/* ───────── 过程行可视化三卡选择器（复刻 process-column.css） ───────── */
 .st-process-cards {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-2-5);
-  width: min(520px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  width: min(760px, 100%);
 }
 .st-process-card {
   display: flex;
@@ -148,6 +148,20 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-app);
+}
+/* 平铺：行距收紧，每行之间一条极淡分隔线（和对话里一致） */
+.st-process-sample[data-layout="flat"] .st-process-sample-body {
+  gap: 0;
+}
+.st-process-sample[data-layout="flat"] .st-process-sample-row {
+  min-height: 20px;
+}
+.st-process-sample[data-layout="flat"] .st-process-sample-row + .st-process-sample-row {
+  border-top: 0.5px solid var(--border);
+}
+/* 经典：就是现在对话里的样子——无框、无分隔线、2px 行距、图标 + 「标题 · 文本」 */
+.st-process-sample[data-layout="classic"] .st-process-sample-body {
+  gap: 2px;
 }
 .st-process-sample-row {
   display: flex;
@@ -329,8 +343,8 @@
   margin-left: auto; /* 换到标签下面时也靠右，和同一列别的控件对齐 */
 }
 .st-cells .ui-row-control:has(> .st-process-cards) {
-  flex: 0 1 520px;
-  width: min(520px, 100%);
+  flex: 0 1 760px;
+  width: min(760px, 100%);
 }
 .st-cells .ui-row-control > .ui-seg {
   flex-wrap: wrap;

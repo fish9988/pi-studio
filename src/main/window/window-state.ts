@@ -27,7 +27,7 @@ const defaultShellState: ShellState = {
   chatWidth: 0,
   brandStyle: "pi",
   mascot: "clawd",
-  processRows: "column",
+  processRows: "classic",
   helperModel: "smol",
   helperThinking: "off",
   autoSmartRename: false,

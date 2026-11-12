@@ -13,7 +13,9 @@ import {
   titleBarFades,
   type AppInfo,
   type HandlerGroup,
+  type ShellState,
 } from "../../shared/ipc.ts";
+import { emitEvent } from "./events.ts";
 import { exportDiagnostics } from "../log/diagnostics.ts";
 import { openLogsFolder } from "../log/instance.ts";
 import { getSettings, resolveLocale, updateSettings } from "../settings/settings-store.ts";
@@ -111,7 +113,7 @@ export const appHandlers: HandlerGroup<
   getShellState: async () => getShellState(),
   setShellState: async (value) => {
     const record = parseRecord(value, "shellState");
-    setShellState({
+    const patch: Partial<ShellState> = {
       ...(record["sidebarWidth"] !== undefined && {
         sidebarWidth: parseInteger(record["sidebarWidth"], "sidebarWidth", ...sidebarWidthRange),
       }),
@@ -155,7 +157,11 @@ export const appHandlers: HandlerGroup<
       ...(record["homeRipple"] !== undefined && {
         homeRipple: parseBoolean(record["homeRipple"], "homeRipple"),
       }),
-    });
+    };
+    setShellState(patch);
+    // 外壳状态是双窗口共享的（设置可以开成独立窗口）：改完推一份给所有窗口，
+    // 主窗口里的桌宠/过程行排布/侧栏宽度才会立刻跟着变，不用等重启。
+    emitEvent("shellState", patch);
     if (record["preferredShell"] !== undefined) {
       const pref = parseOneOf(record["preferredShell"], "preferredShell", preferredShells);
       void syncPreferredShellToOmp(pref);
