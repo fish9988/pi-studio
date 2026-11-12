@@ -9,6 +9,18 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-13
+
+### Fixed
+
+- Fixed channels that push thinking or process commentary through the body text stream (DeepSeek-style models and relays): that content now folds into a collapsible "Commentary" process row, and only the real answer stays in the message body.
+- Fixed the process card you expanded by hand collapsing again as soon as the next streaming event arrived: a manual expand or collapse now survives streaming updates, re-renders and history reloads.
+- Fixed prose that discusses angle brackets and XML-like tags (`<tag>`, `Array<string>`, `<｜DSML｜…>`) or snake_case names (`text_start/text_delta`) being folded away as thinking content or shown in italics; such text now renders as plain body text.
+- Fixed the process list showing a bare tool title with no file path or progress indicator while the tool arguments are still streaming.
+- Fixed the elapsed time in the process card header freezing while tools keep appending; it now ticks live while running.
+- Fixed the newest lines of a streaming code block being hidden, and the whole code block being repainted when the fence closes (which dropped any selected text).
+- Fixed the viewport jumping back to the bottom or elsewhere when a conversation-line jump, a fold toggle and streaming output overlap.
+
 ## [0.1.2] - 2026-11-11
 
 ### Added
