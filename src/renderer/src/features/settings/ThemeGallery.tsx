@@ -1,20 +1,27 @@
-// 设置 → 通用 → 外观的主题画廊（spec §4.19）：跟随系统 + themeNames 的顺序，每张卡是一个按钮（aria-pressed = 当前主题）。
-// 预览块挂 data-theme，就地用那个主题的整套变量画迷你界面（侧栏条、主区底 + 主题插图、你的消息气泡、强调色点），不复制颜色值；
-// 跟随系统的预览左右各一半浅色 / 深色。点卡即 setTheme。
-// 插图用预先画好的 WebP 缩略图（scripts/make-theme-thumbs.ts），不用主题的 SVG：16 张带模糊滤镜的 SVG 一起栅格化，
-// 每次打开设置 GPU 都要卡 300ms 以上，换页的淡入被吞掉（docs/architecture/themes.md「主题画廊的缩略图」）。
-import { themeNames, type ThemeName, type ThemePreference } from "../../../../shared/themes.ts";
+// 设置 → 通用 → 外观的主题画廊：
+// 外观深浅色模式（跟随系统 / 浅色 / 深色）独立于主题风格之外；
+// 每个主题家族（默认 / Claude Code / Pi / DeepSeek / Gemini / OpenAI / 樱粉 / 水墨）都完整兼容浅色与深色：
+//  - 选择「跟随系统」时，每张卡片左右对半同时预览该主题的浅色与深色效果；
+//  - 选择「浅色」或「深色」时，所有卡片实时切换为对应深浅色板的迷你界面预览。
+import {
+  familyOfTheme,
+  themeFamilies,
+  themeFamilyNames,
+  type ColorMode,
+  type ThemeFamily,
+  type ThemeName,
+  type ThemePreference,
+} from "../../../../shared/themes.ts";
 import { useT } from "../../i18n/use-t.ts";
+import { setAppearanceTheme } from "../../store/index.ts";
 import { reportError } from "../../ui/errors.ts";
 
-const choices: readonly ThemePreference[] = ["system", ...themeNames];
-
 const thumbFiles = import.meta.glob<string>("../../../styles/themes/thumbs/*.webp", {
-  query: "?url",
+  query: "?url&no-inline",
   import: "default",
   eager: true,
 });
-/** 主题名 → 缩略图地址；没有插图的主题（浅色、深色）没有。 */
+/** 具体色板名 → WebP 缩略图地址；无背景插图的主题为 undefined。 */
 const thumbs = new Map(
   Object.entries(thumbFiles).map(([file, url]) => [file.slice(file.lastIndexOf("/") + 1, -".webp".length), url]),
 );
@@ -32,32 +39,38 @@ function MiniUi({ theme }: { theme: ThemeName }) {
   );
 }
 
-export function ThemeGallery({ value }: { value: ThemePreference }) {
+export function ThemeGallery({ value, colorMode = "system" }: { value: ThemePreference; colorMode?: ColorMode }) {
   const t = useT();
+  const activeFamily: ThemeFamily = familyOfTheme(value);
+
   return (
     <div className="st-theme-gallery" role="group" aria-label={t("settings.theme")} data-testid="theme-gallery">
-      {choices.map((choice) => (
-        <button
-          key={choice}
-          type="button"
-          className="st-theme-card"
-          aria-pressed={choice === value}
-          onClick={() => void window.studio.setTheme(choice).catch((error: unknown) => reportError(t, error))}
-          data-testid={`theme-card-${choice}`}
-        >
-          <span className="st-theme-preview" aria-hidden="true">
-            {choice === "system" ? (
-              <>
-                <MiniUi theme="light" />
-                <MiniUi theme="dark" />
-              </>
-            ) : (
-              <MiniUi theme={choice} />
-            )}
-          </span>
-          <span className="st-theme-name">{t(`settings.theme.${choice}`)}</span>
-        </button>
-      ))}
+      {themeFamilyNames.map((family) => {
+        const pair = themeFamilies[family];
+        const selected = family === activeFamily;
+        return (
+          <button
+            key={family}
+            type="button"
+            className="st-theme-card"
+            aria-pressed={selected}
+            onClick={() => void setAppearanceTheme(family).catch((error: unknown) => reportError(t, error))}
+            data-testid={`theme-card-${family}`}
+          >
+            <span className="st-theme-preview" aria-hidden="true">
+              {colorMode === "system" ? (
+                <>
+                  <MiniUi theme={pair.light} />
+                  <MiniUi theme={pair.dark} />
+                </>
+              ) : (
+                <MiniUi theme={colorMode === "dark" ? pair.dark : pair.light} />
+              )}
+            </span>
+            <span className="st-theme-name">{t(`settings.theme.${family}`)}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

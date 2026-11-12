@@ -7,7 +7,7 @@ import { useT } from "../i18n/use-t.ts";
 import { reportError } from "../ui/errors.ts";
 import { CodeBlock } from "./CodeBlock.tsx";
 import { splitMarks, type TextMark } from "./marks.ts";
-import { parseBlocks, parseStreaming, stabilizeStreaming, type BlockParse, type MarkdownBlock } from "./parse.ts";
+import { parseStreaming, stabilizeStreaming, type BlockParse, type MarkdownBlock } from "./parse.ts";
 import { renderBlock, type RenderContext } from "./render.ts";
 import "./markdown.css";
 
@@ -133,14 +133,16 @@ export function Markdown({
   const t = useT();
   // 上一次流式解析的结果，给下一次增量解析复用；不在流式时清掉。
   const stream = useRef<BlockParse | null>(null);
-  const blocks = useMemo(() => {
+  const parsed = useMemo<BlockParse>(() => {
     if (!streaming) {
       stream.current = null;
-      return parseBlocks(source);
+      // 跟 parseBlocks 完全一样（parseStreaming 没有可复用的上一轮时就是整篇解析），但顺带给出每块的字符偏移。
+      return parseStreaming(null, source);
     }
     stream.current = parseStreaming(stream.current, stabilizeStreaming(source));
-    return stream.current.blocks;
+    return stream.current;
   }, [source, streaming, stream]);
+  const blocks = parsed.blocks;
   // 画完就放掉 token（约是原文的 5–10 倍，对话里每条回答都留着）：memo 跳过的块不再用它，少数重画的块按原文重解析（parse.ts 的 blockTokens）。
   // 流式时下一次增量解析只看块的原文和块首位置，不看 token。
   useEffect(() => {
@@ -152,9 +154,23 @@ export function Markdown({
   );
   return (
     <div className="md" data-streaming={streaming || undefined}>
-      {blocks.map((block, index) => (
-        <Block key={index} block={block} t={t} marks={marks} katex={katex} openFile={openFile} />
-      ))}
+      {blocks.map((block, index) => {
+        // key 用块首字符偏移：流式时同一个位置的块会在中途改变类型（段落 → 列表 / 表格 / 公式块），
+        // 用下标当 key 的话 React 认定是同一块、只换根元素，整棵子树被卸载重建（选区、折叠状态全丢）；
+        // 偏移在同一块首上恒定（前面的块变高变矮不影响它），也不会被"前一块消失"带偏。
+        // 没有 map 的块（offset 为 -1）退回按下标。
+        const start = parsed.starts[index];
+        return (
+          <Block
+            key={start !== undefined && start.offset >= 0 ? start.offset : `i${index}`}
+            block={block}
+            t={t}
+            marks={marks}
+            katex={katex}
+            openFile={openFile}
+          />
+        );
+      })}
     </div>
   );
 }

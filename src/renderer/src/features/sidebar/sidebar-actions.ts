@@ -6,7 +6,12 @@ import type { TaskId } from "../../../../shared/ipc.ts";
 import { selectTask } from "../../store/index.ts";
 import { startDraft } from "../empty/index.ts";
 import { refreshProjects } from "./projects-store.ts";
-import { nextWaitingTask, waitingTasks, type SidebarFolder } from "../../../../shared/ui/sidebar-model.ts";
+import {
+  nextWaitingTask,
+  waitingTasks,
+  isScratchChatCwd,
+  type SidebarFolder,
+} from "../../../../shared/ui/sidebar-model.ts";
 
 /** 弹系统文件夹选择器加入项目，并把它设为新任务草稿的项目（不创建任务）。取消时什么也不做。 */
 export async function addProjectAsDraft(t: TFunction): Promise<void> {
@@ -24,9 +29,22 @@ export async function addProjectAsDraft(t: TFunction): Promise<void> {
  * 文件夹头部的 +：studio 项目直接开草稿；只在历史会话里出现的文件夹先加成项目（主进程按会话 id 查它的 cwd）再开草稿。
  * 加成项目不创建任务，草稿不发消息就不会留下任何东西。
  */
-export async function startDraftInFolder(folder: SidebarFolder, t: TFunction): Promise<void> {
+export async function startDraftInFolder(
+  folder: SidebarFolder,
+  t: TFunction,
+  defaultCwd?: string | null,
+): Promise<void> {
   if (folder.project !== null) {
     startDraft(folder.project.id);
+    return;
+  }
+  const norm = (p: string) =>
+    p
+      .replace(/[\\/]+$/, "")
+      .replaceAll("\\", "/")
+      .toLowerCase();
+  if ((defaultCwd != null && norm(folder.cwd) === norm(defaultCwd)) || isScratchChatCwd(folder.cwd)) {
+    startDraft(null);
     return;
   }
   const session = folder.items.find((item) => item.kind === "session");

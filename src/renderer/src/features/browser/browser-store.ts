@@ -2,8 +2,7 @@
 // 和文件面板、子代理面板共用右栏，同时只开一个。页面本身是主进程的 WebContentsView，这里只管开关和显示的数据。
 import type { BrowserState, TaskId } from "../../../../shared/ipc.ts";
 import { createStore, useStoreValue } from "../../store/create-store.ts";
-import { closeAgentsPanel } from "../agents/agents-store.ts";
-import { closeFilePreview } from "../file-preview/preview-store.ts";
+import { closeDshToolKind, isDshToolActive, openDshToolTab } from "../workbench/dsh-workbench-store.ts";
 
 const panel = createStore<TaskId | null>(null);
 const states = createStore<ReadonlyMap<TaskId, BrowserState>>(new Map());
@@ -30,26 +29,27 @@ window.studio.onTaskRemoved((taskId) => {
 
 /** 打开（或切到）这个任务的浏览器面板。focus 为假（AI 连上时自动打开）：不记、不抢焦点。 */
 export function openBrowserPanel(taskId: TaskId, focus = true): void {
-  if (panel.get() === taskId) return;
-  closeFilePreview();
-  closeAgentsPanel(false);
   if (focus && panel.get() === null) {
     const active = document.activeElement;
     returnFocus = active instanceof HTMLElement && active !== document.body ? active : null;
   }
   focusOnOpen = focus;
   panel.set(taskId);
+  openDshToolTab(taskId, "browser");
 }
 
 export function toggleBrowserPanel(taskId: TaskId): void {
-  if (panel.get() === taskId) closeBrowserPanel();
+  if (isDshToolActive(taskId, "browser")) closeBrowserPanel();
   else openBrowserPanel(taskId);
 }
 
 /** `restoreFocus` 为假：别的面板正在打开并拿了焦点，不能把焦点抢回去。 */
 export function closeBrowserPanel(restoreFocus = true): void {
-  if (panel.get() === null) return;
-  panel.set(null);
+  const current = panel.get();
+  if (current !== null) {
+    panel.set(null);
+    closeDshToolKind(current, "browser");
+  }
   const target = returnFocus;
   returnFocus = null;
   if (restoreFocus && target?.isConnected) target.focus();

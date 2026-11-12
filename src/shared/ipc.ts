@@ -17,7 +17,8 @@ import type {
   TodoPhase,
   TokenUsage,
 } from "./omp-wire/rpc-wire.generated.ts";
-import type { ThemePreference } from "./themes.ts";
+import type { ColorMode, ThemePreference } from "./themes.ts";
+export type { ColorMode, ThemePreference };
 import type {
   DraftGitInfo,
   GitCommitMessageResult,
@@ -223,6 +224,8 @@ export interface ModelKey {
 export interface StudioSettings {
   locale: LocalePreference;
   theme: ThemePreference;
+  /** 独立于主题风格之外的深浅色外观模式（跟随系统 / 浅色 / 深色）。 */
+  colorMode?: ColorMode;
   backdrop: BackdropMode;
   backdropStrength: BackdropStrength;
   /** 用户选的背景图：主进程复制进 userData/backdrops 的文件名（内容 sha256 + 扩展名），页面经 app://studio/@backdrop/<文件名> 读；没选过为 null。 */
@@ -243,6 +246,10 @@ export interface StudioSettings {
   copyOnSelect: boolean;
   /** 折叠着的工具卡只画标题行，不画 omp 给的输出预览（点开看全部）。默认关（issue #8）。 */
   toolHeadsOnly: boolean;
+  /** 最终回答出现后，自动收起本轮工具调用过程。默认开。 */
+  autoCollapseTools?: boolean;
+  /** 最终回答出现后，自动收起内联代码变更与 Diff 面板。默认开。 */
+  autoCollapseDiffs?: boolean;
   /** 整个软件的字号（正文 pt，fontSizeSteps 之一），默认 15；页面缩放 = fontSize / 15。 */
   fontSize: number;
   /** 用户确认过"全自动"。 */
@@ -550,14 +557,16 @@ export interface SessionTreeView {
   nodes: SessionTreeNode[];
 }
 
-/** forkTask / branchTask 的结果：`text` 是被分叉的那条用户消息的文字，放进输入框让用户改后重发。 */
+/** forkTask / branchTask 的结果：`text` 是被分叉的那条用户消息的文字，`images` 是附带的图片，一并放进输入框让用户改后重发。 */
 export interface ForkResult {
   task: TaskState;
   text: string;
+  images?: PromptImage[];
 }
 
 export interface BranchTaskResult {
   text: string;
+  images?: PromptImage[];
   /** 只有 TSP 任务有：这次回溯是否让 omp 给被放弃的分支写了摘要（请求了 `summarize` 且成功）。 */
   summarized?: boolean;
 }
@@ -1120,6 +1129,7 @@ export interface StudioInvokeApi {
   getSettings(): Promise<StudioSettings>;
   setLocale(preference: LocalePreference): Promise<void>;
   setTheme(preference: ThemePreference): Promise<void>;
+  setColorMode(mode: ColorMode): Promise<void>;
   setBackdrop(mode: BackdropMode): Promise<void>;
   setBackdropStrength(strength: BackdropStrength): Promise<void>;
   /** 弹文件对话框选一张图（png / jpg / webp / gif / avif，不超过 limits.backdropMaxBytes），复制进 userData/backdrops 并把背景图切到 custom；用户取消返回 false。 */
@@ -1324,6 +1334,14 @@ export interface StudioInvokeApi {
   listDirectory(target: ProjectFilesTarget, relDir: string): Promise<DirListing>;
   /** `@` 文件引用补全：目录由主进程按任务（或新任务草稿的项目）查出，只返回相对路径，最多 20 条；query 含绝对路径或 `..` 时 reject。 */
   listProjectFiles(target: ProjectFilesTarget, query: string): Promise<string[]>;
+  /** 在右侧文件树中新建空文件或文件夹（relPath 为相对根目录路径，落在根外时 reject）。 */
+  createFileEntry(target: ProjectFilesTarget, relPath: string, kind: "file" | "dir"): Promise<void>;
+  /** 在右侧文件树中重命名文件或文件夹，返回新的相对路径。 */
+  renameFileEntry(target: ProjectFilesTarget, oldRelPath: string, newName: string): Promise<string>;
+  /** 在右侧文件树中删除文件或文件夹（优先移入系统回收站，失败则删除）。 */
+  deleteFileEntry(target: ProjectFilesTarget, relPath: string): Promise<void>;
+  /** 在系统文件管理器中显示目标文件或目录（支持任务目录、草稿项目目录与默认目录）。 */
+  revealProjectFile(target: ProjectFilesTarget, relPath: string): Promise<void>;
 
   // 会话树与分叉（docs/architecture/session-tree.md）
   /**
@@ -1343,7 +1361,7 @@ export interface StudioInvokeApi {
    * 就地回到树里的一个用户消息节点：驱动 omp 自己的 `/tree`（同一个会话文件里移动叶子，不新建文件，原来的分支留在文件里），节点树由 omp 自己重画；
    * 返回那条消息的文字。只在任务空闲时可用。`summarize` 为真时让 omp 给被放弃的分支写摘要（调一次模型，写进会话文件一个 branch_summary 条目）。
    */
-  branchTask(taskId: TaskId, entryId: string, summarize?: boolean): Promise<BranchTaskResult>;
+  branchTask(taskId: TaskId, entryId: string, summarize?: boolean, revertFiles?: boolean): Promise<BranchTaskResult>;
 
   // 子代理面板（S1，spec §4.28）：omp 只在 Agent Hub 里提供插话 / 结束 / 恢复，主进程在后台驱动它再恢复（tasks/tsp-hub-driver.ts）。
   /** 子代理的记录（会话文件）和最终输出（`.md`），只读 omp 存档；读不到时 `unavailable` + 原因，不抛错。 */
@@ -1526,6 +1544,8 @@ export interface StudioInvokeApi {
   setSoundOnDone(on: boolean): Promise<void>;
   setCopyOnSelect(on: boolean): Promise<void>;
   setToolHeadsOnly(on: boolean): Promise<void>;
+  setAutoCollapseTools(on: boolean): Promise<void>;
+  setAutoCollapseDiffs(on: boolean): Promise<void>;
   /** 记下用户已经确认过"全自动"，之后选它不再弹确认。 */
   setYoloConfirmed(): Promise<void>;
   /** 新任务实际会用的默认模型和思考强度：服务进程 get_state 读出的当前值（缓存优先，同 listModels(false)）；读不到（没登录、没有可用模型）时为 null。 */
@@ -1747,6 +1767,7 @@ export const invokeNames = {
   getSettings: true,
   setLocale: true,
   setTheme: true,
+  setColorMode: true,
   setBackdrop: true,
   setBackdropStrength: true,
   chooseBackdropImage: true,
@@ -1823,6 +1844,10 @@ export const invokeNames = {
   readPreviewFile: true,
   listDirectory: true,
   listProjectFiles: true,
+  createFileEntry: true,
+  renameFileEntry: true,
+  deleteFileEntry: true,
+  revealProjectFile: true,
   getSessionTree: true,
   forkTask: true,
   branchTask: true,
@@ -1903,6 +1928,8 @@ export const invokeNames = {
   setSoundOnDone: true,
   setCopyOnSelect: true,
   setToolHeadsOnly: true,
+  setAutoCollapseTools: true,
+  setAutoCollapseDiffs: true,
   setYoloConfirmed: true,
   getDefaultModel: true,
   getStartupSnapshot: true,

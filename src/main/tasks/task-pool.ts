@@ -36,6 +36,7 @@ import type { BtwHistoryRecord, BtwUiEvent } from "../../shared/btw.ts";
 import type { TspEvent } from "../../shared/tsp/tsp.generated.ts";
 import { titleFromPrompt } from "./convert.ts";
 import { stripIconGlyphs } from "../../shared/ui/clean-title.ts";
+import { findGitRootSync } from "./workspace-dirs.ts";
 import {
   TooManyTasksError,
   TspRunner,
@@ -528,12 +529,16 @@ export class TaskPool {
     const forked = this.#adopt(record);
     this.#deps.events.state(forked.state);
     await forked.start();
-    const { text } = await forked.rewindTo(target, known);
-    return { task: forked.state, text };
+    const { text, images } = await forked.rewindTo(target, known);
+    return {
+      task: forked.state,
+      text,
+      ...(images !== undefined && images.length > 0 ? { images } : {}),
+    };
   }
 
-  async branchTask(id: TaskId, entryId: string, summarize = false): Promise<BranchTaskResult> {
-    return this.#runner(id).rewindTo(entryId, undefined, summarize);
+  async branchTask(id: TaskId, entryId: string, summarize = false, revertFiles = false): Promise<BranchTaskResult> {
+    return this.#runner(id).rewindTo(entryId, undefined, summarize, revertFiles);
   }
 
   /** 给会话树里的条目打标签（`label` 为 null / 空 = 清除），由 omp 的 `/tree` 选择器完成。 */
@@ -599,9 +604,21 @@ export class TaskPool {
     const { worktreePath, worktreeBranch, worktreeBase } = runner.record;
     const project = this.#deps.registry.findProject(runner.record.projectId);
     if (!project) throw new Error(`task ${id} refers to unknown project`);
+    let effectiveCwd = runner.cwd;
+    let effectiveProjectPath = project.path;
+    if (worktreePath === null && findGitRootSync(effectiveCwd) === null) {
+      for (const wsDir of runner.workspaceDirs.toReversed()) {
+        const gitRoot = findGitRootSync(wsDir);
+        if (gitRoot !== null) {
+          effectiveCwd = gitRoot;
+          effectiveProjectPath = gitRoot;
+          break;
+        }
+      }
+    }
     return {
-      projectPath: project.path,
-      cwd: runner.cwd,
+      projectPath: effectiveProjectPath,
+      cwd: effectiveCwd,
       worktree:
         worktreePath !== null && worktreeBranch !== null && worktreeBase !== null
           ? { path: worktreePath, branch: worktreeBranch, base: worktreeBase }

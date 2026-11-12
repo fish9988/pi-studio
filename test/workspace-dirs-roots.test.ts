@@ -84,6 +84,13 @@ describe("文件面板读额外根", () => {
     expect(file).toMatchObject({ kind: "text", text: "extra file" });
   });
 
+  it("root 缺省时若文件在任务 cwd 不存在但存在于 taskWorkspaceDirs，自动回退读取额外目录中的相对或绝对路径", async () => {
+    const byRel = await fileHandlers.readPreviewFile({ kind: "task", taskId: task }, "笔记 一.md");
+    expect(byRel).toMatchObject({ kind: "text", text: "extra file" });
+    const byAbs = await fileHandlers.readPreviewFile({ kind: "task", taskId: task }, path.join(extra, "笔记 一.md"));
+    expect(byAbs).toMatchObject({ kind: "text", text: "extra file" });
+  });
+
   it("下标过期（目录被移除）：reject，不会读到 cwd", async () => {
     mocks.dirs = [];
     await expect(fileHandlers.listDirectory({ kind: "task", taskId: task, root: 1 }, "")).rejects.toThrow(

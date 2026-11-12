@@ -7,6 +7,7 @@ import {
   type BackdropMode,
   type BackdropStrength,
   type BrandStyle,
+  type ColorMode,
   type IdleClose,
   type LocalePreference,
   type MascotCharacter,
@@ -24,7 +25,7 @@ import {
   setProcessRowsLayout,
   useShellValue,
 } from "../../app/shell-store.ts";
-import { useAppInfo, useSettings } from "../../store/index.ts";
+import { setAppearanceColorMode, useAppInfo, useSettings } from "../../store/index.ts";
 import { Badge, Button, Row, SectionHead, Segmented, Switch } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { Select } from "../../ui/Select.tsx";
@@ -84,6 +85,11 @@ export function GeneralSection() {
     { value: "zh-CN", label: t("settings.language.zh") },
     { value: "en", label: t("settings.language.en") },
   ] as const;
+  const colorMode: ColorMode = settings?.colorMode ?? "system";
+  const colorModeOptions = (["system", "light", "dark"] as const).map((value) => ({
+    value,
+    label: t(`settings.colorMode.${value}`),
+  }));
   const brandStyle = useShellValue("brandStyle") ?? "pi";
   const brandOptions = (["pi", "claude", "deepseek"] as const).map((value) => ({
     value,
@@ -122,7 +128,21 @@ export function GeneralSection() {
   return (
     <>
       <SectionHead title={t("settings.appearance")} />
-      <ThemeGallery value={settings?.theme ?? "system"} />
+      <div className="st-cells">
+        <Row label={t("settings.colorMode")}>
+          {(labelId) => (
+            <Segmented<ColorMode>
+              size="sm"
+              value={colorMode}
+              options={colorModeOptions}
+              labelledBy={labelId}
+              onChange={(next) => guard(setAppearanceColorMode(next))}
+              testId="setting-color-mode"
+            />
+          )}
+        </Row>
+      </div>
+      <ThemeGallery value={settings?.theme ?? "default"} colorMode={colorMode} />
       <div className="st-cells">
         <Row label={t("settings.brandStyle")}>
           {(labelId) => (
@@ -321,6 +341,26 @@ export function GeneralSection() {
               labelledBy={labelId}
               onChange={(next) => void window.studio.setToolHeadsOnly(next)}
               testId="setting-tool-heads-only"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.autoCollapseTools")} info={t("settings.autoCollapseTools.desc")}>
+          {(labelId) => (
+            <Switch
+              checked={settings?.autoCollapseTools ?? true}
+              labelledBy={labelId}
+              onChange={(next) => void window.studio.setAutoCollapseTools(next)}
+              testId="setting-auto-collapse-tools"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.autoCollapseDiffs")} info={t("settings.autoCollapseDiffs.desc")}>
+          {(labelId) => (
+            <Switch
+              checked={settings?.autoCollapseDiffs ?? true}
+              labelledBy={labelId}
+              onChange={(next) => void window.studio.setAutoCollapseDiffs(next)}
+              testId="setting-auto-collapse-diffs"
             />
           )}
         </Row>

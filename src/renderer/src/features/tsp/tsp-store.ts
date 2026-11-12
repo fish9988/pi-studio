@@ -680,13 +680,14 @@ const derivedCache = new Map<TaskId, Map<unknown, { mirror: Mirror; version: num
  * `nodes`：derive 只读这些节点（见 shared/tsp/node-watch.ts 的前提），它们没变就不重算；不给则每批消息后重算。
  */
 export function useTspDerived<T>(
-  taskId: TaskId,
+  taskId: TaskId | null,
   derive: (doc: TspDocument) => T,
   same: (a: T, b: T) => boolean,
   nodes?: NodeDeps,
 ): T | null {
-  const sub = useMemo(() => (l: () => void) => subscribe(panelKey(taskId), l), [taskId]);
+  const sub = useMemo(() => (l: () => void) => (taskId === null ? () => {} : subscribe(panelKey(taskId), l)), [taskId]);
   return useSyncExternalStore(sub, () => {
+    if (taskId === null) return null;
     const mirror = mirrors.get(taskId);
     if (!mirror) return null;
     let version = mirror.seq;

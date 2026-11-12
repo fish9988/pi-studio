@@ -11,36 +11,43 @@
 .topbar-branch {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: 5px;
   min-width: 0;
-  max-width: 32ch;
-  height: var(--control-h-sm);
+  max-width: 26ch;
+  height: 26px;
   margin-right: var(--space-1);
-  padding: 0 var(--space-2) 0 var(--space-2-5);
+  padding: 0 var(--space-2);
   color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: var(--fs-code-sm);
+  font-size: var(--fs-xs);
   background: transparent;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  cursor: default;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
   transition:
     background-color var(--dur-instant) var(--ease-out),
-    border-color var(--dur-instant) var(--ease-out);
+    border-color var(--dur-instant) var(--ease-out),
+    color var(--dur-instant) var(--ease-out);
 }
 .topbar-branch:hover,
 .topbar-branch[aria-expanded="true"] {
   background: var(--bg-hover);
   border-color: var(--border);
+  color: var(--text);
 }
 .topbar-branch:active {
   background: var(--bg-active);
 }
 .topbar-branch svg {
   flex: none;
-}
-.topbar-branch > svg:last-child {
   color: var(--text-3);
+}
+.topbar-branch-dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--accent);
 }
 .topbar-branch-name {
   min-width: 0;

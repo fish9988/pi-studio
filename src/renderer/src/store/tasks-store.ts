@@ -70,6 +70,11 @@ export function getTask(taskId: TaskId): TaskState | null {
   return tasksStore.get().byId[taskId] ?? null;
 }
 
+/** 立即将恢复或新建的任务状态同步写入本地 store，避免调用方在 IPC 广播到达前读不到刚恢复的任务。 */
+export function upsertTask(task: TaskState): void {
+  tasksStore.set(withTasks({ ...tasksStore.get().byId, [task.id]: task }));
+}
+
 /** 任务是否空闲（只在这个布尔值变化时重渲染，对话流里每条用户消息都订阅它）。 */
 export function useTaskIdle(taskId: TaskId): boolean {
   return useStoreValue(tasksStore, (state) => state.byId[taskId]?.status === "idle");

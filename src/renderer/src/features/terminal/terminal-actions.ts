@@ -1,6 +1,7 @@
 // 终端的焦点和显隐动作：快捷键 Ctrl+` 和命令面板/顶栏按钮的语义不同，都在这里。
 import { useEffect, useRef } from "react";
 import type { DraftKey, TaskId, TerminalKey } from "../../../../shared/ipc.ts";
+import { rekeyDshWorkbench } from "../workbench/dsh-workbench-store.ts";
 import { isTerminalOpen, rekeyTerminalOpen, setTerminalOpen } from "./terminal-store.ts";
 
 /** 草稿正在建任务并交接终端：这段时间里草稿的键可能因项目列表刷新而变，不能因此把终端关了。 */
@@ -16,13 +17,16 @@ export async function handOverDraftTerminal(from: DraftKey, to: TaskId, worktree
     if (worktree) {
       await window.studio.closeTerminal(from);
       setTerminalOpen(from, false);
+      rekeyDshWorkbench(from, to, true);
       return;
     }
     await window.studio.rekeyTerminal(from, to);
     rekeyTerminalOpen(from, to);
+    rekeyDshWorkbench(from, to, false);
   } catch (error) {
     console.error("草稿终端交接失败", error);
     setTerminalOpen(from, false);
+    rekeyDshWorkbench(from, to, worktree);
   }
 }
 

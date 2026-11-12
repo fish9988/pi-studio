@@ -14,7 +14,7 @@ import {
   type TaskId,
   type ProjectId,
 } from "../../shared/ipc.ts";
-import { isThemeName, type ThemePreference } from "../../shared/themes.ts";
+import { isColorMode, isThemeFamily, isThemeName, type ColorMode, type ThemePreference } from "../../shared/themes.ts";
 import {
   parseBuiltinCommand,
   parseTaskCommand,
@@ -102,8 +102,13 @@ export function parseLocalePreference(value: unknown): LocalePreference {
 }
 
 export function parseThemePreference(value: unknown): ThemePreference {
-  if (value === "system" || (typeof value === "string" && isThemeName(value))) return value;
+  if (value === "system" || (typeof value === "string" && (isThemeFamily(value) || isThemeName(value)))) return value;
   throw new IpcValidationError("theme 不是已知的主题");
+}
+
+export function parseColorMode(value: unknown): ColorMode {
+  if (typeof value === "string" && isColorMode(value)) return value;
+  throw new IpcValidationError("colorMode 必须是 system | light | dark 之一");
 }
 
 export function parseBackdropMode(value: unknown): BackdropMode {

@@ -9,7 +9,6 @@ import { Close } from "../../icons.tsx";
 import { IconButton, Tabs, tabPanelProps } from "../../ui/controls.tsx";
 import { setPreviewWidth, usePreviewWidth } from "../file-preview/preview-store.ts";
 import { useTspDerived, useTspDrive } from "../tsp/tsp-store.ts";
-import { WorkbenchStrip } from "../workbench/WorkbenchStrip.tsx";
 import { AgentDetail } from "./AgentDetail.tsx";
 import { AgentsActivity } from "./AgentsActivity.tsx";
 import { AgentRow } from "./AgentRow.tsx";
@@ -101,7 +100,6 @@ export function AgentsPanel({ taskId, selected }: { taskId: TaskId; selected: st
         }}
         onKeyDown={onResizerKey}
       />
-      <WorkbenchStrip active="agents" taskId={taskId} />
       {/* 页签放在面板头里（同文件面板），不再另写一个和第一个页签重复的标题 */}
       <header className="file-preview-head">
         <Tabs<"agents" | "activity">

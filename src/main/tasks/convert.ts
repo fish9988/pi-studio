@@ -30,8 +30,13 @@ export function toModelOption(info: ModelInfoWithMetrics): ModelOption {
   };
 }
 
-/** 会话标题：首条用户消息的第一行，截到 60 个字符。 */
+/** 会话标题：首条用户消息的第一行（剥离图片占位符与盘符长路径前缀），截到 60 个字符。 */
 export function titleFromPrompt(text: string): string {
-  const firstLine = text.split(/\r?\n/).find((line) => line.trim() !== "") ?? "";
-  return Array.from(firstLine.trim()).slice(0, 60).join("");
+  const firstLine =
+    text
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\[Image #\d+[^\]]*\]/gi, "").trim())
+      .find((line) => line !== "") ?? "";
+  const shortened = firstLine.replace(/[A-Za-z]:[\\/](?:[^\s\\/]+[\\/])+([\w.-]+)/g, "$1");
+  return Array.from(shortened.trim()).slice(0, 60).join("");
 }

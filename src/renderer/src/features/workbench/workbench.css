@@ -1,6 +1,533 @@
-/* 右侧统一工作台（文件 | 变更 | 子代理 | 浏览器切换条 + 行内工作区变更检视器）。全部类名以 .wb- 开头，只用 tokens.css 变量。 */
+/* 右侧统一工作台（100% 复刻 DSH 多标签工作台 + 行内工作区变更检视器）。零过渡抖动，只用 tokens.css 变量。 */
 
-/* ───────── 顶部四模式切换条 ───────── */
+/* ───────── DSH 同款右侧边栏外壳与动态多标签栏 ───────── */
+
+.dsh-wb {
+  position: relative;
+  display: flex;
+  flex: 0 1 38%;
+  flex-direction: column;
+  min-width: 300px;
+  max-width: 78%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border-subtle);
+  animation: none;
+  transition: none;
+}
+
+.dsh-wb[data-expanded] {
+  flex: 0 1 74%;
+  max-width: 82%;
+}
+
+.dsh-wb .file-preview {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  border-left: 0;
+  animation: none;
+  transition: none;
+}
+
+.dsh-wb .file-preview > .file-preview-resizer {
+  display: none;
+}
+
+.dsh-wb-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1-5);
+  height: 38px;
+  padding: 0 var(--space-2) 0 var(--space-2-5);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+}
+
+.dsh-wb-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dsh-wb-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.dsh-wb-lone-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 var(--space-1);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.dsh-wb-tab-slot {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.dsh-wb-tab-sep {
+  width: 1px;
+  height: 13px;
+  margin: 0 3px;
+  background: var(--border-subtle);
+  flex: none;
+}
+
+.dsh-wb-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  max-width: 168px;
+  padding: 0 8px 0 9px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dsh-wb-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dsh-wb-tab[data-active] {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.dsh-wb-tab-ic {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.dsh-wb-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dsh-wb-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.dsh-wb-tab:hover .dsh-wb-tab-close,
+.dsh-wb-tab[data-active] .dsh-wb-tab-close {
+  opacity: 0.78;
+}
+
+.dsh-wb-tab-close:hover {
+  opacity: 1;
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.dsh-wb-add-btn,
+.dsh-wb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  flex: none;
+  cursor: pointer;
+}
+
+.dsh-wb-add-btn:hover,
+.dsh-wb-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dsh-wb-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.dsh-wb-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ───────── Antigravity Overview 默认页（无框极简列表 + 实时状态区） ───────── */
+
+.dsh-wb-start {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  background: var(--bg-sidebar);
+  overflow-y: auto;
+}
+
+.dsh-ov-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.dsh-ov-omni-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dsh-ov-omni {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 34px;
+  padding: 0 var(--space-2-5);
+  background: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-3);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.dsh-ov-omni:focus-within {
+  background: var(--bg-raised);
+  border-color: var(--border-strong);
+  color: var(--text-2);
+}
+
+.dsh-ov-omni-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  outline: none;
+}
+
+.dsh-ov-omni-input::placeholder {
+  color: var(--text-3);
+}
+
+.dsh-ov-omni-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.dsh-ov-omni-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dsh-ov-omni-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  overflow-y: auto;
+}
+
+.dsh-ov-omni-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-ov-omni-option:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dsh-ov-omni-option-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-ov-omni-kbd {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+}
+
+.dsh-ov-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dsh-ov-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  letter-spacing: 0.02em;
+}
+
+.dsh-ov-head-count {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-ov-nav-list,
+.dsh-ov-live-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dsh-ov-nav-row,
+.dsh-ov-live-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-instant) var(--ease-out);
+}
+
+.dsh-ov-nav-row:hover,
+.dsh-ov-live-row:hover:not(.dsh-ov-live-static) {
+  background: var(--bg-hover);
+}
+
+.dsh-ov-live-static {
+  cursor: default;
+}
+
+.dsh-ov-nav-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--text-2);
+}
+
+.dsh-ov-nav-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: var(--fw-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-ov-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-ov-nav-kbd {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11.5px;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.dsh-ov-nav-arrow {
+  flex: none;
+  color: var(--text-3);
+  opacity: 0.65;
+}
+
+.dsh-ov-empty {
+  padding: 4px var(--space-2);
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  opacity: 0.72;
+}
+
+.dsh-ov-live-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-ov-live-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-ov-live-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dsh-ov-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--text-3);
+}
+
+.dsh-ov-dot[data-state="running"] {
+  background: var(--accent);
+}
+
+.dsh-ov-dot[data-state="done"],
+.dsh-ov-dot[data-state="idle"] {
+  background: var(--st-done);
+}
+
+.dsh-ov-dot[data-state="failed"] {
+  background: var(--st-error);
+}
+
+.dsh-wb-extensions-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-4);
+  background: var(--bg-app);
+  overflow-y: auto;
+}
+
+/* ───────── 右侧栏内嵌终端 ───────── */
+
+.dsh-wb-terminal {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-app);
+}
+
+.dsh-wb-terminal[hidden] {
+  display: none;
+}
+
+.dsh-wb-term-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 32px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ───────── 顶部四模式切换条（兼容保留） ───────── */
 
 .wb-strip {
   display: flex;
@@ -86,6 +613,40 @@
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
+}
+
+.wb-source-switch {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+}
+
+.wb-source-btn {
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.wb-source-btn:hover {
+  color: var(--text-2);
+}
+
+.wb-source-btn[data-active] {
+  background: var(--bg-raised);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .wb-stat-add {
@@ -201,9 +762,20 @@
 .wb-file-text {
   display: flex;
   flex: 1;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.wb-file-name {
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: var(--fw-medium);
+  text-overflow: ellipsis;
 }
 
 .wb-file-dir {
@@ -211,13 +783,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--text-3);
-  text-overflow: ellipsis;
-}
-
-.wb-file-name {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
+  font-size: var(--fs-2xs);
   text-overflow: ellipsis;
 }
 

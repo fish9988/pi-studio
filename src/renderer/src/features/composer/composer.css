@@ -7,10 +7,9 @@
   z-index: calc(var(--z-sticky) + 1);
   flex: none;
   container-type: inline-size;
-  width: min(calc(100% - 2 * var(--gutter)), calc(var(--content-w) + var(--composer-grow-w, 0px)));
+  width: min(calc(100% - 2 * var(--gutter)), var(--content-w));
   margin: 0 auto;
   padding-bottom: var(--space-4);
-  transition: width var(--dur-base) var(--ease-out);
 }
 /* 内容从输入框后面淡出，而不是被切断。 */
 .composer-stack::before {
@@ -30,52 +29,73 @@
 .composer {
   position: relative;
   container-type: inline-size;
-  padding: var(--space-1-5) var(--space-2) var(--space-1-5) var(--space-2-5);
+  padding: var(--space-1-5) var(--space-2-5) var(--space-1-5) var(--space-2-5);
   background: var(--bg-raised);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: var(--shadow-composer);
   transition:
-    border-color var(--dur-instant),
-    box-shadow var(--dur-instant);
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
-/* 上面输入区，下面工具行，同一块底上、没有分隔线 */
+/* 上面输入区（扁平起始高度，随内容自动纵向长高），下面工具行，同一块底上、没有分隔线 */
 .composer-body {
-  min-height: 40px;
-  padding: var(--space-2) var(--space-2) var(--space-1);
+  min-height: 32px;
+  padding: var(--space-1-5) var(--space-1-5) var(--space-0-5);
 }
 .composer:hover {
   border-color: var(--border-strong);
 }
 .composer:focus-within {
-  border-color: var(--border-strong);
-  box-shadow:
-    var(--shadow-composer),
-    0 0 0 3px var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-strong));
+  box-shadow: var(--shadow-composer);
 }
-/* ── 桌面宠物精灵表窗口与条带机（完整移植自 mascot-frame.css / crab.css / whale.css / whale-girl.css） ── */
+.composer[data-dragging] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-raised));
+}
+/* ── 桌面宠物精灵表窗口与防遮挡侧边锚点（默认停靠在输入框外侧留白区，支持自由拖拽记忆；不再半透明避让） ── */
 .composer-mascot {
   position: absolute;
   z-index: 2;
   pointer-events: none;
+  translate: var(--mascot-dx, 0px) var(--mascot-dy, 0px);
+}
+.composer-mascot[data-dragging] {
+  transition: none;
 }
 .composer-mascot-clawd {
-  right: 0;
-  bottom: 100%;
+  left: calc(100% - 36px);
+  bottom: 4px;
   width: 104px;
   height: 72px;
 }
 .composer-mascot-deepy {
-  right: 8px;
-  bottom: calc(100% - 4px);
+  left: calc(100% - 12px);
+  bottom: 0;
   width: 104px;
   height: 104px;
 }
 .composer-mascot-whalegirl {
-  right: 8px;
-  bottom: calc(100% - 12px);
+  left: calc(100% - 14px);
+  bottom: -4px;
   width: 138px;
   height: 132px;
+}
+.composer-mascot-clawd[data-narrow] {
+  left: auto;
+  right: -6px;
+  bottom: calc(100% - 2px);
+}
+.composer-mascot-deepy[data-narrow] {
+  left: auto;
+  right: 2px;
+  bottom: calc(100% - 6px);
+}
+.composer-mascot-whalegirl[data-narrow] {
+  left: auto;
+  right: 2px;
+  bottom: calc(100% - 12px);
 }
 .composer-mascot-sprite {
   position: absolute;
@@ -131,22 +151,35 @@
   width: 104px;
   height: 104px;
 }
-/* OMP 像素 π 宠物容器 */
+/* OMP 像素 π 宠物容器（默认停靠在输入框外侧留白区） */
 .composer-crab {
   position: absolute;
-  right: 18px;
-  bottom: 100%;
+  left: calc(100% + 10px);
+  bottom: 6px;
   z-index: 2;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   min-width: 48px;
   height: 34px;
-  cursor: pointer;
+  cursor: grab;
   pointer-events: auto;
   user-select: none;
+  touch-action: none;
+  translate: var(--mascot-dx, 0px) var(--mascot-dy, 0px);
   transform-origin: bottom center;
-  transition: transform var(--dur-fast) var(--ease-out);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+.composer-crab[data-narrow] {
+  left: auto;
+  right: 8px;
+  bottom: 100%;
+}
+.composer-crab[data-dragging] {
+  cursor: grabbing;
+  transition: none;
 }
 .composer-crab:hover {
   transform: translateY(-2px);
@@ -274,15 +307,25 @@
   flex: none;
 }
 .usage-context {
-  display: grid;
-  place-items: center;
-  width: var(--control-h-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: var(--control-h-sm);
   height: var(--control-h-sm);
-  padding: 0;
+  padding: 0 5px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
+}
+.usage-context[data-pct-label]::after {
+  content: attr(data-pct-label);
+  line-height: 1;
 }
 /* 悬停 / 打开时只给底色（同其它工具按钮），圆环本身的颜色不变。 */
 button.usage-context:hover,
@@ -339,17 +382,22 @@ button.usage-context:hover,
   min-width: calc-size(max-content, min(size, var(--chip-name-min-w) + 2 * var(--chip-pad)));
   overflow: hidden;
 }
-/* 整颗胶囊（名字 + 思考强度徽标）：左边是模型名，右边是主流 AI 界面风格的思考强度药丸徽标。 */
+.chip-name-caret {
+  flex: none;
+  margin-left: 2px;
+  opacity: 0.55;
+}
+/* 思考档位切换胶囊：去掉扎眼高饱和底色，改为与主题融合的低饱和次级胶囊（如 Med ⌄ / 中 ⌄） */
 .ui-chip.chip-effort {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   height: 24px;
   margin-left: 2px;
-  padding: 0 8px 0 7px;
+  padding: 0 7px 0 6px;
   border-radius: var(--radius-pill);
-  background: var(--bg-sunken);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   border: 1px solid var(--border-subtle);
   color: var(--text-2);
   font-size: var(--fs-xs);
@@ -363,23 +411,12 @@ button.usage-context:hover,
 .ui-chip.chip-effort:hover,
 .ui-chip.chip-effort[aria-expanded="true"] {
   background: var(--bg-hover);
-  border-color: var(--border);
+  border-color: var(--border-strong);
   color: var(--text);
 }
-.ui-chip.chip-effort:is([data-level="medium"], [data-level="high"]) {
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
-  color: var(--accent);
-}
-.ui-chip.chip-effort:is([data-level="medium"], [data-level="high"]):hover,
-.ui-chip.chip-effort:is([data-level="medium"], [data-level="high"])[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
-}
-.ui-chip.chip-effort:is([data-level="xhigh"], [data-level="max"]) {
-  background: color-mix(in srgb, var(--st-waiting) 14%, var(--accent-soft));
-  border-color: color-mix(in srgb, var(--st-waiting) 38%, var(--accent));
-  color: color-mix(in oklch, var(--accent), var(--st-waiting) 42%);
+.ui-chip.chip-effort:is([data-level="high"], [data-level="xhigh"], [data-level="max"]) {
+  background: color-mix(in srgb, var(--text) 6.5%, transparent);
+  color: var(--text);
 }
 .effort-pill-icon {
   display: inline-flex;
@@ -517,17 +554,23 @@ button.usage-context:hover,
 }
 .usage-ring-track {
   stroke: var(--border-strong);
-  stroke-width: 1.5;
+  stroke-width: 1.65;
+  opacity: 0.85;
 }
-/* 已用是中性色的扇形（UsageMeter 的 Ring）；快满了才变成琥珀色（data-high） */
+/* 精致环形进度条：常态为柔和强调色，75% 起琥珀色预警，90% 起柔和红色预警 */
 .usage-ring-fill {
-  stroke: var(--text-3);
-  stroke-width: 6;
+  stroke: var(--accent);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--dur-base) var(--ease-out);
 }
-/* 自动压缩触发点：从圆环向里的一道短刻度（UsageMeter 的 Ring；不伸出外圈，伸出去像箭头），用已用弧和底圈之外的中性色 */
+.usage-context[data-pending] .usage-ring-track {
+  stroke: var(--border-strong);
+  opacity: 0.55;
+}
 .usage-ring-tick {
-  stroke: var(--text-2);
-  stroke-width: 1.5;
+  stroke: var(--text-3);
+  stroke-width: 1.25;
 }
 .usage-context[data-warn] {
   color: var(--st-waiting-text);
@@ -540,6 +583,298 @@ button.usage-context:hover,
 }
 .usage-context[data-high] .usage-ring-fill {
   stroke: var(--st-error);
+}
+
+/* ── 上下文圆环悬停 Tooltip 卡片（集中展示 对话轮数 / 缓存命中率 / Token 用量 / 累计开销） ── */
+.ctx-hover-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: var(--z-tooltip);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 248px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  animation: fade-in var(--dur-fast) var(--ease-out);
+}
+.ctx-hover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ctx-hover-title {
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+.ctx-hover-pct {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.ctx-hover-card[data-warn] .ctx-hover-pct {
+  color: var(--st-waiting-text);
+}
+.ctx-hover-card[data-high] .ctx-hover-pct {
+  color: var(--st-error);
+}
+.ctx-hover-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border-subtle);
+}
+.ctx-hover-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.ctx-hover-card[data-warn] .ctx-hover-bar-fill {
+  background: var(--st-waiting);
+}
+.ctx-hover-card[data-high] .ctx-hover-bar-fill {
+  background: var(--st-error);
+}
+.ctx-hover-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+.ctx-hover-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ctx-hover-label {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.ctx-hover-val {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctx-hover-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding-top: 2px;
+}
+.ctx-hover-hint {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctx-hover-usage-btn {
+  flex: none;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.ctx-hover-usage-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ───────── DSH 风格轻量模型选择弹出菜单（图 7） ───────── */
+.ui-popover:has(> .dsh-model-popover) {
+  padding: 0;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.dsh-model-popover {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.dsh-mp-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-3);
+}
+.dsh-mp-search {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.dsh-mp-search::placeholder {
+  color: var(--text-3);
+}
+.dsh-mp-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(360px, 52vh);
+  overflow-y: auto;
+  padding: 6px;
+}
+.dsh-mp-loading {
+  padding: 6px;
+}
+.dsh-mp-empty {
+  margin: 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  text-align: center;
+}
+.dsh-mp-group {
+  display: flex;
+  flex-direction: column;
+}
+.dsh-mp-divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border-subtle);
+}
+.dsh-mp-group-title {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+}
+.dsh-mp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.dsh-mp-item:hover,
+.dsh-mp-item[aria-selected="true"] {
+  background: var(--bg-hover);
+}
+.dsh-model-brand {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+.dsh-model-brand[data-brand="deepseek"] {
+  color: #3b82f6;
+  background: color-mix(in srgb, #3b82f6 12%, transparent);
+}
+.dsh-model-brand[data-brand="claude"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.dsh-model-brand[data-brand="gemini"] {
+  color: #6366f1;
+  background: color-mix(in srgb, #6366f1 12%, transparent);
+}
+.dsh-model-brand[data-brand="openai"] {
+  color: #10b981;
+  background: color-mix(in srgb, #10b981 12%, transparent);
+}
+.dsh-mp-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.dsh-mp-item-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsh-mp-item-desc {
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dsh-mp-item-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  color: var(--accent);
+}
+.dsh-mp-footer {
+  padding: 5px 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dsh-mp-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.dsh-mp-more-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 /* 上下文构成（照 Claude Code 的 /context）：分段横条 + 每类一行 */
@@ -599,6 +934,10 @@ button.usage-context:hover,
 .ctx-seg[data-part="customTools"],
 .ctx-swatch[data-part="customTools"] {
   background: #14b8a6;
+}
+.ctx-seg[data-part="compactionSummary"],
+.ctx-swatch[data-part="compactionSummary"] {
+  background: #ec4899;
 }
 .ctx-seg[data-part="systemContext"],
 .ctx-swatch[data-part="systemContext"] {
@@ -813,14 +1152,21 @@ button.usage-context:hover,
   transition:
     background var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.send:active:not(:disabled) {
+  transform: scale(0.93);
 }
 .send[data-kind="send"] {
   background: var(--primary);
   color: var(--text-on-primary);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 24%, transparent);
 }
 .send[data-kind="send"]:hover:not(:disabled) {
   background: var(--primary-hover);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 32%, transparent);
 }
 .send[data-kind="send"]:disabled {
   background: var(--bg-active);

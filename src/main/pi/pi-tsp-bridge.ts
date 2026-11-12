@@ -3,6 +3,7 @@
 // shared `src/shared/tsp/*` selectors render Pi conversations with 100% visual & behavioral fidelity.
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { classifyAssistantText, PROCESS_HEAD_TEXT } from "../../shared/assistant-text-kind.ts";
 import { applyMessage, createDocument, type TspDocMessage, type TspDocument } from "../../shared/tsp/document.ts";
 import type { TspDiffHunk, TspEvent, TspNode, TspOp, TspProps } from "../../shared/tsp/tsp.generated.ts";
 import { isRecord } from "../../shared/type-guards.ts";
@@ -56,7 +57,11 @@ interface LiveToolState {
   toolCallId: string;
   toolName: string;
   args: Record<string, unknown>;
-  startedAtMs: number;
+  /** 流式阶段累计的参数 JSON 文本（RPC 线上事件不带 partial，只能靠 `toolcall_delta` 的文本拼）。 */
+  argsJson: string;
+  /** 已经写进节点的目标，避免重复 op。 */
+  target?: string | undefined;
+  startedAtMs?: number | undefined;
   outputId: string | null;
   streamedOutput: string;
 }
@@ -315,30 +320,38 @@ function formatCompactCount(n: number): string {
   return String(Math.round(n));
 }
 
-function formatUsageFooter(usage: PiUsage | undefined, model?: string): string | null {
-  if (usage === undefined) return null;
-  const parts: string[] = [];
-  const totalTokens =
-    usage.totalTokens ?? (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-  if (totalTokens > 0) {
-    parts.push(`${formatCompactCount(totalTokens)} tok`);
-  }
-  const cost = usage.cost?.total;
-  if (typeof cost === "number" && cost > 0) {
-    parts.push(cost < 0.01 ? `$${cost.toFixed(4)}` : `$${cost.toFixed(2)}`);
-  }
-  if (typeof model === "string" && model !== "") {
-    parts.push(model);
-  }
-  return parts.length > 0 ? parts.join(" · ") : null;
+function shortenModelLabel(model: string): string {
+  const slashIdx = model.lastIndexOf("/");
+  const base = slashIdx >= 0 ? model.slice(slashIdx + 1) : model;
+  return base.replace(/-\d{8}$/, "");
 }
 
-function formatClockTime(timestamp: number | undefined): string | null {
-  if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) return null;
-  const d = new Date(timestamp);
+function formatClockTime(ts: number | undefined): string | null {
+  if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return null;
+  const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+function formatUsageFooter(usage: PiUsage | undefined, model?: string, timestamp?: number): string | null {
+  if (usage === undefined && (model === undefined || model === "")) return null;
+  const parts: string[] = [];
+  if (usage !== undefined) {
+    const totalTokens =
+      usage.totalTokens ?? (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
+    if (totalTokens > 0) {
+      parts.push(`${formatCompactCount(totalTokens)} tok`);
+    }
+  }
+  if (typeof model === "string" && model !== "") {
+    parts.push(shortenModelLabel(model));
+  }
+  const clock = formatClockTime(timestamp);
+  if (clock !== null) {
+    parts.push(clock);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function extractContentTextAndImages(content: string | readonly PiContentBlock[] | undefined): {
@@ -372,6 +385,99 @@ function extractContentTextAndImages(content: string | readonly PiContentBlock[]
   return { text: textParts.join("\n"), images };
 }
 
+/** 从流式事件携带的 partial 里取第 index 个内容块（拿不到返回 undefined）。 */
+function partialContentBlock(partial: PiAssistantMessage | undefined, index: number): PiTextContent | undefined {
+  const blocks = partial?.content;
+  if (!Array.isArray(blocks)) return undefined;
+  const block = blocks[index];
+  if (!isRecord(block) || block["type"] !== "text") return undefined;
+  return block as unknown as PiTextContent;
+}
+
+/** 从 partial 里取第 index 个工具调用块（id / 名字 / 已累计的参数）。 */
+function toolCallMeta(
+  partial: PiAssistantMessage | undefined,
+  index: number,
+): { id?: string | undefined; toolName?: string | undefined; arguments?: unknown } | undefined {
+  const blocks = partial?.content;
+  if (!Array.isArray(blocks)) return undefined;
+  const block = blocks[index];
+  if (!isRecord(block) || block["type"] !== "toolCall") return undefined;
+  return {
+    id: typeof block["id"] === "string" ? block["id"] : undefined,
+    toolName: typeof block["name"] === "string" ? block["name"] : undefined,
+    arguments: block["arguments"],
+  };
+}
+
+/**
+ * 把流式阶段拿到的参数归一成对象。
+ * 线上 `toolcall_*` 事件是按 provider 逐步拼的：`partial` 里可能是对象，也可能只是一段还在写的 JSON 文本，
+ * 半截 JSON 解析失败就返回 {}，绝不抛异常。
+ */
+function coerceToolArgs(value: unknown): Record<string, unknown> {
+  if (isRecord(value)) return value;
+  if (typeof value === "string") return toolArgsFromJsonText(value);
+  return {};
+}
+
+/** 从（可能不完整的）参数 JSON 文本里拿参数：整段能解析就用它，否则只掠已经闭合的字符串字段。 */
+function toolArgsFromJsonText(text: string): Record<string, unknown> {
+  const trimmed = text.trim();
+  if (trimmed === "") return {};
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    const args: Record<string, unknown> = {};
+    for (const match of trimmed.matchAll(/"([A-Za-z_$][\w$]*)"\s*:\s*"((?:[^"\\\n]|\\.)*)"/g)) {
+      const key = match[1];
+      const literal = match[2];
+      if (key === undefined || literal === undefined) continue;
+      try {
+        args[key] = JSON.parse(`"${literal}"`);
+      } catch {
+        // 半截转义（末尾一个孤立的 `\`）解析不了，跳过这一条。
+      }
+    }
+    return args;
+  }
+}
+
+/** `path` / `file_path` 两个参数名（不同 provider 叫法不同）。 */
+function pathArgOf(args: Readonly<Record<string, unknown>>): string {
+  if (typeof args["path"] === "string") return args["path"];
+  if (typeof args["file_path"] === "string") return args["file_path"];
+  return "";
+}
+
+/** 命令类工具卡头上那一行：描述 > 首行注释 > 第一条实质命令行。 */
+function bashCommandTarget(command: string, args: Readonly<Record<string, unknown>>): string {
+  const descArg =
+    typeof args["description"] === "string" && args["description"].trim() !== ""
+      ? args["description"].trim()
+      : typeof args["summary"] === "string" && args["summary"].trim() !== ""
+        ? args["summary"].trim()
+        : undefined;
+  const lines = command
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
+  const commentLine = lines.find((l) => /^#\s*\S/.test(l));
+  return (
+    descArg ??
+    (commentLine !== undefined
+      ? commentLine.replace(/^#+\s*/, "")
+      : (lines.find(
+          (l) =>
+            !/^(?:Set-Location|cd|pushd|\$ErrorActionPreference\s*=|\$[A-Za-z_]\w*\s*=|export\s+\w+=)/i.test(l) &&
+            !l.startsWith("#"),
+        ) ??
+        lines[0] ??
+        command))
+  );
+}
+
 function capitalizeToolTitle(name: string): string {
   switch (name) {
     case "bash":
@@ -392,6 +498,8 @@ function capitalizeToolTitle(name: string): string {
       return "List";
     case "codemode":
       return "Codemode";
+    case "subagent":
+      return "Subagent";
     case "tool_search":
       return "Tool Search";
     default:
@@ -419,6 +527,264 @@ function workingLabelForTool(toolName: string, args: Readonly<Record<string, unk
   return `Running ${toolName}…`;
 }
 
+// ───────── `subagent` 工具（Pi 扩展） ─────────
+//
+// Pi 的 subagent 扩展把结构化结果放在 toolResult.details 里，这是唯一的数据源（子代理跑 `--no-session`，不落盘）：
+//   { mode: "single" | "parallel" | "chain", isError, results: SingleResult[] }
+// 流式 tool_execution_update 的 partialResult.details 形状相同（parallel / chain 边跑边给 results），
+// 所以运行中也能从 details 还原右侧「Subagent」面板要的 `agent` 节点；拿不到 details 时退回 args 推断。
+
+export type PiSubagentStatus = "pending" | "running" | "done" | "failed" | "aborted";
+
+/** details 里单条子代理结果，只留面板与详情用得到的字段。 */
+export interface PiSubagentOutcome {
+  /** details 里的原始 agent 名（`scout`）。 */
+  agent: string;
+  /** `user` / `project` / `unknown`。 */
+  agentSource: string;
+  task: string;
+  status: PiSubagentStatus;
+  model?: string | undefined;
+  errorMessage?: string | undefined;
+  /** chain 模式里的第几步（1 起）。 */
+  step?: number | undefined;
+  /** messages 里 assistant 发起的 toolCall 个数。 */
+  tools: number;
+  /** `usage.turns`。 */
+  requests?: number | undefined;
+  /** `usage.contextTokens`。 */
+  tokens?: number | undefined;
+  cost?: number | undefined;
+  messages: readonly unknown[];
+}
+
+export interface PiSubagentRun {
+  mode: "single" | "parallel" | "chain";
+  results: PiSubagentOutcome[];
+  /** true = 来自 details（含流式 partial）；false = 只有 args 推断。 */
+  fromDetails: boolean;
+}
+
+/** 桥接层缓存的子代理记录（任务运行器按名字取详情用）。 */
+export interface PiSubagentRecord {
+  messages: unknown[] | null;
+  output: string | null;
+  model?: string;
+}
+
+/** 缓存的 messages 上限：够看完整轨迹，又不至于把内存吃穿。 */
+const SUBAGENT_DETAILS_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Pi 的 ChildStatus → TSP 的 agent 状态（TSP 那一套没有 cancelled，中止叫 aborted）。 */
+const SUBAGENT_STATUS: Readonly<Record<string, PiSubagentStatus>> = {
+  pending: "pending",
+  running: "running",
+  completed: "done",
+  failed: "failed",
+  aborted: "aborted",
+};
+
+function numberOrUndefined(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/** 子代理名同时是面板的去重键：只留字母数字和 `_ . -`（同 shared/tsp/agent-hub.ts 的 isAgentName）。 */
+function sanitizeSubagentName(raw: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/[.][.]+/g, ".")
+    .replace(/^[.-]+/, "")
+    .slice(0, 96);
+  return cleaned;
+}
+
+/** 同一次工具调用里重名的子代理追加 `-1`、`-2`（面板按名字去重，名字必须唯一）。 */
+function subagentNodeNames(results: readonly PiSubagentOutcome[]): string[] {
+  const used = new Map<string, number>();
+  return results.map((result, index) => {
+    const base = sanitizeSubagentName(result.agent) || `agent-${index + 1}`;
+    const seen = used.get(base) ?? 0;
+    used.set(base, seen + 1);
+    return seen === 0 ? base : `${base}-${seen}`;
+  });
+}
+
+function countAssistantToolCalls(messages: readonly unknown[]): number {
+  let count = 0;
+  for (const message of messages) {
+    if (!isRecord(message) || message["role"] !== "assistant") continue;
+    const content = message["content"];
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (isRecord(block) && block["type"] === "toolCall") count += 1;
+    }
+  }
+  return count;
+}
+
+/** 最后一条 assistant 文本（子代理的最终答复）。 */
+function finalAssistantText(messages: readonly unknown[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!isRecord(message) || message["role"] !== "assistant") continue;
+    const content = message["content"];
+    if (typeof content === "string") {
+      if (content !== "") return content;
+      continue;
+    }
+    if (!Array.isArray(content)) continue;
+    const parts: string[] = [];
+    for (const block of content) {
+      if (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string") parts.push(block["text"]);
+    }
+    if (parts.length > 0) return parts.join("\n");
+  }
+  return null;
+}
+
+/** 按字节上限从头部丢消息（越新的越重要），不超过 8MB。 */
+function trimSubagentMessages(messages: readonly unknown[]): unknown[] {
+  const all = [...messages];
+  if (all.length <= 200) return all;
+  let bytes = 0;
+  let start = all.length;
+  for (let index = all.length - 1; index >= 0; index -= 1) {
+    let size = 0;
+    try {
+      size = Buffer.byteLength(JSON.stringify(all[index]) ?? "", "utf8");
+    } catch {
+      size = 0;
+    }
+    // 至少留最后一条，哪怕它自己就超了。
+    if (bytes + size > SUBAGENT_DETAILS_MAX_BYTES && start !== all.length) break;
+    bytes += size;
+    start = index;
+  }
+  return all.slice(start);
+}
+
+function subagentOutcomeOf(
+  raw: Readonly<Record<string, unknown>>,
+  fallbackStatus: PiSubagentStatus,
+): PiSubagentOutcome {
+  const messages = Array.isArray(raw["messages"]) ? (raw["messages"] as readonly unknown[]) : [];
+  const usage = isRecord(raw["usage"]) ? raw["usage"] : {};
+  const step = numberOrUndefined(raw["step"]);
+  const rawStatus = typeof raw["status"] === "string" ? (SUBAGENT_STATUS[raw["status"]] ?? null) : null;
+  const agent = typeof raw["agent"] === "string" ? raw["agent"].trim() : "";
+  return {
+    agent: agent !== "" ? agent : "agent",
+    agentSource: typeof raw["agentSource"] === "string" ? raw["agentSource"] : "unknown",
+    task: typeof raw["task"] === "string" ? raw["task"] : "",
+    status: rawStatus ?? fallbackStatus,
+    model: typeof raw["model"] === "string" && raw["model"] !== "" ? raw["model"] : undefined,
+    errorMessage:
+      typeof raw["errorMessage"] === "string" && raw["errorMessage"].trim() !== ""
+        ? raw["errorMessage"].trim()
+        : undefined,
+    step: step !== undefined && step > 0 ? step : undefined,
+    tools: countAssistantToolCalls(messages),
+    requests: numberOrUndefined(usage["turns"]),
+    tokens: numberOrUndefined(usage["contextTokens"]),
+    cost: numberOrUndefined(usage["cost"]),
+    messages,
+  };
+}
+
+function subagentModeOf(value: unknown, fallback: PiSubagentRun["mode"]): PiSubagentRun["mode"] {
+  return value === "single" || value === "parallel" || value === "chain" ? value : fallback;
+}
+
+/** details → 结构化结果；没有 details（或 results 不是数组）返回 null。 */
+export function parseSubagentDetails(details: Readonly<Record<string, unknown>> | undefined): PiSubagentRun | null {
+  if (details === undefined) return null;
+  const rawResults = details["results"];
+  if (!Array.isArray(rawResults)) return null;
+  const results: PiSubagentOutcome[] = [];
+  for (const raw of rawResults) {
+    if (isRecord(raw)) results.push(subagentOutcomeOf(raw, "running"));
+  }
+  const mode = subagentModeOf(details["mode"], "single");
+  return { mode, results, fromDetails: results.length > 0 };
+}
+
+/** args 推断（subagent 的 single / parallel / chain 三种入参）。 */
+function subagentRunFromArgs(args: Readonly<Record<string, unknown>>): PiSubagentRun {
+  const entry = (raw: unknown): PiSubagentOutcome | null => {
+    if (!isRecord(raw)) return null;
+    return {
+      agent: typeof raw["agent"] === "string" ? raw["agent"].trim() : "",
+      agentSource: "unknown",
+      task: typeof raw["task"] === "string" ? raw["task"] : "",
+      status: "pending",
+      tools: 0,
+      messages: [],
+    };
+  };
+  const collect = (key: string): PiSubagentOutcome[] => {
+    const raw = args[key];
+    if (!Array.isArray(raw)) return [];
+    const out: PiSubagentOutcome[] = [];
+    for (const item of raw) {
+      const parsed = entry(item);
+      if (parsed !== null) out.push(parsed);
+    }
+    return out;
+  };
+  const tasks = collect("tasks");
+  if (tasks.length > 0) return { mode: "parallel", results: tasks, fromDetails: false };
+  const chain = collect("chain");
+  if (chain.length > 0) {
+    return {
+      mode: "chain",
+      results: chain.map((result, index) => ({ ...result, step: index + 1 })),
+      fromDetails: false,
+    };
+  }
+  const single = entry({ agent: args["agent"], task: args["task"] });
+  if (single !== null && (single.agent !== "" || single.task !== "")) {
+    return { mode: "single", results: [single], fromDetails: false };
+  }
+  return { mode: "single", results: [], fromDetails: false };
+}
+
+/** 工具卡的终态 → 推断出来的子代理状态（避免卡结束后面板里还挂着「运行中」）。 */
+function subagentStatusFromTool(status: "pending" | "running" | "done" | "error" | "cancelled"): PiSubagentStatus {
+  switch (status) {
+    case "error":
+      return "failed";
+    case "cancelled":
+      return "aborted";
+    case "done":
+      return "done";
+    case "pending":
+      return "pending";
+    default:
+      return "running";
+  }
+}
+
+/** details 优先，拿不到（或还没开始）就用 args 推断；推断出来的状态跟随工具卡。 */
+export function resolveSubagentRun(
+  args: Readonly<Record<string, unknown>>,
+  details: Readonly<Record<string, unknown>> | undefined,
+  toolStatus: "pending" | "running" | "done" | "error" | "cancelled",
+): PiSubagentRun {
+  const fromDetails = parseSubagentDetails(details);
+  const inferred = subagentRunFromArgs(args);
+  if (fromDetails !== null && fromDetails.results.length > 0) {
+    // details 里的 mode 才可靠（args 同时给了 tasks 与 chain 时扩展会报错，也走这里）。
+    return { mode: fromDetails.mode, results: fromDetails.results, fromDetails: true };
+  }
+  const status = subagentStatusFromTool(toolStatus);
+  return {
+    mode: fromDetails?.mode ?? inferred.mode,
+    results: inferred.results.map((result) => ({ ...result, status })),
+    fromDetails: false,
+  };
+}
+
 // ───────── Bridge Class ─────────
 
 export class PiTspBridge {
@@ -430,6 +796,7 @@ export class PiTspBridge {
   >();
   private readonly editorPrefillListeners = new Set<(text: string) => void>();
   private readonly titleListeners = new Set<(title: string) => void>();
+  private readonly touchedPathListeners = new Set<(targetPath: string, toolName: string) => void>();
 
   private frameCounter = 0;
   private seqCounter = 0;
@@ -438,7 +805,15 @@ export class PiTspBridge {
   private hudActive = false;
   private liveThinking = new Map<number, LiveThinkingState>();
   private liveText = new Map<number, LiveTextState>();
+  /** 流式时已经折成过程段的 text 块下标，`message_end` 不再重复生成。 */
+  private liveProcessIndexes = new Set<number>();
+  /** 流式时换成过程段的容器 id，`message_end` 不能当空正文容器删掉。 */
+  private liveProcessContainers = new Set<string>();
   private liveTools = new Map<string, LiveToolState>();
+  /** `toolcall_delta` 只带 contentIndex：记下它对应的工具调用 id，才能在没收到 start 时也接上。 */
+  private liveToolIndexes = new Map<number, string>();
+  /** 最近一次 `subagent` 运行的结果记录：面板名 → messages / 最终输出 / 模型（同名保留最新）。 */
+  private readonly subagentRecords = new Map<string, PiSubagentRecord>();
   private lastStreamAssistantId: string | null = null;
   private pendingOptimisticUsers: string[] = [];
   private activeDialog: ActiveDialogState | null = null;
@@ -474,6 +849,15 @@ export class PiTspBridge {
     return this.activeDialog !== null;
   }
 
+  /**
+   * 上面板里那个子代理的原始记录（Pi 的 subagent 扩展不落盘，只能从最近一次 details 里取）。
+   * 名字是面板显示名（重名时带 `-1`、`-2` 后缀）；没跑过为 null。
+   */
+  getSubagentRecord(name: string): PiSubagentRecord | null {
+    const record = this.subagentRecords.get(name);
+    return record === undefined ? null : { ...record };
+  }
+
   onFrames(listener: (messages: TspDocMessage[], firstSeq: number) => void): () => void {
     this.frameListeners.add(listener);
     return () => {
@@ -499,6 +883,13 @@ export class PiTspBridge {
     this.titleListeners.add(listener);
     return () => {
       this.titleListeners.delete(listener);
+    };
+  }
+
+  onTouchedPath(listener: (targetPath: string, toolName: string) => void): () => void {
+    this.touchedPathListeners.add(listener);
+    return () => {
+      this.touchedPathListeners.delete(listener);
     };
   }
 
@@ -560,8 +951,8 @@ export class PiTspBridge {
 
   private emitBlob(image: PiImageContent): { blobId: string; msg: TspDocMessage | null } {
     const bytes = new Uint8Array(Buffer.from(image.data, "base64"));
-    const blobId = createHash("sha256").update(bytes).digest("hex").slice(0, 24);
-    if (this.blobs.has(blobId)) {
+    const blobId = createHash("sha256").update(bytes).digest("hex");
+    if (this.blobs.has(blobId) && this.doc.blobs.has(blobId)) {
       return { blobId, msg: null };
     }
     this.blobs.set(blobId, {
@@ -642,50 +1033,8 @@ export class PiTspBridge {
     timestamp?: number | undefined;
     blobMessagesOut: TspDocMessage[];
   }): TspNode {
-    const { cardId, text, images, entryId, timestamp, blobMessagesOut } = params;
-    const toolsRowChildren: TspNode[] = [
-      {
-        id: `${cardId}/copy`,
-        k: "row",
-        p: {
-          role: "omp.btn",
-          actions: { click: "copy-message" },
-        },
-        c: [{ id: `${cardId}/copy.i`, k: "icon", p: { name: "copy", tone: "muted" } }],
-      },
-      {
-        id: `${cardId}/rewind`,
-        k: "row",
-        p: {
-          role: "omp.btn",
-          actions: { click: "rewind" },
-        },
-        c: [{ id: `${cardId}/rewind.i`, k: "icon", p: { name: "undo", tone: "muted" } }],
-      },
-    ];
-
-    const clock = formatClockTime(timestamp);
-    if (clock !== null) {
-      toolsRowChildren.push({
-        id: `${cardId}/time`,
-        k: "text",
-        p: { spans: [{ t: clock, s: "muted" }] },
-      });
-    }
-
-    const cardChildren: TspNode[] = [
-      {
-        id: `${cardId}/tools`,
-        k: "row",
-        p: {
-          role: "omp.user.tools",
-          gap: "xs",
-          align: "center",
-          justify: "end",
-        },
-        c: toolsRowChildren,
-      },
-    ];
+    const { cardId, text, images, entryId, blobMessagesOut } = params;
+    const cardChildren: TspNode[] = [];
 
     if (text !== "" || images.length === 0) {
       cardChildren.push({
@@ -695,19 +1044,42 @@ export class PiTspBridge {
       });
     }
 
-    images.forEach((img, idx) => {
-      const { blobId, msg } = this.emitBlob(img);
-      if (msg !== null) blobMessagesOut.push(msg);
-      cardChildren.push({
-        id: `${cardId}/img.${idx}`,
-        k: "image",
-        p: {
-          blob: blobId,
-          alt: `Image ${idx + 1}`,
-          max: { h: "16lines" },
-        },
+    if (text !== "" && this.touchedPathListeners.size > 0) {
+      const pathMatches = text.match(/[A-Za-z]:[\\/][^\s"'<>|*?:]+/g);
+      if (pathMatches !== null) {
+        for (const matchedPath of pathMatches) {
+          for (const listener of this.touchedPathListeners) {
+            listener(matchedPath, "prompt");
+          }
+        }
+      }
+    }
+
+    if (images.length > 0) {
+      const imageNodes: TspNode[] = images.map((img, idx) => {
+        const { blobId, msg } = this.emitBlob(img);
+        if (msg !== null) blobMessagesOut.push(msg);
+        return {
+          id: `${cardId}/img.${idx}`,
+          k: "image",
+          p: {
+            blob: blobId,
+            alt: `Image ${idx + 1}`,
+            max: { h: "16lines" },
+          },
+        };
       });
-    });
+      cardChildren.push({
+        id: `${cardId}/images`,
+        k: "row",
+        p: {
+          role: "omp.user.images",
+          gap: "xs",
+          wrap: true,
+        },
+        c: imageNodes,
+      });
+    }
 
     return {
       id: cardId,
@@ -726,16 +1098,22 @@ export class PiTspBridge {
     thinkingText: string;
     live: boolean;
     durationSec?: number | undefined;
+    /** 换掉默认标题（过程旁白用 `Commentary`，不再是 “Thought”）。 */
+    headText?: string | undefined;
+    /** 折叠态默认值；漏出来的思维/旁白一律折叠。 */
+    collapsed?: boolean | undefined;
   }): { section: TspNode; headId: string; bodyId: string } {
-    const { sectionId, thinkingText, live, durationSec } = params;
+    const { sectionId, thinkingText, live, durationSec, headText } = params;
     const headId = `${sectionId}/head`;
     const bodyId = `${sectionId}/body`;
 
-    const label = live
-      ? "Thinking…"
-      : durationSec !== undefined && durationSec > 0
-        ? `Thought for ${durationSec.toFixed(1)}s`
-        : "Thought";
+    const label =
+      headText ??
+      (live
+        ? "Thinking…"
+        : durationSec !== undefined && durationSec > 0
+          ? `Thought for ${durationSec.toFixed(1)}s`
+          : "Thought");
 
     const headNode: TspNode = live
       ? { id: headId, k: "shimmer", p: { text: label } }
@@ -747,7 +1125,7 @@ export class PiTspBridge {
       p: {
         role: live ? "omp.thinking.live" : "omp.thinking",
         collapsible: true,
-        collapsed: !live,
+        collapsed: params.collapsed ?? !live,
         head: headId,
         ...(!live && durationSec !== undefined && durationSec > 0 ? { took: Math.round(durationSec * 1000) } : {}),
       },
@@ -768,6 +1146,86 @@ export class PiTspBridge {
     return { section, headId, bodyId };
   }
 
+  /** 把漏进正文通道的过程/思维包成一个可折叠段落（和思考段同样被 MainFlow 收进过程组）。 */
+  private buildProcessSectionNode(text: string): { wrapper: TspNode; wrapperId: string; sectionId: string } {
+    const wrapperId = this.nextId("asst_th");
+    const sectionId = `${wrapperId}/sec`;
+    const { section } = this.buildThinkingSectionNode({
+      sectionId,
+      thinkingText: text,
+      live: false,
+      headText: text.trim() === "" ? "Thought" : PROCESS_HEAD_TEXT,
+      collapsed: true,
+    });
+    const wrapper: TspNode = {
+      id: wrapperId,
+      k: "col",
+      p: { role: "omp.assistant", gap: "sm" },
+      c: [section],
+    };
+    return { wrapper, wrapperId, sectionId };
+  }
+
+  /**
+   * 工具卡"目标"（命令首行 / 文件路径 / 搜索词）的提取规则：流式增量更新与整卡重建共用。
+   * 拿不到目标时返回 null（卡片就只显示工具名）。
+   */
+  private toolTargetProps(
+    toolName: string,
+    args: Readonly<Record<string, unknown>>,
+  ): { target: string; targetKind: NonNullable<TspProps<"tool">["targetKind"]> } | null {
+    if (toolName === "bash" || toolName === "powershell") {
+      const command = typeof args["command"] === "string" ? args["command"] : "";
+      if (command.trim() === "") return null;
+      return { target: bashCommandTarget(command, args).slice(0, 120), targetKind: "command" };
+    }
+    const pathArg = pathArgOf(args);
+    if (toolName === "edit" || toolName === "write" || toolName === "read") {
+      return pathArg !== "" ? { target: pathArg, targetKind: "path" } : null;
+    }
+    // 子代理的目标由 `agent` 行决定，不在这里猜。
+    if (toolName === "subagent") return null;
+
+    const queriesList = Array.isArray(args["queries"])
+      ? (args["queries"] as unknown[]).filter((q): q is string => typeof q === "string" && q.trim() !== "")
+      : [];
+    const urlsList = Array.isArray(args["urls"])
+      ? (args["urls"] as unknown[]).filter((u): u is string => typeof u === "string" && u.trim() !== "")
+      : [];
+    const targetCandidate =
+      pathArg !== ""
+        ? pathArg
+        : typeof args["pattern"] === "string"
+          ? args["pattern"]
+          : typeof args["query"] === "string"
+            ? args["query"]
+            : queriesList.length > 0
+              ? queriesList.slice(0, 2).join(" · ")
+              : typeof args["url"] === "string"
+                ? args["url"]
+                : urlsList.length > 0
+                  ? urlsList[0]
+                  : typeof args["claim"] === "string"
+                    ? args["claim"]
+                    : typeof args["tool"] === "string"
+                      ? args["tool"]
+                      : typeof args["search"] === "string"
+                        ? args["search"]
+                        : typeof args["server"] === "string"
+                          ? args["server"]
+                          : typeof args["memory"] === "string"
+                            ? args["memory"]
+                            : typeof args["findText"] === "string"
+                              ? args["findText"]
+                              : undefined;
+    if (targetCandidate === undefined || targetCandidate === "") return null;
+    if (pathArg !== "") return { target: targetCandidate, targetKind: "path" };
+    if (typeof args["pattern"] === "string" || typeof args["query"] === "string" || queriesList.length > 0) {
+      return { target: targetCandidate, targetKind: "query" };
+    }
+    return { target: targetCandidate, targetKind: "text" };
+  }
+
   private buildToolNode(params: {
     nodeId: string;
     toolCallId: string;
@@ -778,6 +1236,9 @@ export class PiTspBridge {
     images?: readonly PiImageContent[] | undefined;
     details?: Readonly<Record<string, unknown>> | undefined;
     durationMs?: number | undefined;
+    exitCode?: number | undefined;
+    /** 工具开始的时间（`subagent` 的 agent 节点据此算运行时长）。 */
+    startedAtMs?: number | undefined;
     blobMessagesOut: TspDocMessage[];
   }): { node: TspNode; outputId: string | null } {
     const {
@@ -790,6 +1251,8 @@ export class PiTspBridge {
       images = [],
       details,
       durationMs,
+      exitCode,
+      startedAtMs,
       blobMessagesOut,
     } = params;
 
@@ -809,6 +1272,10 @@ export class PiTspBridge {
     if (typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0) {
       props.took = Math.round(durationMs);
     }
+    // 未完成时给时间轴起点，渲染层自己每 100ms 递增；完成时只留 `took`。
+    if (status === "pending" || status === "running") {
+      props.age = 0;
+    }
 
     const children: TspNode[] = [];
     let outputId: string | null = null;
@@ -817,23 +1284,23 @@ export class PiTspBridge {
       const command = typeof args["command"] === "string" ? args["command"] : "";
       if (command !== "") {
         props.command = command;
-        const lines = command
-          .split(/\r?\n/)
-          .map((l) => l.trim())
-          .filter((l) => l !== "");
-        const commentLine = lines.find((l) => /^#\s*\S/.test(l));
-        const meaningfulLine =
-          commentLine !== undefined
-            ? commentLine.replace(/^#+\s*/, "")
-            : (lines.find(
-                (l) =>
-                  !/^(?:Set-Location|cd|pushd|\$ErrorActionPreference\s*=|export\s+\w+=)/i.test(l) &&
-                  !l.startsWith("#"),
-              ) ??
-              lines[0] ??
-              command);
-        props.target = meaningfulLine.slice(0, 120);
-        props.targetKind = "command";
+        const target = this.toolTargetProps(toolName, args);
+        if (target !== null) {
+          props.target = target.target;
+          props.targetKind = target.targetKind;
+        }
+      }
+      const inferredExit =
+        typeof exitCode === "number"
+          ? exitCode
+          : typeof details?.["exitCode"] === "number"
+            ? (details["exitCode"] as number)
+            : (() => {
+                const m = /(?:Command exited with code|exited with code|exit code:?)\s*(\d+)/i.exec(outputText);
+                return m ? Number(m[1]) : undefined;
+              })();
+      if (typeof inferredExit === "number" && Number.isFinite(inferredExit) && inferredExit !== 0) {
+        props.exit = inferredExit;
       }
       const lang = toolName === "powershell" ? "powershell" : "bash";
       const outId = `${nodeId}/out`;
@@ -864,15 +1331,11 @@ export class PiTspBridge {
         ],
       });
     } else if (toolName === "edit" || toolName === "write" || toolName === "read") {
-      const targetPath =
-        typeof args["path"] === "string"
-          ? args["path"]
-          : typeof args["file_path"] === "string"
-            ? args["file_path"]
-            : "";
-      if (targetPath !== "") {
-        props.target = targetPath;
-        props.targetKind = "path";
+      const targetPath = pathArgOf(args);
+      const target = this.toolTargetProps(toolName, args);
+      if (target !== null) {
+        props.target = target.target;
+        props.targetKind = target.targetKind;
       }
 
       if (toolName === "edit") {
@@ -963,59 +1426,59 @@ export class PiTspBridge {
         }
       } else {
         // read
-        const lineCount = splitLines(outputText).length;
-        if (lineCount > 0) {
-          props.meta = [`${lineCount} lines`];
+        const isPureImageNotice = images.length > 0 && /^Read image file\b/i.test(outputText.trim());
+        if (isPureImageNotice) {
+          const mimeBadge = images[0]?.mimeType.replace(/^image\//i, "").toUpperCase();
+          if (mimeBadge) props.meta = [mimeBadge];
+        } else {
+          const lineCount = splitLines(outputText).length;
+          if (lineCount > 0) {
+            props.meta = [`${lineCount} lines`];
+          }
+          const outId = `${nodeId}/code`;
+          outputId = outId;
+          children.push({
+            id: outId,
+            k: "code",
+            p: {
+              text: outputText,
+              preview: { lines: 6 },
+            },
+          });
         }
-        const outId = `${nodeId}/code`;
+      }
+    } else if (toolName === "subagent") {
+      // 子代理：把 details / args 变成 `agent` 节点（右侧 Subagent 面板读的就是它们），
+      // 原始输出文本留在最后的 ansi 节点里。
+      const run = resolveSubagentRun(args, details, status);
+      const built = this.buildSubagentAgentNodes({ nodeId, run, startedAtMs });
+      if (built.length > 0) {
+        children.push(...built.map((agent) => agent.node));
+        const names = built.map((agent) => agent.name);
+        props.target = names.join(", ").slice(0, 120);
+        props.targetKind = "text";
+        if (run.mode !== "single") props.meta = [`${names.length} agents`];
+      }
+      if (status === "error") props.note = "failed";
+      else if (status === "cancelled") props.note = "cancelled";
+      if (outputText.trim() !== "") {
+        const outId = `${nodeId}/out`;
         outputId = outId;
         children.push({
           id: outId,
-          k: "code",
+          k: "ansi",
           p: {
+            role: "omp.tool.subagent.output",
             text: outputText,
             preview: { lines: 6 },
           },
         });
       }
     } else {
-      const queriesList = Array.isArray(args["queries"])
-        ? (args["queries"] as unknown[]).filter((q): q is string => typeof q === "string" && q.trim() !== "")
-        : [];
-      const urlsList = Array.isArray(args["urls"])
-        ? (args["urls"] as unknown[]).filter((u): u is string => typeof u === "string" && u.trim() !== "")
-        : [];
-      const targetCandidate =
-        typeof args["path"] === "string"
-          ? args["path"]
-          : typeof args["pattern"] === "string"
-            ? args["pattern"]
-            : typeof args["query"] === "string"
-              ? args["query"]
-              : queriesList.length > 0
-                ? queriesList.slice(0, 2).join(" · ")
-                : typeof args["url"] === "string"
-                  ? args["url"]
-                  : urlsList.length > 0
-                    ? urlsList[0]
-                    : typeof args["claim"] === "string"
-                      ? args["claim"]
-                      : typeof args["tool"] === "string"
-                        ? args["tool"]
-                        : typeof args["search"] === "string"
-                          ? args["search"]
-                          : typeof args["server"] === "string"
-                            ? args["server"]
-                            : typeof args["memory"] === "string"
-                              ? args["memory"]
-                              : typeof args["findText"] === "string"
-                                ? args["findText"]
-                                : undefined;
-      if (targetCandidate !== undefined && targetCandidate !== "") {
-        props.target = targetCandidate;
-        if (typeof args["path"] === "string") {
-          props.targetKind = "path";
-        }
+      const target = this.toolTargetProps(toolName, args);
+      if (target !== null) {
+        props.target = target.target;
+        props.targetKind = target.targetKind;
       }
       const outId = `${nodeId}/out`;
       outputId = outId;
@@ -1027,6 +1490,24 @@ export class PiTspBridge {
           preview: { lines: 6 },
         },
       });
+    }
+
+    if (props.targetKind === "path" && typeof props.target === "string" && props.target !== "") {
+      for (const listener of this.touchedPathListeners) {
+        listener(props.target, toolName);
+      }
+    } else if (toolName === "bash" || toolName === "powershell") {
+      const command = typeof args["command"] === "string" ? args["command"] : "";
+      const cdMatch =
+        /(?:^|[;\n&|])\s*(?:Set-Location(?:\s+-(?:LiteralPath|Path))?|cd(?:\s+\/d)?|pushd|git\s+-C)\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/i.exec(
+          command,
+        );
+      const dirArg = cdMatch?.[1] ?? cdMatch?.[2] ?? cdMatch?.[3];
+      if (dirArg !== undefined && dirArg !== "") {
+        for (const listener of this.touchedPathListeners) {
+          listener(dirArg, toolName);
+        }
+      }
     }
 
     images.forEach((img, idx) => {
@@ -1052,6 +1533,151 @@ export class PiTspBridge {
       },
       outputId,
     };
+  }
+
+  // ───────── `subagent` 节点与记录 ─────────
+
+  /**
+   * 一次 `subagent` 工具调用的 `agent` 子节点：id 固定为 `<工具节点>:agent:<序号>`，
+   * 后续 update 只 set 不重建，面板不会重复出现同一行。
+   */
+  private buildSubagentAgentNodes(params: {
+    nodeId: string;
+    run: PiSubagentRun;
+    startedAtMs?: number | undefined;
+  }): { node: TspNode; name: string }[] {
+    const { nodeId, run, startedAtMs } = params;
+    if (run.results.length === 0) return [];
+    if (run.fromDetails) this.rememberSubagentRecords(run);
+
+    const names = subagentNodeNames(run.results);
+    const now = Date.now();
+    return run.results.map((result, index) => {
+      const name = names[index] ?? `agent-${index + 1}`;
+      const id = `${nodeId}:agent:${index}`;
+      return { node: this.buildSubagentAgentNode({ id, name, result, run, now, startedAtMs }), name };
+    });
+  }
+
+  private buildSubagentAgentNode(params: {
+    id: string;
+    name: string;
+    result: PiSubagentOutcome;
+    run: PiSubagentRun;
+    now: number;
+    startedAtMs?: number | undefined;
+  }): TspNode {
+    const { id, name, result, run, now, startedAtMs } = params;
+    const props = this.subagentAgentProps({ name, result, run, now, startedAtMs });
+    const children: TspNode[] = [];
+    if (result.errorMessage !== undefined) {
+      children.push({ id: `${id}/err`, k: "md", p: { role: "omp.agent.error", text: result.errorMessage } });
+    }
+    return { id, k: "agent", p: props, ...(children.length > 0 ? { c: children } : {}) };
+  }
+
+  /** `agent` 节点的 props（props 合并语义是 set 覆盖，所以这里列全所有可能出现的键）。 */
+  private subagentAgentProps(params: {
+    name: string;
+    result: PiSubagentOutcome;
+    run: PiSubagentRun;
+    now: number;
+    startedAtMs?: number | undefined;
+  }): TspProps<"agent"> {
+    const { name, result, run, now, startedAtMs } = params;
+    const active = result.status === "running" || result.status === "pending";
+    const stats: NonNullable<TspProps<"agent">["stats"]> = {};
+    if (result.tools > 0) stats.tools = result.tools;
+    if (result.requests !== undefined && result.requests > 0) stats.requests = result.requests;
+    if (result.tokens !== undefined && result.tokens > 0) stats.tokens = result.tokens;
+    if (result.cost !== undefined && result.cost > 0) stats.cost = result.cost;
+    if (active && startedAtMs !== undefined) stats.age = Math.max(0, now - startedAtMs);
+
+    const badges: { text: string }[] = [];
+    if (run.mode !== "single") badges.push({ text: run.mode });
+    if (result.step !== undefined) badges.push({ text: `step ${result.step}` });
+
+    return {
+      name,
+      status: result.status,
+      agent: result.agentSource,
+      task: result.task,
+      ...(result.model !== undefined ? { model: result.model } : {}),
+      ...(Object.keys(stats).length > 0 ? { stats } : {}),
+      ...(badges.length > 0 ? { badges } : {}),
+    };
+  }
+
+  /** 缓存最近一次的 messages / 最终输出 / 模型（同名保留最新；Pi 不落盘，这是详情页唯一来源）。 */
+  private rememberSubagentRecords(run: PiSubagentRun): void {
+    const names = subagentNodeNames(run.results);
+    run.results.forEach((result, index) => {
+      const name = names[index];
+      if (name === undefined) return;
+      const record: PiSubagentRecord = {
+        messages: trimSubagentMessages(result.messages),
+        output: finalAssistantText(result.messages),
+        ...(result.model !== undefined ? { model: result.model } : {}),
+      };
+      this.subagentRecords.set(name, record);
+    });
+  }
+
+  /**
+   * 流式 update 时只动 `agent` 子节点（set / add / del），不重建整张工具卡：
+   * 细节很多时整体重建会按块闪烁，而 set 只是改 props。
+   */
+  private appendSubagentUpdateOps(
+    ops: TspOp[],
+    params: {
+      nodeId: string;
+      run: PiSubagentRun;
+      startedAtMs?: number | undefined;
+    },
+  ): void {
+    const { nodeId, run, startedAtMs } = params;
+    if (run.results.length === 0) return;
+    if (run.fromDetails) this.rememberSubagentRecords(run);
+
+    const names = subagentNodeNames(run.results);
+    const now = Date.now();
+    const outId = `${nodeId}/out`;
+    const before = this.nodeExists(outId) ? outId : null;
+
+    run.results.forEach((result, index) => {
+      const name = names[index] ?? `agent-${index + 1}`;
+      const id = `${nodeId}:agent:${index}`;
+      const errId = `${id}/err`;
+      const props = this.subagentAgentProps({ name, result, run, now, startedAtMs });
+      if (!this.nodeExists(id)) {
+        ops.push(["add", id, nodeId, before, this.buildSubagentAgentNode({ id, name, result, run, now, startedAtMs })]);
+        return;
+      }
+      ops.push([
+        "set",
+        id,
+        {
+          ...props,
+          // 没有的键显式置 null：set 是合并语义，不置 null 旧值会留着。
+          model: props.model ?? null,
+          badges: props.badges ?? null,
+          stats: props.stats ?? null,
+        },
+      ]);
+      if (result.errorMessage === undefined) {
+        if (this.nodeExists(errId)) ops.push(["del", errId]);
+      } else if (this.nodeExists(errId)) {
+        ops.push(["set", errId, { text: result.errorMessage }]);
+      } else {
+        ops.push([
+          "add",
+          errId,
+          id,
+          null,
+          { id: errId, k: "md", p: { role: "omp.agent.error", text: result.errorMessage } },
+        ]);
+      }
+    });
   }
 
   private buildUsageRowNode(rowId: string, usageText: string): TspNode {
@@ -1097,11 +1723,18 @@ export class PiTspBridge {
     };
   }
 
-  private buildCompactionSectionNode(sectionId: string, summary: string, tokensBefore?: number | undefined): TspNode {
+  private buildCompactionSectionNode(
+    sectionId: string,
+    summary: string,
+    tokensBefore?: number | undefined,
+    tokensAfter?: number | undefined,
+  ): TspNode {
     const headId = `${sectionId}/head`;
+    const afterLabel =
+      typeof tokensAfter === "number" && tokensAfter > 0 ? ` → ${formatCompactCount(tokensAfter)}` : "";
     const label =
       typeof tokensBefore === "number" && tokensBefore > 0
-        ? `Compacted context · ${formatCompactCount(tokensBefore)} tokens`
+        ? `Compacted context · ${formatCompactCount(tokensBefore)}${afterLabel} tokens`
         : "Compacted context";
     return {
       id: sectionId,
@@ -1403,6 +2036,7 @@ export class PiTspBridge {
           args: { command: msg.command },
           status: msg.cancelled === true ? "cancelled" : isError ? "error" : "done",
           outputText: msg.output ?? "",
+          exitCode: typeof msg.exitCode === "number" ? msg.exitCode : undefined,
           blobMessagesOut: blobMessages,
         });
         ops.push(["add", nodeId, "main", null, node]);
@@ -1503,15 +2137,23 @@ export class PiTspBridge {
         ops.push(["add", nodeId, "main", null, node]);
       } else if (block["type"] === "text") {
         const tx = block as unknown as PiTextContent;
-        if (typeof tx.text === "string" && tx.text !== "") {
-          textPieces.push(tx.text);
+        if (typeof tx.text === "string" && tx.text.trim() !== "") {
+          // 思维/旁白漏在正文通道里时，回到过程区折叠显示，不冒充答案。
+          const classified = classifyAssistantText(tx.text, tx.textSignature);
+          if (classified.kind === "process") {
+            const { wrapper, wrapperId } = this.buildProcessSectionNode(classified.reasoning);
+            ops.push(["add", wrapperId, "main", null, wrapper]);
+            if (classified.answer !== "") textPieces.push(classified.answer);
+          } else {
+            textPieces.push(tx.text);
+          }
         }
       }
     }
 
     const answerText = textPieces.join("\n\n");
     const isErrorStop = msg.stopReason === "error" && typeof msg.errorMessage === "string" && msg.errorMessage !== "";
-    const usageSummary = !isErrorStop ? formatUsageFooter(msg.usage, msg.model) : null;
+    const usageSummary = !isErrorStop ? formatUsageFooter(msg.usage, msg.model, msg.timestamp) : null;
 
     if (answerText !== "" || isErrorStop || (usageSummary !== null && blocks.every((b) => b.type !== "toolCall"))) {
       const colId = this.nextId("asst");
@@ -1555,6 +2197,8 @@ export class PiTspBridge {
       case "turn_start":
         this.liveThinking.clear();
         this.liveText.clear();
+        this.liveProcessIndexes.clear();
+        this.liveProcessContainers.clear();
         this.lastStreamAssistantId = null;
         return this.ensureWorkingHud("Working…");
 
@@ -1594,7 +2238,12 @@ export class PiTspBridge {
             secId,
             "main",
             null,
-            this.buildCompactionSectionNode(secId, event.result.summary, event.result.tokensBefore),
+            this.buildCompactionSectionNode(
+              secId,
+              event.result.summary,
+              event.result.tokensBefore,
+              event.result.estimatedTokensAfter,
+            ),
           ]);
         }
         if (!event.willRetry) {
@@ -1648,6 +2297,8 @@ export class PiTspBridge {
       case "agent_settled": {
         this.liveThinking.clear();
         this.liveText.clear();
+        this.liveProcessIndexes.clear();
+        this.liveProcessContainers.clear();
         this.lastStreamAssistantId = null;
         return this.clearWorkingHud();
       }
@@ -1760,6 +2411,9 @@ export class PiTspBridge {
     if (message.role === "assistant") {
       this.liveThinking.clear();
       this.liveText.clear();
+      this.liveProcessIndexes.clear();
+      this.liveProcessContainers.clear();
+      this.liveToolIndexes.clear();
       this.lastStreamAssistantId = null;
     }
     return [];
@@ -1840,18 +2494,22 @@ export class PiTspBridge {
       }
 
       case "toolcall_start": {
-        const tcId = sub.id ?? `tc_${sub.contentIndex}`;
-        const tcName = sub.toolName ?? "tool";
+        const meta = toolCallMeta(sub.partial, sub.contentIndex);
+        const tcId = sub.id ?? meta?.id ?? `tc_${sub.contentIndex}`;
+        const tcName = sub.toolName ?? meta?.toolName ?? "tool";
+        this.liveToolIndexes.set(sub.contentIndex, tcId);
         for (const th of this.liveThinking.values()) {
           th.hasToolsAfter = true;
         }
         if (!this.liveTools.has(tcId)) {
+          const initialArgs = coerceToolArgs(meta?.arguments);
           const nodeId = this.nextId("tool");
+          const target = this.toolTargetProps(tcName, initialArgs);
           const { node, outputId } = this.buildToolNode({
             nodeId,
             toolCallId: tcId,
             toolName: tcName,
-            args: {},
+            args: initialArgs,
             status: "pending",
             outputText: "",
             blobMessagesOut: [],
@@ -1860,24 +2518,65 @@ export class PiTspBridge {
             nodeId,
             toolCallId: tcId,
             toolName: tcName,
-            args: {},
+            args: initialArgs,
+            argsJson: typeof meta?.arguments === "string" ? meta.arguments : "",
+            target: target?.target,
             startedAtMs: Date.now(),
             outputId,
             streamedOutput: "",
           });
-          this.appendWorkingHudOps(ops, `Preparing ${tcName}…`);
+          this.appendWorkingHudOps(
+            ops,
+            target !== null ? workingLabelForTool(tcName, initialArgs) : `Preparing ${tcName}…`,
+          );
           ops.push(["add", nodeId, "main", null, node]);
         }
+        return this.emitOps(ops);
+      }
+
+      case "toolcall_delta": {
+        const meta = toolCallMeta(sub.partial, sub.contentIndex);
+        const tcId = this.liveToolIndexes.get(sub.contentIndex) ?? meta?.id ?? `tc_${sub.contentIndex}`;
+        let state = this.liveTools.get(tcId);
+        if (state === undefined) {
+          // delta 可能先于 start 到达（或 start 缺失）：先补一次懒创建，不然这次调用的卡片会丢。
+          this.handleMessageUpdate({
+            type: "toolcall_start",
+            contentIndex: sub.contentIndex,
+            id: tcId,
+            toolName: meta?.toolName ?? "tool",
+          });
+          state = this.liveTools.get(tcId);
+        }
+        if (state === undefined) return [];
+        if (sub.delta !== "") state.argsJson += sub.delta;
+        // RPC 线上事件不带 partial（pi 的 toJsonEvent 把快照剥掉了），参数只能靠累计的 JSON 文本拼；
+        // 同进程 partial 里已有对象时以它为准（更完整）。
+        const args: Record<string, unknown> = {
+          ...toolArgsFromJsonText(state.argsJson),
+          ...coerceToolArgs(meta?.arguments),
+        };
+        if (Object.keys(args).length === 0) return [];
+        state.args = args;
+        const target = this.toolTargetProps(state.toolName, args);
+        // 目标没变化就不发 op：列表不重建，用户展开状态也不会丢。
+        if (target === null || target.target === state.target) return [];
+        state.target = target.target;
+        if (this.nodeExists(state.nodeId)) {
+          ops.push(["set", state.nodeId, { target: target.target, targetKind: target.targetKind }]);
+        }
+        this.appendWorkingHudOps(ops, workingLabelForTool(state.toolName, args));
         return this.emitOps(ops);
       }
 
       case "toolcall_end": {
         const tc = sub.toolCall;
         const existing = this.liveTools.get(tc.id);
-        const args = isRecord(tc.arguments) ? tc.arguments : {};
+        const args = coerceToolArgs(tc.arguments);
         if (existing !== undefined) {
           existing.toolName = tc.name;
           existing.args = args;
+          existing.target = this.toolTargetProps(tc.name, args)?.target;
           const blobMsgs: TspDocMessage[] = [];
           const { node, outputId } = this.buildToolNode({
             nodeId: existing.nodeId,
@@ -1886,6 +2585,7 @@ export class PiTspBridge {
             args,
             status: "pending",
             outputText: existing.streamedOutput,
+            startedAtMs: existing.startedAtMs,
             blobMessagesOut: blobMsgs,
           });
           existing.outputId = outputId;
@@ -1937,14 +2637,34 @@ export class PiTspBridge {
       case "text_end": {
         const state = this.liveText.get(sub.contentIndex);
         if (state !== undefined) {
-          ops.push([
-            "set",
-            state.mdId,
-            {
-              stream: null,
-              ...(typeof sub.content === "string" && sub.content !== "" ? { text: sub.content } : {}),
-            },
-          ]);
+          const block = partialContentBlock(sub.partial, sub.contentIndex);
+          const finalText =
+            typeof sub.content === "string" && sub.content !== ""
+              ? sub.content
+              : typeof block?.text === "string"
+                ? block.text
+                : "";
+          // 正文通道里冒出来的思维/旁白（DeepSeek 类通道常见）：整块换成折叠的过程段。
+          const classified = classifyAssistantText(finalText, block?.textSignature);
+          if (classified.kind === "process") {
+            const { wrapper, wrapperId } = this.buildProcessSectionNode(classified.reasoning);
+            if (classified.answer !== "") {
+              (wrapper.c as TspNode[]).push({ id: `${wrapperId}/md`, k: "md", p: { text: classified.answer } });
+            }
+            ops.push(["add", wrapperId, "main", state.containerId, wrapper], ["del", state.containerId]);
+            this.lastStreamAssistantId = wrapperId;
+            this.liveProcessIndexes.add(sub.contentIndex);
+            this.liveProcessContainers.add(wrapperId);
+          } else {
+            ops.push([
+              "set",
+              state.mdId,
+              {
+                stream: null,
+                ...(finalText !== "" ? { text: finalText } : {}),
+              },
+            ]);
+          }
           this.liveText.delete(sub.contentIndex);
         }
         return this.emitOps(ops);
@@ -1968,7 +2688,8 @@ export class PiTspBridge {
     if (existing !== undefined) {
       existing.toolName = toolName;
       existing.args = args;
-      existing.startedAtMs = Date.now();
+      // 保留 `toolcall_start` 的时间：参数流式生成的那几十秒也要算进耗时。
+      existing.startedAtMs ??= Date.now();
       const { node, outputId } = this.buildToolNode({
         nodeId: existing.nodeId,
         toolCallId,
@@ -1976,6 +2697,7 @@ export class PiTspBridge {
         args,
         status: "running",
         outputText: existing.streamedOutput,
+        startedAtMs: existing.startedAtMs,
         blobMessagesOut: blobMsgs,
       });
       existing.outputId = outputId;
@@ -1996,6 +2718,8 @@ export class PiTspBridge {
         toolCallId,
         toolName,
         args,
+        argsJson: "",
+        target: this.toolTargetProps(toolName, args)?.target,
         startedAtMs: Date.now(),
         outputId,
         streamedOutput: "",
@@ -2024,6 +2748,34 @@ export class PiTspBridge {
 
     const { text } = extractContentTextAndImages(partialResult.content);
     existing.streamedOutput = text;
+
+    if (toolName === "subagent") {
+      // 子代理面板要边跑边看：details 里带着各子代理的实时状态，只 set 那些 `agent` 节点，不重建整张卡。
+      const outputId = existing.outputId !== null && this.nodeExists(existing.outputId) ? existing.outputId : null;
+      const ops: TspOp[] = [];
+      if (outputId === null) {
+        if (text.trim() !== "") {
+          // 开始时没文本就没有 /out 节点：补一个，之后走 set（不重建卡片，agent 行不会丢）。
+          const outId = `${existing.nodeId}/out`;
+          existing.outputId = outId;
+          ops.push([
+            "add",
+            outId,
+            existing.nodeId,
+            null,
+            { id: outId, k: "ansi", p: { role: "omp.tool.subagent.output", text, preview: { lines: 6 } } },
+          ]);
+        }
+      } else {
+        ops.push(["set", outputId, { text }]);
+      }
+      if (this.nodeExists(existing.nodeId)) {
+        const run = resolveSubagentRun(args, partialResult.details, "running");
+        this.appendSubagentUpdateOps(ops, { nodeId: existing.nodeId, run, startedAtMs: existing.startedAtMs });
+      }
+      return this.emitOps(ops);
+    }
+
     if (existing.outputId !== null && this.nodeExists(existing.outputId)) {
       return this.emitOps([["set", existing.outputId, { text }]]);
     }
@@ -2042,7 +2794,9 @@ export class PiTspBridge {
     const blobMsgs: TspDocMessage[] = [];
     const ops: TspOp[] = [];
 
-    const tookMs = durationMs ?? (existing !== undefined ? Math.max(0, Date.now() - existing.startedAtMs) : undefined);
+    const tookMs =
+      durationMs ??
+      (existing !== undefined ? Math.max(0, Date.now() - (existing.startedAtMs ?? Date.now())) : undefined);
     const nodeId = existing?.nodeId ?? this.nextId("tool");
     const args = existing?.args ?? {};
 
@@ -2056,6 +2810,7 @@ export class PiTspBridge {
       images,
       details: result.details,
       durationMs: tookMs,
+      startedAtMs: existing?.startedAtMs,
       blobMessagesOut: blobMsgs,
     });
 
@@ -2116,20 +2871,39 @@ export class PiTspBridge {
     const hasToolCalls =
       message.stopReason === "toolUse" ||
       (Array.isArray(message.content) && message.content.some((b) => isRecord(b) && b["type"] === "toolCall"));
-    const textBlocks = Array.isArray(message.content)
-      ? message.content
-          .filter((b): b is PiTextContent => isRecord(b) && b["type"] === "text" && typeof b["text"] === "string")
-          .map((b) => b.text)
-          .filter((t) => t.trim() !== "")
-      : [];
+    const bodyPieces: string[] = [];
+    const processPieces: string[] = [];
+    if (Array.isArray(message.content)) {
+      message.content.forEach((b, index) => {
+        if (!isRecord(b) || b["type"] !== "text" || typeof b["text"] !== "string") return;
+        if (b["text"].trim() === "") return;
+        // 流式阶段（text_end）已经折过的块：不再重复生成一份。
+        if (this.liveProcessIndexes.has(index)) return;
+        const classified = classifyAssistantText(
+          b["text"],
+          typeof b["textSignature"] === "string" ? b["textSignature"] : undefined,
+        );
+        if (classified.kind === "process") {
+          processPieces.push(classified.reasoning);
+          if (classified.answer !== "") bodyPieces.push(classified.answer);
+        } else {
+          bodyPieces.push(b["text"]);
+        }
+      });
+    }
+    const textBlocks = bodyPieces;
+    for (const processText of processPieces) {
+      const { wrapper, wrapperId } = this.buildProcessSectionNode(processText);
+      ops.push(["add", wrapperId, "main", null, wrapper]);
+    }
 
     // If an assistant message arrived without prior `text_start` deltas (e.g. direct one-shot message_end), ensure text is present.
     let containerId = this.lastStreamAssistantId;
     if (containerId !== null && textBlocks.length === 0) {
-      if (this.nodeExists(containerId)) {
+      if (this.nodeExists(containerId) && !this.liveProcessContainers.has(containerId)) {
         ops.push(["del", containerId]);
+        containerId = null;
       }
-      containerId = null;
     } else if (containerId === null && textBlocks.length > 0) {
       containerId = this.nextId("asst");
       ops.push([
@@ -2146,12 +2920,16 @@ export class PiTspBridge {
       ]);
     }
 
-    const usageSummary = !hasToolCalls ? formatUsageFooter(message.usage, message.model) : null;
+    const usageSummary = !hasToolCalls
+      ? formatUsageFooter(message.usage, message.model, message.timestamp ?? Date.now())
+      : null;
     if (usageSummary !== null && containerId !== null) {
       const usageRowId = `${containerId}/usage`;
       ops.push(["add", usageRowId, containerId, null, this.buildUsageRowNode(usageRowId, usageSummary)]);
     }
 
+    this.liveProcessIndexes.clear();
+    this.liveProcessContainers.clear();
     this.lastStreamAssistantId = null;
     return this.emitOps(ops);
   }
@@ -2742,7 +3520,11 @@ export class PiTspBridge {
     this.hudActive = false;
     this.liveThinking.clear();
     this.liveText.clear();
+    this.liveProcessIndexes.clear();
+    this.liveProcessContainers.clear();
     this.liveTools.clear();
+    this.liveToolIndexes.clear();
+    this.subagentRecords.clear();
     this.lastStreamAssistantId = null;
     this.pendingOptimisticUsers = [];
     this.activeDialog = null;

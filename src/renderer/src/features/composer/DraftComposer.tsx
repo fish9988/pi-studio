@@ -23,7 +23,6 @@ import { ModelChip } from "./ModelChip.tsx";
 import { decideEnter } from "./send-logic.ts";
 import { SendStop } from "./SendStop.tsx";
 import { DraftContextMeter } from "./UsageMeter.tsx";
-import { SessionCost } from "./SessionCost.tsx";
 import { FileMenu } from "./FileMenu.tsx";
 import { SlashMenu } from "./SlashMenu.tsx";
 import { draftSlashRunner, useDraftSlashMenu } from "./use-draft-slash.ts";
@@ -35,7 +34,6 @@ import { clearFirstPrompt, setFirstPrompt } from "../tsp/first-prompt-store.ts";
 import { AttachButton } from "./AttachButton.tsx";
 import { ClawdMascot } from "./ClawdMascot.tsx";
 import { EnhancePromptButton } from "./EnhancePromptButton.tsx";
-import { QuickPhrasesButton } from "./QuickPhrasesButton.tsx";
 import "./composer.css";
 /** projectTools：工具行里紧跟审批胶囊的部分（空状态放项目标签）。 */
 export function DraftComposer({ projectId, projectTools }: { projectId: ProjectId | null; projectTools?: ReactNode }) {
@@ -178,7 +176,9 @@ export function DraftComposer({ projectId, projectTools }: { projectId: ProjectI
       <div
         className="composer"
         data-composer-drop
+        data-dragging={attach.dragging || undefined}
         onDragOver={attach.onDragOver}
+        onDragLeave={attach.onDragLeave}
         onDrop={attach.onDrop}
         onMouseDown={(event) => keepFieldFocus(event, fieldRef.current)}
       >
@@ -222,6 +222,16 @@ export function DraftComposer({ projectId, projectTools }: { projectId: ProjectI
           onKeyDown={onKeyDown}
         />
         <div className="composer-tools">
+          <AttachButton addFiles={attach.addFiles} acceptsImages={model?.acceptsImages} disabled={sending} />
+          {projectTools}
+          <EnhancePromptButton
+            draftKey={key}
+            text={draft.text}
+            taskId={null}
+            disabled={sending}
+            onFocusField={() => fieldRef.current?.focus()}
+          />
+          <span className="composer-spacer" />
           <ModelChip
             model={model}
             thinkingLevel={thinkingLevel}
@@ -243,19 +253,7 @@ export function DraftComposer({ projectId, projectTools }: { projectId: ProjectI
             setModel={(modelKey) => Promise.resolve(chooseDraftModel(key, { model: modelKey }))}
             setThinking={(level) => Promise.resolve(chooseDraftModel(key, { thinkingLevel: level }))}
           />
-          {projectTools}
-          <span className="composer-spacer" />
-          <AttachButton addFiles={attach.addFiles} acceptsImages={model?.acceptsImages} disabled={sending} />
-          <QuickPhrasesButton draftKey={key} disabled={sending} onFocusField={() => fieldRef.current?.focus()} />
-          <EnhancePromptButton
-            draftKey={key}
-            text={draft.text}
-            taskId={null}
-            disabled={sending}
-            onFocusField={() => fieldRef.current?.focus()}
-          />
           <DraftContextMeter model={model ?? null} projectId={projectId} />
-          <SessionCost usage={null} provider={model?.key.provider ?? null} />
           <SendStop
             running={false}
             stopping={false}

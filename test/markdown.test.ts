@@ -28,6 +28,47 @@ describe("原始 HTML 转义成文本", () => {
     const out = html('<iframe src="https://evil.example"></iframe>\n\n<style>body{display:none}</style>');
     expect(out).not.toMatch(/<iframe|<style/i);
   });
+
+  // 回归（2026-11-12）：正文里讨论标签/泛型时，尖括号和内容必须作为可见文本留下，不能被当成标签剥掉。
+  it("正文里的尖括号、类标签、泛型都原样显示", () => {
+    const out = html(
+      [
+        "And DSML text containing <...> where the tag is <tag>",
+        "",
+        "泛型：Array<string>、Map<K, V>、<T>，闭合写法 </thinking>",
+        "",
+        '原始标记：<｜DSML｜ calls> 和 <｜DSML｜ invoke name="read">',
+      ].join("\n"),
+    );
+    expect(out).toContain("And DSML text containing &lt;...&gt; where the tag is &lt;tag&gt;");
+    expect(out).toContain("Array&lt;string&gt;");
+    expect(out).toContain("&lt;T&gt;");
+    expect(out).toContain("&lt;/thinking&gt;");
+    expect(out).toContain("&lt;｜DSML｜ calls&gt;");
+    // 没有真的变成元素：只剩 <p> / <code> 这类自己的标签。
+    expect(out).not.toMatch(/<tag|<T>|<thinking/);
+  });
+});
+
+describe("蛇形命名里的下划线不变成斜体", () => {
+  it("词内下划线（snake_case）保持原样", () => {
+    const source = "text_start/text_delta/text_end + message_end";
+    const out = html(source);
+    expect(out).not.toContain("<em>");
+    expect(out).toContain(source);
+  });
+
+  it("变量名、斜杠、加号分隔的下划线都不触发强调", () => {
+    const out = html("事件是 text_start / text_delta，参数 param_name = other_name，工具 tool_call_start");
+    expect(out).not.toContain("<em>");
+    expect(out).toContain("text_start");
+    expect(out).toContain("param_name = other_name");
+  });
+
+  it("真正用下划线写的强调仍然生效（不要为了修蛇形命名把强调一起关掉）", () => {
+    expect(html("这是 _重点_ 内容")).toContain("<em>重点</em>");
+    expect(html("**加粗** 和 *斜体*")).toContain("<em>斜体</em>");
+  });
 });
 
 describe("危险链接协议被拒", () => {
@@ -66,6 +107,23 @@ describe("危险链接协议被拒", () => {
     expect(out).toContain('href="src/a.ts"');
     expect(out).toContain('href="C:/x/y.pdf"');
     expect(withFile("[顶](#top) [内](omp://x) [信](mailto:a@b.c) [x](javascript:alert(1))")).not.toMatch(/href=/i);
+  });
+
+  it("行内代码文件胶囊不塞入 TS/JS 前缀文字污染复制内容；长绝对路径智能缩写并在 title 保留全路径", () => {
+    const withFile = (source: string) =>
+      renderToStaticMarkup(renderMarkdown(source, { openLink: () => {}, openFile: () => {}, katex }));
+    const inlineCode = withFile("(`PreviewPage.tsx` / `index.html`)");
+    expect(inlineCode).toContain(
+      '<code class="md-code-inline md-file-chip" data-file-kind="ts" data-file-badge="TS" title="PreviewPage.tsx">PreviewPage.tsx</code>',
+    );
+    expect(inlineCode).not.toContain(">TS<");
+    const longPath = withFile("`C:\\Users\\someone\\workspace\\pi-studio\\src\\MainFlow.tsx:128`");
+    expect(longPath).toContain('title="C:\\Users\\someone\\workspace\\pi-studio\\src\\MainFlow.tsx:128"');
+    expect(longPath).toContain(">.../src/MainFlow.tsx:128</code>");
+    const fileLink = withFile("[index.html](file:///C:/app/index.html)");
+    expect(fileLink).toContain('class="md-link md-file-link"');
+    expect(fileLink).toContain('data-file-badge="&lt;/&gt;"');
+    expect(fileLink).toContain('<span class="md-file-link-pill">index.html</span>');
   });
 
   it("远程图片不加载，显示为链接；data:image 保留", () => {

@@ -1,7 +1,7 @@
 // 会话树、回溯、分叉（docs/architecture/session-tree.md）。
 // 树只读会话文件（tsp/session-tree-file.ts）；回溯 = 驱动 omp 自己的 `/tree`：选择器里 activate 那条用户消息。
 // 分叉成新任务由池完成（TaskPool.forkTask）：新任务用 `omp --fork=<会话文件>` 起，起来以后在新进程里同样回溯。
-import type { RestoredDraft, SessionTreeView } from "../../shared/ipc.ts";
+import type { PromptImage, RestoredDraft, SessionTreeView } from "../../shared/ipc.ts";
 import type { TspDocument } from "../../shared/tsp/document.ts";
 import {
   SUMMARY_NO,
@@ -96,7 +96,11 @@ export class TspSessionTree {
    * `summarize`：让 omp 给被放弃的分支写摘要再移动（选择器的 `summarize` 动作 = Shift+Enter，不管 `branchSummary.enabled` 开没开都直接摘要，
    * 会调一次模型，最长等 SUMMARY_TIMEOUT_MS）；不摘要时如果 omp 开着 `branchSummary.enabled` 并弹出"Summarize branch?"，答 No summary。
    */
-  rewindTo(entryId: string, known?: RewindTarget, summarize = false): Promise<{ text: string; summarized: boolean }> {
+  rewindTo(
+    entryId: string,
+    known?: RewindTarget,
+    summarize = false,
+  ): Promise<{ text: string; images?: PromptImage[]; summarized: boolean }> {
     return this.#host.exclusive(async () => {
       const target = known ?? findUserEntry(await this.#readTreeEntries(), entryId);
       if (target === null) throw new Error("that is not a user message of this session");
@@ -165,7 +169,11 @@ export class TspSessionTree {
       await this.#host.takeEditorText(session);
       this.#leafOverride =
         target.lastEntryId === null ? null : { afterEntryId: target.lastEntryId, leafId: target.parentId };
-      return { text: target.text, summarized: summarize };
+      return {
+        text: target.text,
+        ...(target.images !== undefined && target.images.length > 0 ? { images: target.images } : {}),
+        summarized: summarize,
+      };
     });
   }
 

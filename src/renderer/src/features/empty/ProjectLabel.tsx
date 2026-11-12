@@ -9,18 +9,32 @@ import { useAppInfo } from "../../store/index.ts";
 import { anchorBelow, Menu, type MenuAnchor, type MenuEntry } from "../../ui/Menu.tsx";
 import { useProjects } from "../sidebar/projects-store.ts";
 import { addProjectAsDraft } from "../sidebar/sidebar-actions.ts";
+import { folderAliasKey, useFolderAliases } from "../sidebar/sidebar-prefs-store.ts";
+import { isDefaultFolder } from "./default-folder.ts";
 import { pickDraftProject } from "./draft-project.ts";
 import "./empty.css";
 
-/** 文件夹图标 + 路径（只显示）。 */
+function baseName(p: string): string {
+  const parts = p.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] ?? p;
+}
+
+/** 极简工作目录轻标签：仅显示简短目录名（或自定义显示名 / 默认文件夹），鼠标悬停查看完整路径。 */
 export function PathLabel({ path, testId = "empty-project" }: { path: string; testId?: string }) {
+  const t = useT();
+  const chatsDir = useAppInfo()?.chatsDir ?? null;
+  const folderAliases = useFolderAliases();
+  const alias = path !== "" ? folderAliases[folderAliasKey(path)] : undefined;
+  const shortLabel =
+    alias ??
+    (chatsDir !== null && path !== "" && isDefaultFolder(path, chatsDir)
+      ? t("empty.defaultFolder")
+      : baseName(path) || path);
+
   return (
     <span className="empty-project" data-testid={testId} title={path}>
-      <Folder size={14} />
-      {/* 外层 rtl 让省略号落在开头，bdi 保持路径本身从左往右排 */}
-      <span className="empty-project-name">
-        <bdi>{path}</bdi>
-      </span>
+      <Folder size={13} />
+      <span className="empty-project-name">{shortLabel}</span>
     </span>
   );
 }

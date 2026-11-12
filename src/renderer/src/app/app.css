@@ -93,9 +93,10 @@ button {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-0-5);
+  justify-content: space-between;
+  gap: var(--space-1);
   width: var(--sidebar-current, var(--sidebar-w));
-  padding-left: var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-2-5);
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
 }
@@ -103,6 +104,7 @@ button {
 #app[data-sidebar="hidden"] .topbar-left,
 #app[data-drawer="true"] .topbar-left {
   width: auto;
+  justify-content: flex-start;
   padding-right: var(--space-1);
   background: transparent;
   border-right-color: transparent;
@@ -139,7 +141,28 @@ html[data-platform="darwin"] .topbar-left {
 .claude-brand-lockup {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: 7px;
+}
+.pi-compact-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.pi-compact-wordmark {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1;
 }
 .claude-wordmark {
   display: block;
@@ -155,7 +178,7 @@ html[data-platform="darwin"] .topbar-left {
 .crumb {
   display: flex;
   flex: 0 1 auto;
-  gap: var(--space-1);
+  gap: 5px;
   align-items: center;
   min-width: 0;
   padding: 0 var(--space-2-5);
@@ -163,8 +186,32 @@ html[data-platform="darwin"] .topbar-left {
   white-space: nowrap;
 }
 
+.crumb-folder {
+  max-width: 140px;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  text-overflow: ellipsis;
+}
+
+.crumb-sep {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  opacity: 0.55;
+  user-select: none;
+}
+
 .crumb-restart {
   flex: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.crumb:hover .crumb-restart,
+.crumb-restart:focus-visible {
+  opacity: 0.72;
 }
 
 /* 顶栏标题：500，活跃任务可点击原地改名 */
@@ -321,6 +368,19 @@ html[data-platform="darwin"] .topbar-left {
   padding: 0 var(--space-2) 0 var(--space-2);
 }
 
+/* 顶栏右侧归位为单个侧栏切换按钮（图2），旧的多面板独立按钮收拢为不可见节点以兼容快捷键与测试 */
+.topbar-legacy-toggles {
+  position: absolute;
+  right: 40px;
+  top: 4px;
+  display: inline-flex;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* 有中段胶囊时由 topbar-center 的 margin-inline: auto 把工具推到右端 */
 .topbar-center + .topbar-tools {
   margin-left: 0;
@@ -419,7 +479,7 @@ html[data-platform="darwin"] .topbar-left {
 
 .panel {
   /* --content-w 直接在 .panel 上求值，保证拖拽写入 --chat-current 时整条对话列、输入框和左右手柄同步响应 */
-  --content-w: var(--chat-current, clamp(760px, 78cqi, 1080px));
+  --content-w: var(--chat-current, clamp(680px, 70cqi, 880px));
   position: relative;
   display: flex;
   flex: 1;
@@ -492,8 +552,10 @@ html[data-platform="darwin"] .topbar-left {
   background: var(--border);
 }
 
-/* 对话列左右两缘的宽度拖拽手柄（ChatWidthResizer.tsx）：
-   仅在会话显示区的垂直中段区域（约 28%–64% 高度）激活与显示，绝不延伸到底部输入框或顶部标题栏。 */
+/* 对话列左缘的宽度拖拽手柄（ChatWidthResizer.tsx）：
+   仅在会话显示区的垂直中段区域（约 28%–64% 高度）激活与显示，绝不延伸到底部输入框或顶部标题栏。
+   整条手柄往左让出 16px：胶囊落在对话列外侧的空白里（右端沿正好是文字的左缘），
+   不会盖住首字，也给“贴着文字拖”留出余量。右缘没有手柄（见 app.css 里 ChatWidthResizer 的注释）。 */
 .chat-width-handle {
   position: absolute;
   top: 28%;
@@ -505,10 +567,7 @@ html[data-platform="darwin"] .topbar-left {
   touch-action: none;
 }
 .chat-width-handle-left {
-  left: max(calc(var(--gutter) - 7px), calc(50% - min(100% - 2 * var(--gutter), var(--content-w)) / 2 - 7px));
-}
-.chat-width-handle-right {
-  right: max(calc(var(--gutter) - 7px), calc(50% - min(100% - 2 * var(--gutter), var(--content-w)) / 2 - 7px));
+  left: max(calc(var(--gutter) - 16px), calc(50% - min(100% - 2 * var(--gutter), var(--content-w)) / 2 - 16px));
 }
 .chat-width-handle::after {
   content: "";
@@ -691,9 +750,23 @@ html[data-platform="darwin"] .topbar-left {
   }
 }
 
-/* ───────── 并行设置窗口 & 独立操作系统设置窗口 ───────── */
+/* ───────── DSH 风格居中模态设置弹窗 & 侧边停靠 & 独立窗口 ───────── */
 
-.body:has(> .settings-win[data-mode="dock"]:not([data-minimized])) > .panel {
+.settings-modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-dialog) - 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--titlebar-h) + var(--space-3)) var(--space-4) var(--space-4);
+  background: color-mix(in srgb, var(--bg-scrim) 52%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-app-region: no-drag;
+  animation: fade-in var(--dur-fast) var(--ease-out);
+}
+
+.body:has(> .settings-win[data-mode="dock"]) > .panel {
   min-width: 320px;
 }
 
@@ -708,36 +781,22 @@ html[data-platform="darwin"] .topbar-left {
   z-index: calc(var(--z-sticky) + 3);
 }
 
-.settings-win[data-mode="dock"]:not([data-minimized]) {
-  flex: 0 1 clamp(560px, 56vw, 880px);
-  border-left: 1px solid var(--border);
+.settings-win[data-mode="modal"] {
+  width: min(880px, 90vw);
+  height: min(640px, 85vh);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: var(--shadow-2);
+  animation: pop-in var(--dur-fast) var(--ease-out);
 }
 
-.settings-win[data-mode="float"]:not([data-minimized]) {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  bottom: 12px;
-  width: min(860px, calc(100% - 32px));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-2);
-}
-
-.settings-win[data-minimized] {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  width: auto;
-  height: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-2);
+.settings-win[data-mode="dock"] {
+  flex: 0 1 clamp(540px, 50vw, 840px);
+  border-left: 1px solid var(--border-subtle);
 }
 
 @media (max-width: 1080px) {
-  .settings-win[data-mode="dock"]:not([data-minimized]) {
+  .settings-win[data-mode="dock"] {
     position: absolute;
     inset: 0;
     border-left: 0;
@@ -749,24 +808,11 @@ html[data-platform="darwin"] .topbar-left {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  height: 36px;
-  padding: 0 var(--space-2-5) 0 var(--space-3);
+  height: 40px;
+  padding: 0 var(--space-3) 0 var(--space-4);
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
-}
-
-.settings-win[data-mode="float"] .settings-win-bar {
-  cursor: grab;
-}
-
-.settings-win[data-mode="float"] .settings-win-bar:active {
-  cursor: grabbing;
-}
-
-.settings-win[data-minimized] .settings-win-bar {
-  border-bottom: 0;
-  background: transparent;
 }
 
 .settings-win-title {

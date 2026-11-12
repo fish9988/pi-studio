@@ -163,6 +163,20 @@ export class TerminalManager {
   async rekey(from: DraftKey, to: TaskId): Promise<boolean> {
     const pending = this.#opening.get(from);
     if (pending) await pending.catch(() => undefined);
+    const prefix = `${from}#t`;
+    for (const oldKey of Array.from(this.#entries.keys())) {
+      if (oldKey.startsWith(prefix)) {
+        const suffix = oldKey.slice(from.length);
+        const targetSubKey = `${to}${suffix}` as TerminalKey;
+        const subEntry = this.#entries.get(oldKey);
+        if (subEntry && !this.#entries.has(targetSubKey)) {
+          subEntry.batcher.flush();
+          this.#entries.delete(oldKey);
+          subEntry.key = targetSubKey;
+          this.#entries.set(targetSubKey, subEntry);
+        }
+      }
+    }
     const entry = this.#entries.get(from);
     if (!entry || this.#entries.has(to) || this.#opening.has(to)) return false;
     // 还没发出去的输出以旧键发出去，渲染进程还在旧键上订阅。
@@ -215,11 +229,29 @@ export class TerminalManager {
    * 删 worktree 之前必须等它。
    */
   close(key: TerminalKey): Promise<void> {
+    if (!/#t\d+$/.test(key)) {
+      const prefix = `${key}#t`;
+      const allKeys = new Set<TerminalKey>(this.#entries.keys());
+      for (const k of this.#opening.keys()) allKeys.add(k);
+      const extraKeys: TerminalKey[] = [];
+      for (const k of allKeys) {
+        if (k.startsWith(prefix)) extraKeys.push(k);
+      }
+      if (extraKeys.length > 0) {
+        return Promise.all([this.#closeSingle(key), ...extraKeys.map((k) => this.#closeSingle(k))]).then(
+          () => undefined,
+        );
+      }
+    }
+    return this.#closeSingle(key);
+  }
+
+  #closeSingle(key: TerminalKey): Promise<void> {
     // 正在起：等它起好再结束，否则这个终端会成为没人管的孤儿。
     const pending = this.#opening.get(key);
     if (pending)
       return pending.then(
-        () => this.close(key),
+        () => this.#closeSingle(key),
         () => undefined,
       );
     const entry = this.#entries.get(key);

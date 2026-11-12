@@ -66,7 +66,17 @@ interface ZoomAnchor {
   fy: number;
 }
 
-export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarget; path: string; hidden: boolean }) {
+export function PreviewPage({
+  target,
+  path,
+  focusLine,
+  hidden,
+}: {
+  target: ProjectFilesTarget;
+  path: string;
+  focusLine?: number | undefined;
+  hidden: boolean;
+}) {
   const t = useT();
   const locale = useLocale();
   const isZh = locale === "zh-CN";
@@ -96,14 +106,14 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
     const inline = getInlineArtifact(path);
     if (inline !== null) {
       setLoad({ state: "done", file: inline });
-      setSource(false);
+      setSource(focusLine !== undefined);
       setScripts(inline.kind === "html");
       setZoom("fit");
       return;
     }
     let cancelled = false;
     setLoad({ state: "loading" });
-    setSource(false);
+    setSource(focusLine !== undefined);
     setScripts(false);
     setZoom("fit");
     window.studio.readPreviewFile(target, path).then(
@@ -117,13 +127,17 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
     return () => {
       cancelled = true;
     };
-  }, [target, path]);
+  }, [target, path, focusLine]);
   const file = load.state === "done" ? load.file : null;
   const name = baseName(file?.path ?? path);
   const ext = extension(file?.path ?? path);
-  const isMarkdown = file?.kind === "text" && (ext === "md" || ext === "markdown");
+  const isMarkdown = file?.kind === "text" && (ext === "md" || ext === "markdown" || ext === "mdx");
+  const isCsv = file?.kind === "text" && (ext === "csv" || ext === "tsv");
+  const isMermaid = file?.kind === "text" && (ext === "mmd" || ext === "mermaid");
+  const isJson = file?.kind === "text" && ext === "json";
+  const [jsonTree, setJsonTree] = useState(false);
   const isSvg = file?.kind === "image" && ext === "svg";
-  const toggleable = isMarkdown || isSvg || file?.kind === "html";
+  const toggleable = isMarkdown || isCsv || isMermaid || isSvg || file?.kind === "html";
   const imageView = file?.kind === "image" && !source;
   const textView = file?.kind === "text" || file?.kind === "html" || (file?.kind === "image" && source);
   const mdHeadings = useMemo(
@@ -185,13 +199,17 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
     pending.scroller.scrollTop += rect.top + pending.fy * rect.height - pending.y;
   }, [zoom, textZoom]);
 
-  // 系统打开 / 在文件夹中显示按任务 id 走（只有任务有）；草稿的项目目录里只能预览。
+  // 系统打开按任务 id 走；在文件夹中显示支持任务与项目/默认文件夹。
   const taskId = target.kind === "task" ? target.taskId : null;
   const run = (action: "openTaskFile" | "revealTaskFile") => {
-    if (!file || taskId === null) return;
-    window.studio[action](taskId, file.path, target.kind === "task" ? target.root : undefined).catch((error: unknown) =>
-      reportError(t, error),
-    );
+    if (!file) return;
+    if (taskId !== null) {
+      window.studio[action](taskId, file.path, target.kind === "task" ? target.root : undefined).catch(
+        (error: unknown) => reportError(t, error),
+      );
+    } else if (action === "revealTaskFile") {
+      window.studio.revealProjectFile(target, file.path).catch((error: unknown) => reportError(t, error));
+    }
   };
 
   return (
@@ -248,6 +266,16 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
               </Button>
             </span>
           )}
+          {isJson && (
+            <Button
+              variant="quiet"
+              size="sm"
+              testId="file-preview-json-tree-toggle"
+              onClick={() => setJsonTree((v) => !v)}
+            >
+              {jsonTree ? (isZh ? "源码" : "Raw") : isZh ? "结构树" : "Tree"}
+            </Button>
+          )}
           {isMarkdown && !source && mdHeadings.length > 1 && (
             <Button
               variant="quiet"
@@ -285,7 +313,7 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
               <External size={14} />
             </IconButton>
           )}
-          {taskId !== null && !path.startsWith("@artifact/") && file !== null && file.kind !== "missing" && (
+          {!path.startsWith("@artifact/") && file !== null && file.kind !== "missing" && (
             <IconButton label={t("preview.reveal")} testId="file-preview-reveal" onClick={() => run("revealTaskFile")}>
               <Folder size={14} />
             </IconButton>
@@ -335,6 +363,10 @@ export function PreviewPage({ target, path, hidden }: { target: ProjectFilesTarg
             zoom={zoom}
             imageRef={imageRef}
             isMarkdown={isMarkdown}
+            isCsv={isCsv}
+            isMermaid={isMermaid}
+            jsonTree={isJson && jsonTree && focusLine === undefined}
+            focusLine={focusLine}
             onExternal={taskId === null ? null : () => run(file.canOpen ? "openTaskFile" : "revealTaskFile")}
           />
         )}

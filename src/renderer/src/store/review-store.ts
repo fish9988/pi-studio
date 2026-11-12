@@ -3,6 +3,7 @@
 import { REVIEW_COMMENTS_MAX, type GitDiffContext } from "../../../shared/git.ts";
 import type { TaskId } from "../../../shared/ipc.ts";
 import type { CommentDraft, QueuedComment } from "../../../shared/ui/review-model.ts";
+import { closeDshToolKind, openDshToolTab } from "../features/workbench/dsh-workbench-store.ts";
 import { createStore, useStoreValue } from "./create-store.ts";
 
 interface ReviewState {
@@ -26,6 +27,7 @@ let nextId = 1;
 
 export function openReview(taskId: TaskId): void {
   reviewStore.set({ ...reviewStore.get(), openTaskId: taskId });
+  openDshToolTab(taskId, "changes");
 }
 
 export function setReviewMode(mode: "unified" | "split"): void {
@@ -41,7 +43,11 @@ export function setReviewWrap(wrap: boolean): void {
 }
 
 export function closeReview(): void {
+  const prev = reviewStore.get().openTaskId;
   reviewStore.set({ ...reviewStore.get(), openTaskId: null });
+  if (prev !== null) {
+    closeDshToolKind(prev, "changes");
+  }
 }
 
 function setComments(taskId: TaskId, next: readonly QueuedComment[]): void {

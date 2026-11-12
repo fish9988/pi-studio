@@ -1,6 +1,6 @@
 // 代码块（spec 4.10）：头部语言名 + 复制；围栏闭合后才高亮（只改颜色）；全文显示（omp 的 md 节点不限行数）。
 // ```svg 和 ```mermaid 围栏闭合后画成图，头部多一个切回源码的按钮。
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { draftKey, type TaskId } from "../../../shared/ipc.ts";
 import { insertPaste } from "../features/composer/composer-tokens.ts";
 import { getDraft, setDraft, setDraftText } from "../features/composer/draft-store.ts";
@@ -12,7 +12,7 @@ import { currentLocale } from "../store/settings-store.ts";
 import { onThemeChange } from "../ui/theme-change.ts";
 import { useHighlighted } from "./highlight.ts";
 import { resolveLanguage } from "./highlight-languages.ts";
-import { tokenProps } from "./highlight-tokens.ts";
+import { tokenProps, type HighlightToken } from "./highlight-tokens.ts";
 import { useMermaid } from "./mermaid.ts";
 import { FIGURE_TOKENS, prepareMermaidSvg, prepareSvg, svgDataUrl } from "./svg-figure.ts";
 function lineClass(line: string, isDiff: boolean): string {
@@ -22,16 +22,32 @@ function lineClass(line: string, isDiff: boolean): string {
   return "md-line";
 }
 
+/** 离底不到这么远就算"用户还在底部"（.md-codebody 的贴底跟随）。 */
+const FOLLOW_DISTANCE = 24;
+
+/** 一行代码的 token：没高亮（围栏没闭合 / 高亮还没回来 / 语言认不出）时也包成单个无色 token。
+ *  围栏闭合、高亮结果到达时只是往同一批 span 里写新文字（React 做 commitTextUpdate），
+ *  不会把整行的文本节点整排换成元素子节点——选区、行内偏移和这块内的滚动位置都保住。 */
+function lineTokens(tokens: HighlightToken[][] | null, index: number, line: string): readonly HighlightToken[] {
+  const hit = tokens?.[index];
+  return hit !== undefined && hit.length > 0 ? hit : [{ text: line, italic: false, bold: false }];
+}
+
 interface CodeBlockProps {
   code: string;
   lang: string;
   closed: boolean;
+  focusLine?: number | undefined;
+  standalone?: boolean | undefined;
 }
 
-export const CodeBlock = memo(function CodeBlock({ code, lang, closed }: CodeBlockProps) {
+export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine, standalone }: CodeBlockProps) {
   const t = useT();
   const taskId = useSelectedTaskId();
   const [copied, setCopied] = useState(false);
+  const preRef = useRef<HTMLPreElement>(null);
+  /** 代码块自己的贴底跟随：用户手动上滑就放开，围栏闭合后也不再接管。 */
+  const follow = useRef(true);
   // ```svg 围栏闭合后画成图（svg-figure.ts）；```mermaid 先在 worker 里画成 SVG（mermaid.ts），画好之前照常显示源码。
   // 头部的 <> 切回源码，画不出来时也退回源码。
   const kind = closed ? lang.toLowerCase() : "";
@@ -67,6 +83,36 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed }: CodeBlo
     const timer = setTimeout(() => setCopied(false), 1200);
     return () => clearTimeout(timer);
   }, [copied]);
+
+  useEffect(() => {
+    if (focusLine === undefined || focusLine < 1 || drawing) return;
+    const target = preRef.current?.querySelector<HTMLElement>("[data-focus-line]");
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusLine, code, drawing]);
+
+  // .md-codebody 自己有 max-height + 滚动条：流式追加时贴着底走，用户一旦上滑就停。
+  useEffect(() => {
+    const el = preRef.current;
+    if (el === null) return;
+    const onScroll = () => {
+      follow.current = el.scrollHeight - el.clientHeight - el.scrollTop < FOLLOW_DISTANCE;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [drawing]);
+
+  // 新内容到了：还在底部就贴到底。直接用 ref 设 scrollTop（不用 ResizeObserver，免得和自己的滚动互相触发）。
+  // 围栏闭合（这一轮不再追加）后停止跟随，把这块的滚动控制权交还给用户。
+  useEffect(() => {
+    const el = preRef.current;
+    if (el === null) return;
+    if (closed) {
+      follow.current = false;
+      return;
+    }
+    if (!follow.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [code, closed]);
 
   const copy = () => {
     navigator.clipboard.writeText(code).then(
@@ -159,17 +205,19 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed }: CodeBlo
       ) : (
         <>
           {failed && <p className="md-figure-note">{t("code.figureFailed")}</p>}
-          <pre className="md-codebody">
+          <pre ref={preRef} className="md-codebody" style={standalone ? { maxHeight: "none" } : undefined}>
             <code>
               {lines.map((line, index) => (
-                <span key={index} className={lineClass(line, isDiff)}>
-                  {tokens?.[index]
-                    ? tokens[index].map((token, i) => (
-                        <span key={i} {...tokenProps(token)}>
-                          {token.text}
-                        </span>
-                      ))
-                    : line}
+                <span
+                  key={index}
+                  className={lineClass(line, isDiff)}
+                  data-focus-line={focusLine === index + 1 ? "" : undefined}
+                >
+                  {lineTokens(tokens, index, line).map((token, i) => (
+                    <span key={i} {...tokenProps(token)}>
+                      {token.text}
+                    </span>
+                  ))}
                   {"\n"}
                 </span>
               ))}

@@ -3,6 +3,7 @@ export { FilesToggle } from "./FilesToggle.tsx";
 export {
   getInlineArtifact,
   openFilePreview,
+  openFilesPanel,
   openInlineArtifact,
   toggleFilesPanel,
   usePreviewPanel,

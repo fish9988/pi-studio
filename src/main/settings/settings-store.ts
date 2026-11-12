@@ -3,12 +3,13 @@
 import { app, nativeTheme } from "electron";
 import path from "node:path";
 import { backdropFilePattern, defaultFontSize, type Locale, type StudioSettings } from "../../shared/ipc.ts";
-import { themes } from "../../shared/themes.ts";
+import { isThemeName, themes, type ColorMode } from "../../shared/themes.ts";
 import { emitEvent } from "../ipc/events.ts";
 import {
   parseBackdropMode,
   parseBackdropStrength,
   parseBoolean,
+  parseColorMode,
   parseFontSize,
   parseIdleClose,
   parseOneOf,
@@ -24,7 +25,8 @@ import { readJsonFile } from "./json-file.ts";
 
 const defaults: StudioSettings = {
   locale: "system",
-  theme: "system",
+  theme: "default",
+  colorMode: "system",
   backdrop: "theme",
   backdropStrength: "medium",
   customBackdrop: null,
@@ -36,6 +38,8 @@ const defaults: StudioSettings = {
   soundOnDone: false,
   copyOnSelect: true,
   toolHeadsOnly: false,
+  autoCollapseTools: true,
+  autoCollapseDiffs: true,
   fontSize: defaultFontSize,
   yoloConfirmed: false,
 };
@@ -46,11 +50,13 @@ function parseBackdropFile(value: unknown): string | null {
   throw new Error("customBackdrop 不是 userData/backdrops 里的文件名");
 }
 
-/** nativeTheme 只认 system / light / dark：具名主题按它的深浅给（omp 的 theme 事件、网页的 prefers-color-scheme 都跟着 nativeTheme）。 */
+/** nativeTheme 只认 system / light / dark：显式色板名按它的深浅给，主题家族则直接跟独立的 colorMode 走。 */
 function themeSource(): "system" | "light" | "dark" {
-  const { theme } = settings;
-  if (theme === "system") return "system";
-  return themes[theme].dark ? "dark" : "light";
+  const { theme, colorMode = "system" } = settings;
+  if (isThemeName(theme) && theme !== "sakura" && theme !== "ink") {
+    return themes[theme].dark ? "dark" : "light";
+  }
+  return colorMode;
 }
 
 let settings: StudioSettings = defaults;
@@ -77,9 +83,33 @@ function sanitize(raw: unknown): StudioSettings {
       return fallback;
     }
   };
+  const rawTheme = record["theme"];
+  const rawColorMode = record["colorMode"];
+  let migratedTheme: unknown = rawTheme;
+  let inferredColorMode: ColorMode | undefined;
+  if (rawTheme === "system") {
+    migratedTheme = "default";
+    if (rawColorMode === undefined) inferredColorMode = "system";
+  } else if (rawTheme === "light") {
+    migratedTheme = "default";
+    if (rawColorMode === undefined) inferredColorMode = "light";
+  } else if (rawTheme === "dark") {
+    migratedTheme = "default";
+    if (rawColorMode === undefined) inferredColorMode = "dark";
+  } else if (rawTheme === "whale-dark") {
+    migratedTheme = "deepseek";
+    if (rawColorMode === undefined) inferredColorMode = "dark";
+  } else if (rawTheme === "whale-light") {
+    migratedTheme = "deepseek";
+    if (rawColorMode === undefined) inferredColorMode = "light";
+  } else if (rawTheme === "night-sakura") {
+    migratedTheme = "sakura";
+    if (rawColorMode === undefined) inferredColorMode = "dark";
+  }
   return {
     locale: field(parseLocalePreference, record["locale"], defaults.locale),
-    theme: field(parseThemePreference, record["theme"], defaults.theme),
+    theme: field(parseThemePreference, migratedTheme, defaults.theme),
+    colorMode: field(parseColorMode, rawColorMode ?? inferredColorMode, defaults.colorMode ?? "system"),
     backdrop: field(parseBackdropMode, record["backdrop"], defaults.backdrop),
     backdropStrength: field(parseBackdropStrength, record["backdropStrength"], defaults.backdropStrength),
     customBackdrop: field(parseBackdropFile, record["customBackdrop"], defaults.customBackdrop),
@@ -98,6 +128,16 @@ function sanitize(raw: unknown): StudioSettings {
       (value) => parseBoolean(value, "toolHeadsOnly"),
       record["toolHeadsOnly"],
       defaults.toolHeadsOnly,
+    ),
+    autoCollapseTools: field(
+      (value) => parseBoolean(value, "autoCollapseTools"),
+      record["autoCollapseTools"],
+      defaults.autoCollapseTools ?? true,
+    ),
+    autoCollapseDiffs: field(
+      (value) => parseBoolean(value, "autoCollapseDiffs"),
+      record["autoCollapseDiffs"],
+      defaults.autoCollapseDiffs ?? true,
     ),
     fontSize: field(parseFontSize, record["fontSize"], defaults.fontSize),
     yoloConfirmed: field(

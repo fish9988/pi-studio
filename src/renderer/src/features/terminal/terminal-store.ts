@@ -2,6 +2,7 @@
 // 只在内存里：重启应用后 shell 本来就没了，面板默认收起。主进程的终端不受它影响（隐藏面板不结束 shell）。
 import type { DraftKey, TaskId, TerminalKey } from "../../../../shared/ipc.ts";
 import { createStore, useStoreValue } from "../../store/create-store.ts";
+import { closeDshToolKind, isDshToolActive, openDshToolTab } from "../workbench/dsh-workbench-store.ts";
 
 interface TerminalUiState {
   open: ReadonlySet<TerminalKey>;
@@ -12,7 +13,7 @@ interface TerminalUiState {
 const store = createStore<TerminalUiState>({ open: new Set(), focusRequest: null });
 
 export function isTerminalOpen(key: TerminalKey): boolean {
-  return store.get().open.has(key);
+  return store.get().open.has(key) || isDshToolActive(key, "terminal");
 }
 
 export function setTerminalOpen(key: TerminalKey, open: boolean, options: { focus?: boolean } = {}): void {
@@ -21,6 +22,9 @@ export function setTerminalOpen(key: TerminalKey, open: boolean, options: { focu
   if (open) next.add(key);
   else next.delete(key);
   store.set({ open: next, focusRequest: open && options.focus === true ? key : state.focusRequest });
+  const baseKey = key.replace(/#t\d+$/, "") as TerminalKey;
+  if (open) openDshToolTab(baseKey, "terminal");
+  else closeDshToolKind(baseKey, "terminal");
 }
 
 /** 草稿的终端交给了新建的任务：打开状态跟着走（任务的面板一出现就是开着的）。 */

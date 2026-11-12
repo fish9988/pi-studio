@@ -22,11 +22,11 @@ function block(css: string, selector: string): Block {
   return declarations;
 }
 
-const lightBlock = block(tokensCss, ':root,\n[data-theme="light"]');
+const baseLightBlock = block(tokensCss, ':root,\n[data-theme="light"]');
 const blocks: Record<ThemeName, Block> = Object.fromEntries(
   themeNames.map((name) => [
     name,
-    name === "light" ? lightBlock : block(name === "dark" ? tokensCss : themesCss, `[data-theme="${name}"]`),
+    name === "light" ? baseLightBlock : block(name === "dark" ? tokensCss : themesCss, `[data-theme="${name}"]`),
   ]),
 ) as Record<ThemeName, Block>;
 
@@ -94,8 +94,8 @@ describe("配色主题", () => {
     expect([...system]).toEqual([...blocks.dark]);
   });
 
-  it("每个主题声明的变量和浅色块一一对应", () => {
-    const expected = [...lightBlock.keys()].sort();
+  it("每个主题声明的变量和浅色基准块一一对应", () => {
+    const expected = [...baseLightBlock.keys()].sort();
     for (const name of themeNames) expect([...blocks[name].keys()].sort(), name).toEqual(expected);
   });
 

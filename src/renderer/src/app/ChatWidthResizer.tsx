@@ -1,7 +1,8 @@
 // 对话列宽度拖拽手柄（复刻 dsh-claude-style 的 width-handle）：
-// 对话列左右两缘各一条 10px 宽的透明命中带；鼠标停留满 220ms 或按下时才露出 2px 导轨线（防滑过误闪）；
+// 对话列左缘一条 14px 宽的透明命中带；鼠标停留满 60ms 或按下时才露出 2px 导轨线（防滑过误闪）；
 // 拖动时中心对称缩放对话列宽度（Δwidth = ±2 × Δx），直接写主区面板的 --chat-current（零 React 重渲染），
 // 松手后 commit 持久化；双击恢复自适应默认宽度；←/→ 键微调。
+// 右缘不做手柄：中心对称缩放让左右等价，而右缘正好是覆盖式滚动条的位置（见文件末的说明）。
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { chatWidthRange, clampChatWidth, commitChatWidth, defaultChatWidth } from "./shell-store.ts";
 
@@ -153,10 +154,8 @@ function HandleSide({
 }
 
 export function ChatWidthResizer({ width, panel }: { width: number; panel: RefObject<HTMLElement | null> }) {
-  return (
-    <>
-      <HandleSide side="left" width={width} panel={panel} />
-      <HandleSide side="right" width={width} panel={panel} />
-    </>
-  );
+  // 只留左缘一条：缩放是中心对称的（Δwidth = ±2 × Δx），左右两条功能完全一样，
+  // 而右缘那条正好压在会话面板的覆盖式滚动条上（两条命中带只隔 3px），
+  // 想拖滚动条会变成拖列宽。右缘还给滚动条自己。
+  return <HandleSide side="left" width={width} panel={panel} />;
 }

@@ -81,6 +81,22 @@ export function PixelLogo({
   const brand = brandOverride ?? storedBrand;
 
   if (brand === "pi" || brand === "omp") {
+    if (unit <= 2) {
+      return (
+        <span
+          className="claude-brand-lockup"
+          role="img"
+          aria-label="pi studio"
+          data-testid="pixel-logo"
+          data-brand="pi"
+        >
+          <span className="pi-compact-mark" aria-hidden="true">
+            π
+          </span>
+          <span className="pi-compact-wordmark">pi studio</span>
+        </span>
+      );
+    }
     return (
       <span className="claude-brand-lockup" role="img" aria-label="pi studio" data-testid="pixel-logo" data-brand="pi">
         <svg
@@ -105,10 +121,9 @@ export function PixelLogo({
   }
 
   if (brand === "deepseek") {
-    // 照 sidebar.css：18px 字高基准，鲸鱼标与 deepseek 字标同着官方深海蓝 #4D6BFE
-    const markH = unit <= 2 ? 18 : unit <= 4 ? 22 : 28;
+    const markH = unit <= 2 ? 15 : unit <= 4 ? 20 : 26;
     const markW = Math.round((markH * 23.16) / 17.04);
-    const wordH = unit <= 2 ? 18 : unit <= 4 ? 22 : 28;
+    const wordH = unit <= 2 ? 15 : unit <= 4 ? 20 : 26;
     const wordW = Math.round((wordH * 96) / 24);
     return (
       <span
@@ -119,11 +134,11 @@ export function PixelLogo({
         data-brand="deepseek"
       >
         <svg className="pixel-logo" width={markW} height={markH} viewBox="0 0 23.16 17.04" aria-hidden="true">
-          <path fill="#4D6BFE" d={DEEPSEEK_MARK_PATH} />
+          <path fill="var(--accent)" d={DEEPSEEK_MARK_PATH} />
         </svg>
         <svg className="claude-wordmark" width={wordW} height={wordH} viewBox="26 0 96 24" aria-hidden="true">
           {DEEPSEEK_WORD_PATHS.map((d, idx) => (
-            <path key={idx} fill="#4D6BFE" d={d} />
+            <path key={idx} fill="var(--text)" d={d} />
           ))}
         </svg>
         {version && (
@@ -135,9 +150,9 @@ export function PixelLogo({
     );
   }
 
-  // 照 sidebar.css：18px 字高基准，星芒标与 Claude 衬线字标
-  const markSize = unit <= 2 ? 18 : unit <= 4 ? 22 : 28;
-  const wordHeight = unit <= 2 ? 18 : unit <= 4 ? 22 : 28;
+  // 紧凑克制品牌标识：星芒标随主题强调色柔和适配，字标随主文字色
+  const markSize = unit <= 2 ? 15 : unit <= 4 ? 20 : 26;
+  const wordHeight = unit <= 2 ? 15 : unit <= 4 ? 20 : 26;
   const wordWidth = Math.round((wordHeight * 512.22) / 121.54);
   return (
     <span
@@ -149,7 +164,7 @@ export function PixelLogo({
     >
       <svg className="pixel-logo" width={markSize} height={markSize} viewBox="0 0 148.09 148.18" aria-hidden="true">
         <g transform="translate(-75.96,-223.53)">
-          <path fill="#D97757" d={CLAUDE_MARK_PATH} />
+          <path fill="var(--accent)" d={CLAUDE_MARK_PATH} />
         </g>
       </svg>
       <svg

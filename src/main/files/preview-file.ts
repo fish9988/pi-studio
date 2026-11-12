@@ -19,6 +19,16 @@ const imageMime: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+const mediaMime: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".m4a": "audio/mp4",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+};
+
 const isHtml = (ext: string): boolean => ext === ".html" || ext === ".htm";
 
 /** 绝对路径（含 `file:///C:/...` 或前导 `/C:/...`）落在 cwd 内时换算成相对路径；其余原样交给 resolveInside 校验。 */
@@ -65,7 +75,17 @@ export async function readPreviewFile(cwd: string, input: string): Promise<Previ
   if (mime !== undefined) {
     if (info.size > previewImageMaxBytes) return { ...base, kind: "too_large" };
     const bytes = await readFile(file);
-    return { ...base, kind: "image", dataUrl: `data:${mime};base64,${bytes.toString("base64")}` };
+    const dataUrl = `data:${mime};base64,${bytes.toString("base64")}`;
+    if (ext === ".svg" && info.size <= previewTextMaxBytes) {
+      return { ...base, kind: "image", dataUrl, text: bytes.toString("utf8") };
+    }
+    return { ...base, kind: "image", dataUrl };
+  }
+  const embedMime = mediaMime[ext];
+  if (embedMime !== undefined) {
+    if (info.size > previewImageMaxBytes) return { ...base, kind: "too_large" };
+    const bytes = await readFile(file);
+    return { ...base, kind: "binary", dataUrl: `data:${embedMime};base64,${bytes.toString("base64")}` };
   }
   if (info.size > previewTextMaxBytes) return { ...base, kind: "too_large" };
   const bytes = await readFile(file);

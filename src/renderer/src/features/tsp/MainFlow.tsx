@@ -3,28 +3,35 @@
 // 这类整段重建对话，omp 删掉旧节点重画）就不再画：终端里重建也会清掉状态行（omp 18.12.5 实录 session-tree-compacted.jsonl）。
 // 状态行最多露两行：MCP 工具多时启动的 `xdev: xd://: mounted …` 会列出全部工具名，占满一屏（2026-11-06 仓库所有者），
 // 多出的收进和工具输出一样的"N more lines"。
-import { Fragment, memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { TaskId } from "../../../../shared/ipc.ts";
 import type { DocNode, DocSurface, TspDocument } from "../../../../shared/tsp/document.ts";
 import type { StatusNote } from "../../../../shared/tsp/status-notes.ts";
 import { useShellValue } from "../../app/shell-store.ts";
 import { ChevronDown, Code, External, FileIcon, Globe } from "../../icons.tsx";
 import { openReview } from "../../store/review-store.ts";
-import { currentLocale } from "../../store/settings-store.ts";
+import { currentLocale, useSettings } from "../../store/settings-store.ts";
 import { openFilePreview, openInlineArtifact, type InlineArtifact } from "../file-preview/index.ts";
+import { openChangesPanel } from "../workbench/index.ts";
 import { Clamp } from "./Clamp.tsx";
 import { formatElapsed } from "./fmt.ts";
 import { TspIcon } from "./icons.tsx";
 import type { TspContext } from "./node-props.ts";
+import { dropGroupFolds, groupFoldKey, useGroupFold } from "./process-fold.ts";
 import { useSessionExtras } from "./session-extras-store.ts";
 import { cleanGlyphs } from "./span-tokens.ts";
 import { TspNode } from "./TspChildren.tsx";
-import { peekTspNode, useTspDerived, useTspStatusNotes } from "./tsp-store.ts";
+import { onTspDocumentDropped, peekTspNode, useTspDerived, useTspStatusNotes } from "./tsp-store.ts";
+import { useClock } from "./use-clock.ts";
 import { setNodesFolded } from "./use-fold.ts";
 const STATUS_NOTE_LINES = 2;
 
+// 任务被移除 / 登录会话换新进程：它的过程组折叠记录一起清掉，store 不跟着关过的任务越攒越大。
+onTspDocumentDropped(dropGroupFolds);
+
 type DeliverableCategory = "markdown" | "html" | "vector" | "image" | "pdf" | "data" | "style" | "code";
-type LangBadgeKind = "ts" | "tsx" | "js" | "py" | "css" | "json" | "md" | "html" | "svg" | "img" | "pdf" | "code";
+type LangBadgeKind =
+  "ts" | "tsx" | "js" | "py" | "css" | "json" | "sh" | "md" | "html" | "svg" | "img" | "pdf" | "code";
 
 interface DeliverableItem {
   key: string;
@@ -39,6 +46,7 @@ interface DeliverableItem {
   added: number;
   removed: number;
   bodyNodeId?: string;
+  bodyNodeIds?: readonly string[];
   bodyKind?: "diff" | "code";
   filePath?: string;
   artifact?: InlineArtifact;
@@ -52,6 +60,9 @@ type MainSegment =
       tools: number;
       durationMs: number;
       turnIndex: number;
+      /** 同一轮里的第几个过程组（从 0 开始）。折叠状态的键用它，与节点 id 无关（text_end / hydrate 会换 id）。 */
+      ordinal: number;
+      showDoneBar: boolean;
       running: boolean;
       settled: boolean;
       deliverables: readonly DeliverableItem[];
@@ -255,15 +266,17 @@ function fileBadgeMeta(filePath: string): {
     };
   }
   const langBadge: { label: string; kind: LangBadgeKind } =
-    ext === "tsx" || ext === "jsx"
-      ? { label: ext.toUpperCase(), kind: "tsx" }
-      : ext === "ts" || ext === "mts" || ext === "cts"
-        ? { label: "TS", kind: "ts" }
-        : ext === "js" || ext === "mjs" || ext === "cjs"
-          ? { label: "JS", kind: "js" }
-          : ext === "py"
-            ? { label: "PY", kind: "py" }
-            : { label: ext ? ext.slice(0, 4).toUpperCase() : "CODE", kind: "code" };
+    ext === "ps1" || ext === "sh" || ext === "bash" || ext === "zsh" || ext === "bat" || ext === "cmd"
+      ? { label: ">_", kind: "sh" }
+      : ext === "tsx" || ext === "jsx"
+        ? { label: ext.toUpperCase(), kind: "tsx" }
+        : ext === "ts" || ext === "mts" || ext === "cts"
+          ? { label: "TS", kind: "ts" }
+          : ext === "js" || ext === "mjs" || ext === "cjs"
+            ? { label: "JS", kind: "js" }
+            : ext === "py"
+              ? { label: "PY", kind: "py" }
+              : { label: ext ? ext.slice(0, 4).toUpperCase() : "CODE", kind: "code" };
   return {
     category: "code",
     badge: "CODE",
@@ -372,7 +385,7 @@ function extractNodeDeliverables(surface: DocSurface, id: string): DeliverableIt
       operation,
       added: stats.added,
       removed: stats.removed,
-      ...(stats.bodyNodeId !== undefined ? { bodyNodeId: stats.bodyNodeId } : {}),
+      ...(stats.bodyNodeId !== undefined ? { bodyNodeId: stats.bodyNodeId, bodyNodeIds: [stats.bodyNodeId] } : {}),
       ...(stats.bodyKind !== undefined ? { bodyKind: stats.bodyKind } : {}),
       filePath,
     });
@@ -450,6 +463,61 @@ function extractNodeDeliverables(surface: DocSurface, id: string): DeliverableIt
   return items;
 }
 
+function stripCommonWorkspacePrefix(items: readonly DeliverableItem[]): readonly DeliverableItem[] {
+  const diskItems = items.filter((item) => item.filePath !== undefined);
+  if (diskItems.length === 0) return items;
+
+  // 若存在真实落盘的变更文件，过滤掉从回答正文代码块提取出的同类型合成 artifact，避免重复渲染
+  const hasRealDiskWrites = diskItems.some((item) => item.operation === "write" || item.operation === "edit");
+  const baseList = hasRealDiskWrites ? items.filter((item) => item.artifact === undefined) : items;
+
+  const absPaths = diskItems.map((item) => item.filePath!).filter((p) => /^[A-Za-z]:\//.test(p) || p.startsWith("/"));
+  if (absPaths.length === 0) return baseList;
+
+  let commonPrefix = "";
+  if (absPaths.length >= 2) {
+    const splitDirs = absPaths.map((p) => {
+      const idx = p.lastIndexOf("/");
+      return idx > 0 ? p.slice(0, idx).split("/") : [];
+    });
+    const first = splitDirs[0] ?? [];
+    let commonLen = first.length;
+    for (let i = 1; i < splitDirs.length; i += 1) {
+      const other = splitDirs[i]!;
+      let j = 0;
+      while (j < commonLen && j < other.length && first[j]?.toLowerCase() === other[j]?.toLowerCase()) {
+        j += 1;
+      }
+      commonLen = j;
+    }
+    if (commonLen >= 2) {
+      commonPrefix = `${first.slice(0, commonLen).join("/")}/`;
+    }
+  }
+  if (commonPrefix === "" && absPaths.length === 1) {
+    const single = absPaths[0]!;
+    const marker = /^(.*)\/(?:src|docs|test|tests|packages|scripts|public|app|resources)\//i.exec(single);
+    if (marker?.[1]) {
+      commonPrefix = `${marker[1]}/`;
+    } else {
+      const lastSlash = single.lastIndexOf("/");
+      if (lastSlash > 0) commonPrefix = `${single.slice(0, lastSlash)}/`;
+    }
+  }
+  if (commonPrefix === "") return baseList;
+
+  const prefixLower = commonPrefix.toLowerCase();
+  return baseList.map((item) => {
+    if (item.filePath === undefined || !item.filePath.toLowerCase().startsWith(prefixLower)) {
+      return item;
+    }
+    const rel = item.filePath.slice(commonPrefix.length);
+    const lastSlash = rel.lastIndexOf("/");
+    const dirPath = lastSlash > 0 ? rel.slice(0, lastSlash) : "";
+    return dirPath === item.dirPath ? item : { ...item, dirPath };
+  });
+}
+
 function dedupeDeliverables(list: readonly DeliverableItem[]): readonly DeliverableItem[] {
   if (list.length === 0) return EMPTY_DELIVERABLES;
   const map = new Map<string, DeliverableItem>();
@@ -465,6 +533,12 @@ function dedupeDeliverables(list: readonly DeliverableItem[]): readonly Delivera
           : item.operation === "edit" || prev.operation === "edit"
             ? "edit"
             : "read";
+      const prevIds = prev.bodyNodeIds ?? (prev.bodyNodeId !== undefined ? [prev.bodyNodeId] : []);
+      const nextIds = item.bodyNodeIds ?? (item.bodyNodeId !== undefined ? [item.bodyNodeId] : []);
+      const mergedIds = [...prevIds];
+      for (const nid of nextIds) {
+        if (!mergedIds.includes(nid)) mergedIds.push(nid);
+      }
       map.set(item.key, {
         ...prev,
         ...item,
@@ -476,10 +550,11 @@ function dedupeDeliverables(list: readonly DeliverableItem[]): readonly Delivera
           : prev.bodyNodeId !== undefined
             ? { bodyNodeId: prev.bodyNodeId, bodyKind: prev.bodyKind }
             : {}),
+        ...(mergedIds.length > 0 ? { bodyNodeIds: mergedIds } : {}),
       });
     }
   }
-  return [...map.values()];
+  return stripCommonWorkspacePrefix([...map.values()]);
 }
 
 function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
@@ -495,10 +570,15 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
   // 仅在该轮最终回答末尾唯一输出一次，绝不在中途重复打断对话流！
   let turnDeliverables: DeliverableItem[] = [];
   let currentTurnIndex = -1;
+  let turnHasDoneBar = false;
+  // 当前这一轮里已经输出过几个过程组：过程组的折叠状态按 (轮次, ordinal) 记，所以这个序号必须稳定。
+  let turnProcessOrdinal = 0;
 
   const flushProcess = (fallbackTurnMs = 0, hasFollowingAnswer = false) => {
     if (runIds.length === 0) return;
     if (runThoughts + runTools >= 1) {
+      const showDoneBar = !turnHasDoneBar;
+      turnHasDoneBar = true;
       out.push({
         kind: "process",
         ids: runIds,
@@ -506,10 +586,13 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
         tools: runTools,
         durationMs: runDurationMs > 0 ? runDurationMs : fallbackTurnMs,
         turnIndex: currentTurnIndex,
+        ordinal: turnProcessOrdinal,
+        showDoneBar,
         running: runRunning,
         settled: !runRunning && hasFollowingAnswer,
         deliverables: EMPTY_DELIVERABLES,
       });
+      turnProcessOrdinal += 1;
     } else {
       for (const id of runIds) out.push({ kind: "item", id, deliverables: EMPTY_DELIVERABLES });
     }
@@ -569,6 +652,8 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
       flushProcess(0, true);
       attachTurnDeliverablesToLast();
       currentTurnIndex += 1;
+      turnHasDoneBar = false;
+      turnProcessOrdinal = 0;
       out.push({
         kind: "item",
         id,
@@ -619,8 +704,13 @@ function buildSurfaceSegments(surface: DocSurface): readonly MainSegment[] {
         continue;
       }
       if (hasMoreProcessInTurn) {
-        // 本轮后面还有工具调用或思考：把中途过渡说明节点也收进同一个过程组，不拆断过程组！
-        runIds.push(...nonUsageContentIds);
+        // 本轮后面还有工具调用或思考：若模型中途输出了面向用户的过渡说明文字，自然穿插展示（聚合组 1 -> 助手过渡段落 -> 聚合组 2）
+        flushProcess(0, true);
+        out.push({
+          kind: "item",
+          id,
+          deliverables: EMPTY_DELIVERABLES,
+        });
         continue;
       }
       let turnUsageMs = 0;
@@ -660,7 +750,20 @@ function deriveSegmentsBySurface(doc: TspDocument): ReadonlyMap<string, readonly
 }
 
 function sameDeliverables(a: readonly DeliverableItem[], b: readonly DeliverableItem[]): boolean {
-  return a.length === b.length && a.every((item, i) => item.key === b[i]?.key);
+  return (
+    a.length === b.length &&
+    a.every((item, i) => {
+      const other = b[i];
+      return (
+        other !== undefined &&
+        item.key === other.key &&
+        item.added === other.added &&
+        item.removed === other.removed &&
+        item.bodyNodeId === other.bodyNodeId &&
+        (item.bodyNodeIds?.length ?? 0) === (other.bodyNodeIds?.length ?? 0)
+      );
+    })
+  );
 }
 
 function sameSegment(a: MainSegment, b: MainSegment): boolean {
@@ -673,6 +776,9 @@ function sameSegment(a: MainSegment, b: MainSegment): boolean {
       a.thoughts === b.thoughts &&
       a.tools === b.tools &&
       a.durationMs === b.durationMs &&
+      a.turnIndex === b.turnIndex &&
+      a.ordinal === b.ordinal &&
+      a.showDoneBar === b.showDoneBar &&
       a.running === b.running &&
       a.settled === b.settled &&
       a.ids.length === b.ids.length &&
@@ -717,16 +823,30 @@ function StatusLine({ note }: { note: StatusNote }) {
 }
 
 /**
- * 图 6 反重力（Antigravity）风格的单文件变更行：
- * - 左侧语言类型徽标（M↓ / </> / {} / JS / TS / PY）+ 粗体文件名（点击直接在右侧栏打开预览）+ 浅灰目录路径
- * - 右侧 +added（绿） -removed（红）行数统计
- * - 单个文件的内联 Diff 默认不展开（expanded = false），点击该行任意空白处即可展开/收起该文件的 Diff！
+ * 反重力（Antigravity）风格的单文件变更行（图 4）：
+ * - 左侧无底色语法着色符号（>_ / </> / M↓ / {} / JS / TS / PY）+ 中等字重文件名（点击直接在右侧栏打开预览）+ 浅灰相对目录路径
+ * - 右侧对齐 +added（绿） -removed（红）行数统计，不堆砌多余按钮
+ * - 单个文件的内联 Diff 默认收起（expanded = false），点击该行即可展开/收起该文件的内联 Diff
  */
-function AntigravityFileRow({ item, ctx }: { item: DeliverableItem; ctx: TspContext }) {
+function AntigravityFileRow({
+  item,
+  ctx,
+  autoCollapseDiffs,
+}: {
+  item: DeliverableItem;
+  ctx: TspContext;
+  autoCollapseDiffs: boolean;
+}) {
   const zh = currentLocale() === "zh-CN";
   const hasBody = item.bodyNodeId !== undefined;
-  // 单个文件 DIFF 默认不展开，点击行时展开
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => !autoCollapseDiffs);
+  const prevAutoDiff = useRef(autoCollapseDiffs);
+  useEffect(() => {
+    if (prevAutoDiff.current !== autoCollapseDiffs) {
+      prevAutoDiff.current = autoCollapseDiffs;
+      setExpanded(!autoCollapseDiffs);
+    }
+  }, [autoCollapseDiffs]);
 
   const openInSidebar = (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -765,30 +885,18 @@ function AntigravityFileRow({ item, ctx }: { item: DeliverableItem; ctx: TspCont
         <span className="tsp-dsh-file-suffix" data-testid="tsp-deliverable-diff-stats">
           <span className="tsp-dsh-file-stat tsp-dsh-file-add">+{item.added}</span>
           <span className="tsp-dsh-file-stat tsp-dsh-file-del">-{item.removed}</span>
-        </span>
-        {hasBody && (
-          <>
-            <button
-              type="button"
-              className="tsp-ag-diff-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded((v) => !v);
-              }}
-              title={zh ? "展开/收起内联改动对比 (Diff)" : "Toggle inline Diff"}
-              data-testid="tsp-ag-file-diff-btn"
-            >
-              {zh ? "对比" : "Diff"}
-            </button>
+          {hasBody && (
             <span className="tsp-dsh-file-chev" data-open={expanded ? "" : undefined} aria-hidden="true">
               <ChevronDown />
             </span>
-          </>
-        )}
+          )}
+        </span>
       </div>
       {hasBody && expanded && item.bodyNodeId !== undefined && (
         <div className="tsp-dsh-file-body" onClick={(e) => e.stopPropagation()} data-testid="tsp-deliverable-diff-body">
-          <TspNode id={item.bodyNodeId} ctx={ctx} />
+          {(item.bodyNodeIds ?? [item.bodyNodeId]).map((nid) => (
+            <TspNode key={nid} id={nid} ctx={ctx} />
+          ))}
         </div>
       )}
     </div>
@@ -899,19 +1007,31 @@ function DshDeliverableCard({ item, ctx }: { item: DeliverableItem; ctx: TspCont
   );
 }
 /**
- * 结合图 5（DSH 双列交付物卡片）与图 6（反重力 Antigravity 可展开/可搜索的「N files changed +M -K」变更面板）：
- * - 面板整体默认展开（panelOpen = true），支持按文件名/路径搜索过滤，右侧带「评审」按钮；
- * - 面板内每个单文件行默认收起 Diff（点击行展开单文件 Diff，点击文件名直接在右侧栏预览）；
- * - 可预览的交付文档（SVG / HTML / MD）同时提供图 5 风格的双列交付卡片。
+ * 反重力（Antigravity）风格的「N files changed +M -K」圆角卡片面板（图 4）：
+ * - 独立圆角卡片容器，顶栏左侧显示 N files changed +added -removed 折叠开关，右侧带「评审 / Review」按钮；
+ * - 已归入变更列表（write / edit）的文件不再在上方重复渲染巨型卡片，消除图 1 中 CHANGELOG.md 重复出现两次的视觉冲突；
+ * - 面板内每个单文件行默认收起 Diff（点击行展开单文件内联 Diff，点击文件名直接在右侧栏预览）。
  */
 function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly DeliverableItem[] }) {
-  const [panelOpen, setPanelOpen] = useState(true);
+  const autoCollapseDiffs = useSettings()?.autoCollapseDiffs ?? true;
+  const [panelOpen, setPanelOpen] = useState(() => !autoCollapseDiffs);
+  const prevAutoDiff = useRef(autoCollapseDiffs);
+  useEffect(() => {
+    if (prevAutoDiff.current !== autoCollapseDiffs) {
+      prevAutoDiff.current = autoCollapseDiffs;
+      setPanelOpen(!autoCollapseDiffs);
+    }
+  }, [autoCollapseDiffs]);
   const [query, setQuery] = useState("");
   const zh = currentLocale() === "zh-CN";
   if (items.length === 0) return null;
 
   const changedFiles = items.filter((i) => i.operation === "write" || i.operation === "edit");
-  const deliverableDocs = items.filter((i) => i.operation === "read" || isDeliverableDocPath(i.name));
+  const changedKeys = new Set(changedFiles.map((i) => i.key));
+  // 仅对未包含在 changedFiles 中的独立只读预览文档或内联生成物展示卡片，避免同一文件上下重复渲染两次
+  const deliverableDocs = items.filter(
+    (i) => !changedKeys.has(i.key) && (i.operation === "read" || isDeliverableDocPath(i.name)),
+  );
 
   const totalAdded = changedFiles.reduce((acc, i) => acc + i.added, 0);
   const totalRemoved = changedFiles.reduce((acc, i) => acc + i.removed, 0);
@@ -920,6 +1040,27 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
     q === ""
       ? changedFiles
       : changedFiles.filter((i) => i.name.toLowerCase().includes(q) || i.dirPath.toLowerCase().includes(q));
+
+  const onReviewClick = () => {
+    const hasDiskFile = changedFiles.some((item) => item.filePath !== undefined);
+    if (hasDiskFile) {
+      void window.studio
+        .getGitStatus(ctx.taskId)
+        .then((st) => {
+          if (st.kind === "ok" && st.files.length > 0) {
+            openReview(ctx.taskId);
+          } else {
+            openChangesPanel(ctx.taskId);
+          }
+        })
+        .catch(() => {
+          openChangesPanel(ctx.taskId);
+        });
+      return;
+    }
+    const first = changedFiles[0];
+    if (first?.artifact !== undefined) openInlineArtifact(ctx.taskId, first.artifact);
+  };
 
   return (
     <div className="tsp-deliverables-host" data-testid="tsp-deliverables">
@@ -931,7 +1072,7 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
         </div>
       )}
       {changedFiles.length > 0 && (
-        <div className="tsp-ag-panel" data-testid="tsp-ag-changes-panel">
+        <div className="tsp-ag-panel" data-open={panelOpen ? "" : undefined} data-testid="tsp-ag-changes-panel">
           <div className="tsp-ag-head">
             <button
               type="button"
@@ -951,13 +1092,13 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
                 <ChevronDown />
               </span>
             </button>
-            {panelOpen && (
+            {panelOpen && changedFiles.length > 8 && (
               <input
                 type="search"
                 className="tsp-ag-search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={zh ? "搜索变更文件或 Diff…" : "Search changed files…"}
+                placeholder={zh ? "筛选文件…" : "Filter files…"}
                 aria-label={zh ? "搜索变更文件" : "Search changed files"}
                 data-testid="tsp-ag-changes-search"
               />
@@ -965,15 +1106,7 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
             <button
               type="button"
               className="tsp-ag-review-btn"
-              onClick={() => {
-                const hasDiskFile = changedFiles.some((item) => item.filePath !== undefined);
-                if (hasDiskFile) {
-                  openReview(ctx.taskId);
-                  return;
-                }
-                const first = changedFiles[0];
-                if (first?.artifact !== undefined) openInlineArtifact(ctx.taskId, first.artifact);
-              }}
+              onClick={onReviewClick}
               data-testid="tsp-ag-changes-review"
             >
               <FileIcon size={12} />
@@ -983,7 +1116,12 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
           {panelOpen && (
             <div className="tsp-ag-list">
               {filteredChanged.map((item) => (
-                <AntigravityFileRow key={`chg:${item.key}`} item={item} ctx={ctx} />
+                <AntigravityFileRow
+                  key={`chg:${item.key}`}
+                  item={item}
+                  ctx={ctx}
+                  autoCollapseDiffs={autoCollapseDiffs}
+                />
               ))}
             </div>
           )}
@@ -1152,13 +1290,73 @@ function ExplorationGroupRow({
   );
 }
 
+/** 实时耗时的时钟周期：耗时按秒显示，没必要 100ms 振一下（振太快会拖累整条对话的滚动条）。 */
+const LIVE_PROCESS_STEP_MS = 1000;
+
+/**
+ * 过程组头部的实时耗时：已结算的 `baseMs` 加上运行中从 `baseMs` 上次变化到现在走过的时间。
+ * 只有这一片订阅时钟（每秒醒一次、只重画自己），ProcessGroup 主体不跟着抖：
+ * 否则每秒十几次重渲染会把内层滚动条打断、也会让 sameSegment 的 memo 白做。
+ */
+const LiveProcessTime = memo(function LiveProcessTime({
+  baseMs,
+  running,
+  className,
+  prefix,
+  testId,
+}: {
+  baseMs: number;
+  running: boolean;
+  className: string;
+  /** 数字前面那句（如 `· `、`，用时 `）：数字本身不显示时它也不显示。 */
+  prefix?: string | undefined;
+  testId?: string | undefined;
+}) {
+  // 锚点：baseMs 变化的时刻。布局阶段重锚，旧锚点算出来的那一帧不会被画出来。
+  const [anchor, setAnchor] = useState(() => ({ baseMs, at: Date.now() }));
+  useLayoutEffect(() => {
+    setAnchor((current) => (current.baseMs === baseMs ? current : { baseMs, at: Date.now() }));
+  }, [baseMs]);
+  // 按整秒取整：同一秒内取到的值相同，useSyncExternalStore 才不会因快照一直变而白重画。
+  const displayMs = useClock(running, LIVE_PROCESS_STEP_MS, (now) => {
+    if (!running) return baseMs;
+    const value = baseMs + Math.max(0, now - anchor.at);
+    return Math.trunc(value / LIVE_PROCESS_STEP_MS) * LIVE_PROCESS_STEP_MS;
+  });
+  // 不到 100ms 不写：零头写在头上只是噪声（和原来 durationText 的门槛一致）。
+  if (displayMs < 100) return null;
+  return (
+    <span className={className} data-testid={testId} role="timer">
+      {`${prefix ?? ""}${formatElapsed(displayMs, displayMs >= 1000 ? "seconds" : "short")}`}
+    </span>
+  );
+});
+
+function ProcessCheckIcon() {
+  return (
+    <svg className="tsp-process-summary-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="12" height="12" rx="3" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M5.2 8.2L7.1 10.1L10.9 6.1"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function ProcessGroup({
   ids,
   thoughts,
   tools,
   durationMs,
   turnIndex,
+  ordinal,
+  showDoneBar,
   running,
+  settled,
   deliverables,
   after,
   ctx,
@@ -1168,29 +1366,47 @@ function ProcessGroup({
   tools: number;
   durationMs: number;
   turnIndex: number;
+  ordinal: number;
+  showDoneBar: boolean;
   running: boolean;
+  settled: boolean;
   deliverables: readonly DeliverableItem[];
   after: ReadonlyMap<string, StatusNote[]>;
   ctx: TspContext;
 }) {
-  const [folded, setFolded] = useState(false);
-  const [foldExplore, setFoldExplore] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const autoCollapseTools = useSettings()?.autoCollapseTools ?? true;
+  const [sectionOpen, setSectionOpen] = useState(true);
+  // 折叠状态按 (任务, surface, 轮次, 序号) 记在模块级 store 里：组件即使因外层重建而重挂，状态也不会回初始值。
+  // 程序默认值 = 自动收起开关 && 这一轮真的结束了（settled）：运行中先展开给用户看过程，结束时才收起。
+  const initialCollapsed = autoCollapseTools && settled;
+  const [folded, applyFold] = useGroupFold(groupFoldKey(ctx.taskId, ctx.sf, turnIndex, ordinal), initialCollapsed);
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const layout = useShellValue("processRows") ?? "column";
   const conversationView = useShellValue("conversationView") ?? "chat";
   const isTrajectory = conversationView === "trajectory";
+  const effectiveSectionOpen = isTrajectory ? true : sectionOpen;
   const effectiveFolded = isTrajectory ? false : folded;
-  const effectiveFoldExplore = isTrajectory ? false : foldExplore;
   const zh = currentLocale() === "zh-CN";
   const label = formatProcessSummary(thoughts, tools);
+  // turnIndex 为 -1（还没出现第一条用户消息）时没有对应的用量脚注，不要去读 turns[-1]。
   const extraTurnMs = useSessionExtras(ctx.taskId, (extras) =>
     turnIndex >= 0 ? (extras.turns[turnIndex]?.elapsedMs ?? 0) : 0,
   );
-  const effectiveMs = durationMs > 0 ? durationMs : extraTurnMs;
-  const durationText =
-    effectiveMs >= 100 ? formatElapsed(effectiveMs, effectiveMs >= 1000 ? "seconds" : "short") : null;
+  // 已结算耗时优先；没有就用本轮用量脚注里的耗时（它只在回合结束后刷新，所以走字的活交给 LiveProcessTime）。
+  const baseMs = durationMs > 0 ? durationMs : extraTurnMs;
+  const doneTimeShown = baseMs >= 100;
+  const doneHeaderLabel = running
+    ? zh
+      ? "正在执行…"
+      : "Running…"
+    : doneTimeShown
+      ? zh
+        ? "已完成，用时"
+        : "Completed in"
+      : zh
+        ? "已完成"
+        : "Completed";
 
   const activitiesText = (() => {
     const counts = new Map<ProcessActivityKind, number>();
@@ -1208,12 +1424,15 @@ function ProcessGroup({
       .join(" · ");
   })();
 
-  const { items: renderItems, hasExploreRuns } = foldExplorationIds(ctx.taskId, ctx.sf, ids, effectiveFoldExplore);
+  const { items: renderItems } = foldExplorationIds(ctx.taskId, ctx.sf, ids, false);
 
+  // ids 每批流式更新都是新数组：用 ref 读最新的，回调本身保持稳定（否则每批都换引用，依赖它的效应会被反复触发）。
+  const idsRef = useRef(ids);
+  idsRef.current = ids;
   const applyDetailsFold = useCallback(
     (expand: boolean) => {
       const targets: { node: DocNode; initialCollapsed: boolean }[] = [];
-      for (const id of ids) {
+      for (const id of idsRef.current) {
         const node = peekTspNode(ctx.taskId, ctx.sf, id);
         if (!node || node.p["collapsible"] !== true) continue;
         const role = node.p["role"];
@@ -1226,7 +1445,7 @@ function ProcessGroup({
       }
       setNodesFolded(ctx.taskId, ctx.sf, targets, !expand);
     },
-    [ctx.taskId, ctx.sf, ids],
+    [ctx.taskId, ctx.sf],
   );
 
   const prevTrajectory = useRef(isTrajectory);
@@ -1236,17 +1455,26 @@ function ProcessGroup({
       return;
     }
     prevTrajectory.current = isTrajectory;
-    setDetailsExpanded(isTrajectory);
     applyDetailsFold(isTrajectory);
   }, [isTrajectory, applyDetailsFold]);
 
-  const onToggleAllDetails = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    const nextExpanded = !detailsExpanded;
-    setDetailsExpanded(nextExpanded);
-    if (folded && nextExpanded) setFolded(false);
-    applyDetailsFold(nextExpanded);
-  };
+  // 自动折叠只在真的结束时触发：settled === true 表示这一轮已经出现正式回答，过程组真的结束了。
+  // 不再看 `!running` —— 一轮之内每结束一个工具 / 一段思考 running 都会短暂为 false，那会把用户刚展开的抽屉又收回。
+  const prevSettled = useRef(settled);
+  const prevAutoTools = useRef(autoCollapseTools);
+  useEffect(() => {
+    const justSettled = !prevSettled.current && settled;
+    const prefChanged = prevAutoTools.current !== autoCollapseTools;
+    prevSettled.current = settled;
+    prevAutoTools.current = autoCollapseTools;
+    if (isTrajectory) return;
+    // 设置项实时翻转：这是用户主动下的全局指令，连手动翻过的组也一并纠正；
+    // 开「自动收起」就把子卡片一起收，关了就一起展开（内部子卡片的折叠状态也同步过来）。
+    if (prefChanged && applyFold("pref")) applyDetailsFold(!autoCollapseTools);
+    // 真的结束了：收起过程组，连带收起里面的子卡片。
+    // applyFold 只有在“用户没手动翻过”时才会真的写值，靠它的返回值守住：用户展开的抽屉不许被程序连带收起。
+    if (justSettled && autoCollapseTools && applyFold("auto-collapse")) applyDetailsFold(false);
+  }, [settled, autoCollapseTools, isTrajectory, applyFold, applyDetailsFold]);
 
   useEffect(() => {
     if (effectiveFolded || isTrajectory || !stickRef.current) return;
@@ -1261,99 +1489,99 @@ function ProcessGroup({
       data-trajectory={isTrajectory ? "" : undefined}
       data-testid="tsp-process-group"
     >
-      <div className="tsp-process-head-row">
+      {!isTrajectory && showDoneBar && (
         <button
           type="button"
-          className="tsp-process-summary"
+          className="tsp-process-done-bar"
           data-running={running || undefined}
-          aria-expanded={!effectiveFolded}
-          onClick={() => {
-            if (!isTrajectory) setFolded((f) => !f);
-          }}
-          data-testid="tsp-process-summary"
+          aria-expanded={effectiveSectionOpen}
+          onClick={() => setSectionOpen((v) => !v)}
+          data-testid="tsp-process-done-bar"
         >
-          <span className="tsp-process-summary-text">{label}</span>
-          {effectiveFolded && activitiesText !== "" && (
-            <>
-              <span className="tsp-process-summary-sep" aria-hidden="true">
-                ·
-              </span>
-              <span className="tsp-process-summary-acts">{activitiesText}</span>
-            </>
-          )}
-          {durationText !== null && (
-            <>
-              <span className="tsp-process-summary-sep" aria-hidden="true">
-                ·
-              </span>
-              <span className="tsp-process-summary-time" data-testid="tsp-process-summary-time">
-                {durationText}
-              </span>
-            </>
-          )}
-          {!isTrajectory && (
-            <span className="tsp-process-summary-chev" aria-hidden="true">
-              <ChevronDown />
-            </span>
-          )}
+          {running && <span className="tsp-process-live-dot" aria-hidden="true" />}
+          <span className="tsp-process-done-label">{doneHeaderLabel}</span>
+          <LiveProcessTime
+            className="tsp-process-done-time"
+            baseMs={baseMs}
+            running={running}
+            prefix={running ? " · " : " "}
+            testId="tsp-process-done-time"
+          />
+          <span
+            className="tsp-process-done-chev"
+            data-collapsed={!effectiveSectionOpen || undefined}
+            aria-hidden="true"
+          >
+            <ChevronDown size={13} />
+          </span>
         </button>
-        {!effectiveFolded && (
-          <div className="tsp-process-controls">
-            {hasExploreRuns && !isTrajectory && (
-              <button
-                type="button"
-                className="tsp-process-ctrl-btn"
-                aria-pressed={effectiveFoldExplore}
-                onClick={() => setFoldExplore((v) => !v)}
-                title={zh ? "将连续的读取与搜索步骤聚合成单行摘要" : "Fold consecutive read/search steps"}
-                data-testid="tsp-process-fold-explore"
-              >
-                {zh
-                  ? effectiveFoldExplore
-                    ? "展开读取"
-                    : "聚合读取"
-                  : effectiveFoldExplore
-                    ? "Unfold reads"
-                    : "Fold reads"}
-              </button>
-            )}
+      )}
+      {effectiveSectionOpen && (
+        <>
+          <div className="tsp-process-head-row">
             <button
               type="button"
-              className="tsp-process-ctrl-btn"
-              aria-pressed={detailsExpanded}
-              onClick={onToggleAllDetails}
-              title={zh ? "一键展开或收起本轮所有思考与工具详情" : "Expand or collapse all step details"}
-              data-testid="tsp-process-bulk-toggle"
+              className="tsp-process-summary"
+              data-running={running || undefined}
+              aria-expanded={!effectiveFolded}
+              onClick={() => {
+                if (!isTrajectory) applyFold("toggle");
+              }}
+              data-testid="tsp-process-summary"
             >
-              {zh ? (detailsExpanded ? "收起详情" : "展开详情") : detailsExpanded ? "Collapse all" : "Expand all"}
+              <ProcessCheckIcon />
+              <span className="tsp-process-summary-text">{label}</span>
+              {effectiveFolded && activitiesText !== "" && (
+                <>
+                  <span className="tsp-process-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="tsp-process-summary-acts">{activitiesText}</span>
+                </>
+              )}
+              {/* 耗时：没有 done bar 的组（同一轮的第 2 个起），收起 / 展开两种状态都直接写在摘要行上。 */}
+              {!showDoneBar && (
+                <LiveProcessTime
+                  className="tsp-process-summary-time"
+                  baseMs={baseMs}
+                  running={running}
+                  prefix=" · "
+                  testId="tsp-process-summary-time"
+                />
+              )}
+              {!isTrajectory && (
+                <span className="tsp-process-summary-chev" aria-hidden="true">
+                  <ChevronDown size={12} />
+                </span>
+              )}
             </button>
           </div>
-        )}
-      </div>
-      {!effectiveFolded && (
-        <div
-          ref={bodyRef}
-          className="tsp-process-group-body"
-          data-layout={layout}
-          data-trajectory={isTrajectory ? "" : undefined}
-          onScroll={(event) => {
-            const el = event.currentTarget;
-            stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-          }}
-        >
-          {renderItems.map((item) =>
-            item.kind === "explore-group" ? (
-              <ExplorationGroupRow key={item.key} item={item} after={after} ctx={ctx} />
-            ) : (
-              <Fragment key={item.id}>
-                <TspNode id={item.id} ctx={ctx} />
-                {(after.get(item.id) ?? []).map((note, i) => (
-                  <StatusLine key={`s-${item.id}-${i}`} note={note} />
-                ))}
-              </Fragment>
-            ),
+          {!effectiveFolded && (
+            <div
+              ref={bodyRef}
+              className="tsp-process-group-body"
+              data-layout={layout}
+              data-trajectory={isTrajectory ? "" : undefined}
+              onScroll={(event) => {
+                const el = event.currentTarget;
+                stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+              }}
+            >
+              {renderItems.map((item) =>
+                item.kind === "explore-group" ? (
+                  <ExplorationGroupRow key={item.key} item={item} after={after} ctx={ctx} />
+                ) : (
+                  <Fragment key={item.id}>
+                    <TspNode id={item.id} ctx={ctx} />
+                    {(after.get(item.id) ?? []).map((note, i) => (
+                      <StatusLine key={`s-${item.id}-${i}`} note={note} />
+                    ))}
+                  </Fragment>
+                ),
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
       <DeliverableShelf ctx={ctx} items={deliverables} />
     </div>
@@ -1380,13 +1608,16 @@ export const MainFlow = memo(function MainFlow({ taskId, sf, ctx }: { taskId: Ta
     if (seg.kind === "process") {
       out.push(
         <ProcessGroup
-          key={`pg-${seg.ids[0]}`}
+          key={`pg-${seg.turnIndex}-${seg.ordinal}`}
           ids={seg.ids}
           thoughts={seg.thoughts}
           tools={seg.tools}
           durationMs={seg.durationMs}
           turnIndex={seg.turnIndex}
+          ordinal={seg.ordinal}
+          showDoneBar={seg.showDoneBar}
           running={seg.running}
+          settled={seg.settled}
           deliverables={seg.deliverables}
           after={after}
           ctx={ctx}

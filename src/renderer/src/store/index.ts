@@ -19,9 +19,24 @@ export function startStores(): void {
 }
 
 export { useOmpStatus } from "./omp-store.ts";
-export { currentPlatform, useAppInfo, useSettings, useSettingsSettled } from "./settings-store.ts";
+export {
+  currentPlatform,
+  setAppearanceColorMode,
+  setAppearanceTheme,
+  useAppInfo,
+  useSettings,
+  useSettingsSettled,
+} from "./settings-store.ts";
 export { useDownloadedVersion, useUpdateState } from "./update-store.ts";
-export { getTask, useExistingTaskIds, useTask, useTasks, useTasksState, useTaskValue } from "./tasks-store.ts";
+export {
+  getTask,
+  upsertTask,
+  useExistingTaskIds,
+  useTask,
+  useTasks,
+  useTasksState,
+  useTaskValue,
+} from "./tasks-store.ts";
 export { useBtwRecords } from "./btw-store.ts";
 export {
   clearSelection,

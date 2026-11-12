@@ -1,7 +1,7 @@
 // 输入框右上沿的桌面宠物（完整复刻原版多帧精灵表与 Web Animations 帧动画引擎）：
 // 支持 Claude 像素蟹（crab，19 套双层墨水遮罩精灵表）、DeepSeek 小鲸鱼（deepy，18 套 5× 矢量精灵表）、
 // DeepSeek 像素鲸鱼娘（whalegirl，22 套可变帧率像素条带）、OMP 像素 π（omp）与关闭（off）。
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import type { MascotCharacter, TaskState, TaskStatus } from "../../../../shared/ipc.ts";
 import { useShellValue } from "../../app/shell-store.ts";
 import { useT } from "../../i18n/use-t.ts";
@@ -9,6 +9,46 @@ import { useSettings } from "../../store/settings-store.ts";
 import { systemReducesMotion } from "../settings/motion-preference.ts";
 import crabUrlsRaw from "./crab-urls.json";
 import { formatCount, formatMoney } from "./usage-format.ts";
+
+const MASCOT_POS_STORAGE_KEY = "pi-studio:mascot-offset";
+
+interface MascotOffset {
+  x: number;
+  y: number;
+}
+
+function readMascotOffset(): MascotOffset {
+  try {
+    const raw = globalThis.localStorage?.getItem(MASCOT_POS_STORAGE_KEY);
+    if (!raw) return { x: 0, y: 0 };
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof (parsed as { x?: unknown }).x === "number" &&
+      typeof (parsed as { y?: unknown }).y === "number" &&
+      Number.isFinite((parsed as { x: number }).x) &&
+      Number.isFinite((parsed as { y: number }).y)
+    ) {
+      return {
+        x: Math.max(-720, Math.min(480, Math.round((parsed as { x: number }).x))),
+        y: Math.max(-600, Math.min(240, Math.round((parsed as { y: number }).y))),
+      };
+    }
+  } catch {
+    // 忽略读取异常
+  }
+  return { x: 0, y: 0 };
+}
+
+function writeMascotOffset(offset: MascotOffset): void {
+  try {
+    if (offset.x === 0 && offset.y === 0) globalThis.localStorage?.removeItem(MASCOT_POS_STORAGE_KEY);
+    else globalThis.localStorage?.setItem(MASCOT_POS_STORAGE_KEY, JSON.stringify(offset));
+  } catch {
+    // 忽略配额异常
+  }
+}
 
 type MascotAnimKey =
   | "idle"
@@ -294,15 +334,39 @@ export function ClawdMascot({
   const reducedMotion = (settings?.reduceMotion ?? false) || systemReducesMotion();
 
   const rootRef = useRef<HTMLSpanElement | null>(null);
+  const ompRef = useRef<HTMLDivElement | null>(null);
   const stripRef = useRef<HTMLSpanElement | null>(null);
   const animRef = useRef<Animation | null>(null);
   const clickTimesRef = useRef<number[]>([]);
-  const dragStartRef = useRef<{ x: number; y: number; active: boolean } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; baseX: number; baseY: number; active: boolean } | null>(null);
 
   const [pointerState, setPointerState] = useState<MascotAnimKey | null>(null);
   const [ambientState, setAmbientState] = useState<MascotAnimKey>("idle");
   const [runningStep, setRunningStep] = useState(0);
   const [hovered, setHovered] = useState(false);
+  const [offset, setOffset] = useState<MascotOffset>(readMascotOffset);
+  const [narrowGutter, setNarrowGutter] = useState(false);
+
+  // 监测聊天面板与输入框之间的右侧留白宽度：留白充足时锚定在输入框外侧留白区（绝不压正文），过窄时贴外沿
+  useEffect(() => {
+    const el = rootRef.current ?? ompRef.current;
+    const composerEl = el?.closest<HTMLElement>(".composer");
+    const panelEl = el?.closest<HTMLElement>(".panel") ?? composerEl?.parentElement?.parentElement ?? null;
+    if (!composerEl || !panelEl) return;
+    const measure = () => {
+      const pRect = panelEl.getBoundingClientRect();
+      const cRect = composerEl.getBoundingClientRect();
+      const rightSpace = pRect.right - cRect.right;
+      setNarrowGutter(rightSpace < 68);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(panelEl);
+    ro.observe(composerEl);
+    return () => ro.disconnect();
+  }, [character]);
+
+  // 输入避让与鼠标避让都已移除（2026-11-12）：桌宠不再半透明，保持实心可点。
 
   // 空闲时周期性触发小动作（左顾右盼、招手/喷水、掏出笔记本电脑打字）
   useEffect(() => {
@@ -473,46 +537,53 @@ export function ClawdMascot({
     </span>
   ) : null;
 
-  if (character === "omp") {
-    return (
-      <div
-        className="composer-crab"
-        data-character="omp"
-        data-state={pointerState ? "waiting" : status}
-        aria-hidden="true"
-        data-testid="composer-crab"
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-        onClick={() => {
-          setPointerState("happy");
-          window.setTimeout(() => setPointerState(null), 650);
-        }}
-      >
-        {bubble}
-        <OmpPiSvg status={status} poked={pointerState !== null} />
-      </div>
-    );
-  }
+  const isDragging = pointerState === "drag";
+  const posStyle = {
+    "--mascot-dx": `${offset.x}px`,
+    "--mascot-dy": `${offset.y}px`,
+  } as CSSProperties;
 
-  const onPointerDown = (e: PointerEvent<HTMLSpanElement>) => {
-    dragStartRef.current = { x: e.clientX, y: e.clientY, active: false };
+  const beginDrag = (e: PointerEvent<HTMLElement>) => {
+    if (e.button !== 0) return;
+    dragStartRef.current = { x: e.clientX, y: e.clientY, baseX: offset.x, baseY: offset.y, active: false };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const onPointerMove = (e: PointerEvent<HTMLSpanElement>) => {
+  const moveDrag = (e: PointerEvent<HTMLElement>) => {
     const d = dragStartRef.current;
     if (!d) return;
-    if (!d.active && Math.hypot(e.clientX - d.x, e.clientY - d.y) >= 4) {
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.active && Math.hypot(dx, dy) >= 4) {
       d.active = true;
       setPointerState("drag");
     }
+    if (d.active) {
+      const next: MascotOffset = {
+        x: Math.max(-680, Math.min(420, Math.round(d.baseX + dx))),
+        y: Math.max(-540, Math.min(180, Math.round(d.baseY + dy))),
+      };
+      setOffset(next);
+    }
   };
 
-  const onPointerUp = (e: PointerEvent<HTMLSpanElement>) => {
+  const endDrag = (e: PointerEvent<HTMLElement>, isOmp = false) => {
     const d = dragStartRef.current;
     dragStartRef.current = null;
     if (d?.active) {
+      const next: MascotOffset = {
+        x: Math.max(-680, Math.min(420, Math.round(d.baseX + (e.clientX - d.x)))),
+        y: Math.max(-540, Math.min(180, Math.round(d.baseY + (e.clientY - d.y)))),
+      };
+      setOffset(next);
+      writeMascotOffset(next);
       setPointerState("happy");
+      if (isOmp) window.setTimeout(() => setPointerState(null), 650);
+      return;
+    }
+    if (isOmp) {
+      setPointerState("happy");
+      window.setTimeout(() => setPointerState(null), 650);
       return;
     }
     const now = performance.now();
@@ -528,11 +599,45 @@ export function ClawdMascot({
     setPointerState(e.clientX - rect.left < rect.width / 2 ? "poke-left" : "poke-right");
   };
 
+  const resetOffsetOnDoubleClick = () => {
+    const zero = { x: 0, y: 0 };
+    setOffset(zero);
+    writeMascotOffset(zero);
+  };
+
+  if (character === "omp") {
+    return (
+      <div
+        ref={ompRef}
+        className="composer-crab"
+        style={posStyle}
+        data-character="omp"
+        data-narrow={narrowGutter || undefined}
+        data-dragging={isDragging || undefined}
+        data-state={pointerState ? "waiting" : status}
+        aria-hidden="true"
+        data-testid="composer-crab"
+        onPointerEnter={() => setHovered(true)}
+        onPointerLeave={() => setHovered(false)}
+        onPointerDown={beginDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={(e) => endDrag(e, true)}
+        onDoubleClick={resetOffsetOnDoubleClick}
+      >
+        {bubble}
+        <OmpPiSvg status={status} poked={pointerState !== null} />
+      </div>
+    );
+  }
+
   return (
     <span
       ref={rootRef}
       className={`composer-mascot composer-mascot-${character}`}
+      style={posStyle}
       data-character={character}
+      data-narrow={narrowGutter || undefined}
+      data-dragging={isDragging || undefined}
       data-animation={effectiveKey}
       data-ready=""
       aria-hidden="true"
@@ -545,9 +650,10 @@ export function ClawdMascot({
         className="composer-mascot-hit"
         onPointerEnter={() => setHovered(true)}
         onPointerLeave={() => setHovered(false)}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerDown={beginDrag}
+        onPointerMove={moveDrag}
+        onPointerUp={(e) => endDrag(e, false)}
+        onDoubleClick={resetOffsetOnDoubleClick}
       >
         {bubble}
       </span>

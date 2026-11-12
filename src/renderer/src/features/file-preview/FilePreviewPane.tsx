@@ -2,16 +2,26 @@
 // 树和预览都经主进程 IPC 取数据（校验落在根目录内）；两页同时挂载、切页只是显隐，所以树的滚动位置和已加载的目录不丢。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { parseDraftKey, type ProjectFilesTarget, type TaskId, type TerminalKey } from "../../../../shared/ipc.ts";
-import { useT } from "../../i18n/use-t.ts";
-import { Close, Restart } from "../../icons.tsx";
+import { useLocale, useT } from "../../i18n/use-t.ts";
+import { Close, External, FileIcon, Folder, Plus, Restart, Search } from "../../icons.tsx";
 import { IconButton, Tabs } from "../../ui/controls.tsx";
+import { reportError } from "../../ui/errors.ts";
 import { useTask } from "../../store/index.ts";
-import { WorkbenchStrip } from "../workbench/WorkbenchStrip.tsx";
+import { switchWorkbenchTab } from "../workbench/workbench-store.ts";
 import { FileTree } from "./FileTree.tsx";
 import { PreviewPage } from "./PreviewPage.tsx";
 import { WorkspaceRoots } from "./WorkspaceRoots.tsx";
 import { filesTarget } from "./files-target.ts";
-import { clearPendingRoot, rootMemoryKey, selectRoot, useSelectedRoot, usePendingRoot } from "./roots-store.ts";
+import {
+  clearPendingRoot,
+  rootMemoryKey,
+  selectRoot,
+  setDefaultRoot,
+  useHasSelectedRoot,
+  useSelectedRoot,
+  usePendingRoot,
+} from "./roots-store.ts";
+import { isScratchChatCwd } from "../../../../shared/ui/sidebar-model.ts";
 import {
   closeFilePreview,
   previewFileInPanel,
@@ -48,16 +58,62 @@ export function FilePreviewPane({
   const dirs = task?.workspaceDirs ?? noDirs;
   // 树当前看的根；列表缩短（目录被移除、任务重启）后落回任务目录。预览页看的是打开文件时的那个根（PanelState.root）。
   const selected = useSelectedRoot(panelKey);
-  const treeRoot = selected <= dirs.length ? selected : 0;
-  const previewRoot = usePreviewPanel()?.root ?? 0;
+  const hasExplicitRoot = useHasSelectedRoot(panelKey);
+  const defaultToFirstWorkspaceDir =
+    !hasExplicitRoot &&
+    dirs.length > 0 &&
+    task !== null &&
+    (isScratchChatCwd(task.cwd) || /[\\/]chats$/i.test(task.cwd));
+  const effectiveSelected = defaultToFirstWorkspaceDir ? 1 : selected;
+  const treeRoot = effectiveSelected <= dirs.length ? effectiveSelected : 0;
+  const previewPanel = usePreviewPanel();
+  const previewRoot = previewPanel?.root ?? 0;
+  const focusLine = previewPanel?.line;
   const target = useMemo(() => filesTarget(panelKey), [panelKey]);
   const treeTarget = useMemo(() => withRoot(target, treeRoot), [target, treeRoot]);
   const previewTarget = useMemo(() => withRoot(target, previewRoot), [target, previewRoot]);
   const [reload, setReload] = useState(0);
+  const locale = useLocale();
+  const isZh = locale === "zh-CN";
+  const [omniQuery, setOmniQuery] = useState("");
+  const [omniResults, setOmniResults] = useState<string[]>([]);
 
   useEffect(() => {
-    if (selected !== treeRoot) selectRoot(panelKey, treeRoot);
-  }, [panelKey, selected, treeRoot]);
+    const q = omniQuery.trim();
+    if (!q || /^https?:\/\//i.test(q)) {
+      setOmniResults([]);
+      return;
+    }
+    let cancelled = false;
+    window.studio
+      .listProjectFiles(treeTarget, q)
+      .then((res) => {
+        if (!cancelled) setOmniResults(res.slice(0, 12));
+      })
+      .catch(() => {
+        if (!cancelled) setOmniResults([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [omniQuery, treeTarget]);
+
+  const dispatchTreeCreate = (kind: "file" | "dir") => {
+    setPanelPage("files");
+    requestAnimationFrame(() => {
+      const treeEl = root.current?.querySelector<HTMLElement>("[data-testid=file-tree]");
+      treeEl?.dispatchEvent(new CustomEvent("studio:file-tree-create", { detail: { kind } }));
+    });
+  };
+
+  useEffect(() => {
+    setDefaultRoot(panelKey, treeRoot);
+    return () => setDefaultRoot(panelKey, 0);
+  }, [panelKey, treeRoot]);
+
+  useEffect(() => {
+    if (selected > dirs.length) selectRoot(panelKey, 0);
+  }, [panelKey, selected, dirs.length]);
 
   const pendingRoot = usePendingRoot(panelKey);
   useEffect(() => {
@@ -122,7 +178,6 @@ export function FilePreviewPane({
         }}
         onKeyDown={onResizerKey}
       />
-      <WorkbenchStrip active="files" taskId={taskId} />
       <header className="file-preview-head">
         <Tabs
           tabs={[
@@ -137,13 +192,41 @@ export function FilePreviewPane({
         />
         <span className="file-preview-spacer" />
         {page === "files" && (
-          <IconButton
-            label={t("preview.refresh")}
-            testId="file-tree-refresh"
-            onClick={() => setReload((count) => count + 1)}
-          >
-            <Restart size={14} />
-          </IconButton>
+          <>
+            <IconButton
+              label={isZh ? "新建文件" : "New File"}
+              tip={isZh ? "新建文件" : "New File"}
+              testId="file-tree-new-file"
+              onClick={() => dispatchTreeCreate("file")}
+            >
+              <Plus size={14} />
+            </IconButton>
+            <IconButton
+              label={isZh ? "新建文件夹" : "New Folder"}
+              tip={isZh ? "新建文件夹" : "New Folder"}
+              testId="file-tree-new-folder"
+              onClick={() => dispatchTreeCreate("dir")}
+            >
+              <Folder size={14} />
+            </IconButton>
+            <IconButton
+              label={isZh ? "在资源管理器中打开项目目录" : "Reveal Project Folder"}
+              tip={isZh ? "在资源管理器中打开项目目录" : "Reveal Project Folder"}
+              testId="file-tree-open-folder"
+              onClick={() => {
+                window.studio.revealProjectFile(treeTarget, "").catch((err: unknown) => reportError(t, err));
+              }}
+            >
+              <External size={14} />
+            </IconButton>
+            <IconButton
+              label={t("preview.refresh")}
+              testId="file-tree-refresh"
+              onClick={() => setReload((count) => count + 1)}
+            >
+              <Restart size={14} />
+            </IconButton>
+          </>
         )}
         <IconButton
           label={t("preview.close")}
@@ -154,6 +237,65 @@ export function FilePreviewPane({
           <Close size={14} />
         </IconButton>
       </header>
+      {page === "files" && (
+        <div className="dsh-sidebar-omni">
+          <Search size={13} />
+          <input
+            type="text"
+            className="dsh-sidebar-omni-input"
+            data-testid="dsh-sidebar-omni-input"
+            value={omniQuery}
+            placeholder={isZh ? "搜索项目文件或输入网址 (URL)…" : "Search files or enter a URL…"}
+            onChange={(e) => setOmniQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && omniQuery.trim() !== "") {
+                e.preventDefault();
+                const q = omniQuery.trim();
+                if (/^(https?:\/\/|localhost[:/])/i.test(q) && taskId !== null) {
+                  switchWorkbenchTab("browser", taskId);
+                  void window.studio.navigateBrowser(taskId, q);
+                  setOmniQuery("");
+                } else if (omniResults.length > 0) {
+                  previewFileInPanel(omniResults[0]!);
+                  setOmniQuery("");
+                }
+              } else if (e.key === "Escape" && omniQuery !== "") {
+                e.preventDefault();
+                e.stopPropagation();
+                setOmniQuery("");
+              }
+            }}
+          />
+          {omniQuery !== "" && (
+            <button
+              type="button"
+              className="dsh-sidebar-omni-clear"
+              onClick={() => setOmniQuery("")}
+              aria-label={isZh ? "清空" : "Clear"}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+      {omniResults.length > 0 && (
+        <div className="dsh-sidebar-omni-results" data-testid="dsh-sidebar-omni-results">
+          {omniResults.map((rel) => (
+            <button
+              key={rel}
+              type="button"
+              className="dsh-sidebar-omni-item"
+              onClick={() => {
+                previewFileInPanel(rel);
+                setOmniQuery("");
+              }}
+            >
+              <FileIcon size={13} />
+              <span className="dsh-sidebar-omni-item-path">{rel}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {taskId !== null && page === "files" && (
         <WorkspaceRoots
           taskId={taskId}
@@ -170,9 +312,11 @@ export function FilePreviewPane({
         active={page === "files"}
         reload={reload}
         selected={previewRoot === treeRoot ? path : null}
-        onOpenFile={previewFileInPanel}
+        onOpenFile={(rel) => previewFileInPanel(rel)}
       />
-      {path !== null && <PreviewPage target={previewTarget} path={path} hidden={page !== "preview"} />}
+      {path !== null && (
+        <PreviewPage target={previewTarget} path={path} focusLine={focusLine} hidden={page !== "preview"} />
+      )}
     </section>
   );
 }

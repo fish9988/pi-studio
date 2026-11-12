@@ -37,10 +37,26 @@ describe("settings.json 的 fontSize", () => {
 
   it("缺失、非档位、类型不对的值回落到 15，其它字段不受影响", async () => {
     for (const bad of [undefined, 0, 11, 23, 15.5, 100, -15, "15", null, true, {}, [15], Number.NaN]) {
-      const settings = await loadWith({ fontSize: bad, theme: "dark" });
+      const settings = await loadWith({ fontSize: bad, theme: "gemini" });
       expect(settings.fontSize).toBe(15);
-      expect(settings.theme).toBe("dark");
+      expect(settings.theme).toBe("gemini");
+      expect(settings.autoCollapseTools).toBe(true);
+      expect(settings.autoCollapseDiffs).toBe(true);
     }
+  });
+
+  it("旧版 light / dark / whale 主题名平滑迁移至独立 colorMode + 主题家族", async () => {
+    const sLight = await loadWith({ theme: "light" });
+    expect(sLight.theme).toBe("default");
+    expect(sLight.colorMode).toBe("light");
+
+    const sDark = await loadWith({ theme: "dark" });
+    expect(sDark.theme).toBe("default");
+    expect(sDark.colorMode).toBe("dark");
+
+    const sWhale = await loadWith({ theme: "whale-dark" });
+    expect(sWhale.theme).toBe("deepseek");
+    expect(sWhale.colorMode).toBe("dark");
   });
 
   it("整个文件不是对象时全部用默认值", async () => {

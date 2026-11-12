@@ -1473,7 +1473,12 @@ export class TspRunner {
     return this.#tree.prepareFork(entryId);
   }
 
-  rewindTo(entryId: string, known?: RewindTarget, summarize = false): Promise<{ text: string; summarized: boolean }> {
+  rewindTo(
+    entryId: string,
+    known?: RewindTarget,
+    summarize = false,
+    _revertFiles = false,
+  ): Promise<{ text: string; images?: PromptImage[]; summarized: boolean }> {
     return this.#tree.rewindTo(entryId, known, summarize);
   }
 

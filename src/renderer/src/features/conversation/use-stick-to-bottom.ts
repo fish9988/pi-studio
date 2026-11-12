@@ -1,11 +1,28 @@
 // 滚动管理（spec 5.4）：吸底、"回到最新"、缩放保位置、切任务记位置、展开/折叠以被点击元素为锚。
 // 唯一的滚动容器是 scroller；content 是它里面的列。吸底时布局变化后在 ResizeObserver 回调里直接把 scrollTop 设到底：
 // 回调在排版之后、绘制之前，这一帧画出来就已经在底部。留到下一个 rAF 设，长出来的内容会先在底边下面画一帧再跳上来（闪一下）。
+// 每次程序改 scrollTop 都要经 scroll-intent 记账：否则 scroll 事件分不出"自己滚的"和"用户上滑"，吸底会被莫名解除/拽回。
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { TaskId } from "../../../../shared/ipc.ts";
+import {
+  classifyScroll,
+  isSmoothScrolling,
+  noteProgrammaticTop,
+  resetScrollIntent,
+  wheelEscapesStick,
+  type ScrollChainNode,
+} from "./scroll-intent.ts";
 import { onStickToBottomRequest } from "./scroll-bus.ts";
 
 const STICK_THRESHOLD = 48;
+/** scrollTop 的 subpixel 容差（缩放、devtools 的取整）。 */
+const TOP_EPSILON = 1;
+
+/** 内层容器只有 overflow-y 是 auto / scroll 时滚轮才滚得动（overflow: hidden 几何上有余量但不吃滚轮）。 */
+function scrollsByWheel(node: ScrollChainNode): boolean {
+  const style = getComputedStyle(node as Element);
+  return style.overflowY === "auto" || style.overflowY === "scroll";
+}
 
 interface SavedScroll {
   top: number;
@@ -14,9 +31,16 @@ interface SavedScroll {
 /** 各任务的滚动位置（切任务回来时恢复）。 */
 const saved = new Map<string, SavedScroll>();
 
-interface Anchor {
+/** 一个"基准块 + 它当时的视口偏移"：锚点块断开时用它量位移。 */
+interface AnchorStop {
   element: Element;
   offset: number;
+}
+
+interface Anchor extends AnchorStop {
+  /** 备用基准：记录锚点时的下一个外层块。锚点块被主进程 del + add 换成新元素（isConnected 变 false）时，
+   *  用它量"上方内容变了多少"——连被换掉那一块的高度变化一起算进去，整段对话不会没补偿就跳一下。 */
+  below: AnchorStop | null;
 }
 
 /** 最外层的 `[data-anchor]` 块，按文档顺序。内层块的底边不超过外层块，"底边在视口顶部以下的第一个块"总是最外层的；
@@ -53,10 +77,27 @@ function firstBelow(list: readonly Element[], top: number): Element | null | und
   return list[lo] ?? null;
 }
 
+/** 列表里 `element` 之后第一个还画着的块（锚点的备用基准）。 */
+function nextDrawn(list: readonly Element[], element: Element): Element | null {
+  const start = list.indexOf(element);
+  if (start < 0) return null;
+  for (let index = start + 1; index < list.length; index += 1) {
+    const node = list[index]!;
+    if (!node.isConnected) continue;
+    const box = node.getBoundingClientRect();
+    if (box.width !== 0 || box.height !== 0) return node;
+  }
+  return null;
+}
+
 export interface StickToBottom {
   /** 脱离吸底且有新内容时为 true：显示"回到最新"。 */
   showJump: boolean;
   scrollToBottom(): void;
+  /** 引擎以外的程序滚动（reveal、对话线跳转）之后调用：算程序滚动、同步记账；离开底部时按"用户要去读别处"脱离吸底，
+   *  并按新位置重取阅读锚点（不重取的话下一次流式增量会按旧锚点把视口拽回去）。
+   *  `away`：不用看当前离底多远，这次滚动就是用户要去读别的位置（对话线跳转一开始就要脱离，不然流式增量会把平滑滚动打断）。 */
+  noteProgrammaticScroll(options?: { away?: boolean }): void;
 }
 
 export function useStickToBottom(
@@ -65,7 +106,6 @@ export function useStickToBottom(
   content: RefObject<HTMLElement | null>,
 ): StickToBottom {
   const stuck = useRef(true);
-  const lastProgrammaticTop = useRef(-1);
   const lastTop = useRef(0);
   const anchor = useRef<Anchor | null>(null);
   /** outermostAnchors 的缓存：对话列的直接子元素增删时作废。 */
@@ -77,8 +117,8 @@ export function useStickToBottom(
     const el = scroller.current;
     if (!el) return;
     const target = el.scrollHeight - el.clientHeight;
-    lastProgrammaticTop.current = target;
     el.scrollTop = target;
+    noteProgrammaticTop(el, el.scrollTop);
     lastTop.current = el.scrollTop;
   }, [scroller]);
 
@@ -88,7 +128,7 @@ export function useStickToBottom(
     pinToBottom();
   }, [pinToBottom]);
 
-  /** 记录阅读锚点：视口顶部下方第一个可见块和它的相对偏移。 */
+  /** 记录阅读锚点：视口顶部下方第一个可见块和它的相对偏移（外加它下面那个块，锚点被删掉时用）。 */
   const recordAnchor = useCallback(() => {
     const el = scroller.current;
     const root = content.current;
@@ -100,8 +140,34 @@ export function useStickToBottom(
       anchors.current = outermostAnchors(root);
       candidate = firstBelow(anchors.current, top);
     }
-    anchor.current = candidate ? { element: candidate, offset: candidate.getBoundingClientRect().top - top } : null;
+    if (!candidate) {
+      anchor.current = null;
+      return;
+    }
+    const offset = candidate.getBoundingClientRect().top - top;
+    const below = nextDrawn(anchors.current, candidate);
+    anchor.current = {
+      element: candidate,
+      offset,
+      below: below === null ? null : { element: below, offset: below.getBoundingClientRect().top - top },
+    };
   }, [scroller, content]);
+
+  /** 引擎以外的程序滚动之后：记账 + 必要时脱离吸底并重取锚点。 */
+  const noteProgrammaticScroll = useCallback(
+    (options?: { away?: boolean }) => {
+      const el = scroller.current;
+      if (!el) return;
+      const range = el.scrollHeight - el.clientHeight;
+      noteProgrammaticTop(el, el.scrollTop);
+      lastTop.current = el.scrollTop;
+      if (options?.away === true || range - el.scrollTop > STICK_THRESHOLD) {
+        stuck.current = false;
+        recordAnchor();
+      }
+    },
+    [scroller, recordAnchor],
+  );
 
   // 切任务：恢复该任务上次的位置和吸底状态（默认吸底）。
   useLayoutEffect(() => {
@@ -110,10 +176,11 @@ export function useStickToBottom(
     const previous = saved.get(taskId);
     stuck.current = previous?.stuck ?? true;
     setShowJump(false);
+    resetScrollIntent(el);
     if (stuck.current) el.scrollTop = el.scrollHeight;
     else el.scrollTop = previous?.top ?? 0;
     lastTop.current = el.scrollTop;
-    lastProgrammaticTop.current = el.scrollTop;
+    noteProgrammaticTop(el, el.scrollTop);
     return () => {
       saved.set(taskId, { top: el.scrollTop, stuck: stuck.current });
     };
@@ -131,7 +198,9 @@ export function useStickToBottom(
     // 按着鼠标 / 触摸时（拖滚动条、拖选文字）的上滚，可滚范围在变也算用户的。
     let pressed = false;
     const onScroll = () => {
-      const programmatic = Math.abs(el.scrollTop - lastProgrammaticTop.current) < 1;
+      const programmatic = classifyScroll(el, el.scrollTop, TOP_EPSILON) === "programmatic";
+      // 平滑滚动期间（对话线跳转）差值一直很大，但也不是用户在滚。
+      const smooth = isSmoothScrolling(el, Date.now());
       const range = el.scrollHeight - el.clientHeight;
       const distance = range - el.scrollTop;
       const layoutDriven = range !== lastRange && !pressed;
@@ -139,7 +208,7 @@ export function useStickToBottom(
       if (distance <= STICK_THRESHOLD) {
         stuck.current = true;
         setShowJump(false);
-      } else if (!programmatic && !layoutDriven && el.scrollTop < lastTop.current - 0.5) {
+      } else if (!programmatic && !smooth && !layoutDriven && el.scrollTop < lastTop.current - 0.5) {
         // 用户主动向上（或"对话线"跳到前面的消息）：立即脱离吸底。
         stuck.current = false;
       }
@@ -153,7 +222,11 @@ export function useStickToBottom(
       pressed = false;
     };
     const onWheel = (event: WheelEvent) => {
-      if (event.deltaY < 0) stuck.current = false;
+      if (
+        event.deltaY < 0 &&
+        !wheelEscapesStick(event.target instanceof Element ? event.target : null, el, event.deltaY, scrollsByWheel)
+      )
+        stuck.current = false;
     };
     const onKey = (event: KeyboardEvent) => {
       if (["PageUp", "Home", "ArrowUp"].includes(event.key)) stuck.current = false;
@@ -165,24 +238,42 @@ export function useStickToBottom(
     // 底下长出新内容时提示"回到最新"。
     let lastHeight = root.offsetHeight;
     let lastWidth = root.offsetWidth;
+    /** 让基准块回到它原来的视口偏移；返回实际补偿的位移（量不到基准时 0）。 */
+    const compensateAnchor = (): number => {
+      const recorded = anchor.current;
+      if (recorded === null) return 0;
+      // 锚点块被主进程 del + add 掉时 isConnected 变 false，用记录里它下面那个块当基准。
+      const reference: AnchorStop | null = recorded.element.isConnected
+        ? recorded
+        : recorded.below?.element.isConnected
+          ? recorded.below
+          : null;
+      if (reference === null) {
+        // 锚点块和备用基准都不在了：不猜位移，保持 scrollTop 不动，重新取一个锚点。
+        recordAnchor();
+        return 0;
+      }
+      const shift = reference.element.getBoundingClientRect().top - el.getBoundingClientRect().top - reference.offset;
+      if (Math.abs(shift) > 0.5) {
+        el.scrollTop += shift;
+        noteProgrammaticTop(el, el.scrollTop);
+      }
+      // 换过基准说明锚点已经失效：按当前位置重新取锚点，下一次测量就用新的。
+      if (reference !== recorded) recordAnchor();
+      return shift;
+    };
     const contentObserver = new ResizeObserver(() => {
       const widthChanged = root.offsetWidth !== lastWidth;
       const grownBy = root.offsetHeight - lastHeight;
       lastHeight = root.offsetHeight;
       lastWidth = root.offsetWidth;
+      // 平滑滚动（对话线跳转）期间位置由发起方接管：这时候再贴底或按锚点补偿，Chromium 会中断平滑动画。
+      if (isSmoothScrolling(el, Date.now())) return;
       if (stuck.current) {
         pinToBottom();
         return;
       }
-      let shift = 0;
-      if (anchor.current?.element.isConnected) {
-        shift =
-          anchor.current.element.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.current.offset;
-        if (Math.abs(shift) > 0.5) {
-          el.scrollTop += shift;
-          lastProgrammaticTop.current = el.scrollTop;
-        }
-      }
+      const shift = compensateAnchor();
       if (!widthChanged && grownBy > Math.max(shift, 0) + 0.5) setShowJump(true);
       lastTop.current = el.scrollTop;
     });
@@ -198,6 +289,7 @@ export function useStickToBottom(
     scrollerObserver.observe(el);
 
     // 展开/折叠任意块以被点击元素为锚：它在视口里的位置不变。
+    // 键盘 Enter / Space 激活折叠头也是按钮的 click（合成 click 冒泡到 el），走的是同一条补偿。
     const onClickCapture = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target.closest("[data-anchor]") : null;
       if (!target || stuck.current) return;
@@ -209,7 +301,7 @@ export function useStickToBottom(
         const delta = pending.element.getBoundingClientRect().top - pending.top;
         if (Math.abs(delta) > 0.5) {
           el.scrollTop += delta;
-          lastProgrammaticTop.current = el.scrollTop;
+          noteProgrammaticTop(el, el.scrollTop);
           lastTop.current = el.scrollTop;
           // 阅读锚点跟着改：同一帧里内容的 ResizeObserver 还会按锚点补偿一次，用旧偏移会把这次补偿抵消掉。
           recordAnchor();
@@ -243,5 +335,5 @@ export function useStickToBottom(
     };
   }, [taskId, scroller, content, pinToBottom, recordAnchor, scrollToBottom]);
 
-  return { showJump, scrollToBottom };
+  return { showJump, scrollToBottom, noteProgrammaticScroll };
 }

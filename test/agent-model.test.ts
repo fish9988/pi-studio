@@ -1,8 +1,9 @@
-// 子代理面板的展示规则（features/agents/agent-model.ts）：哪些状态能插话 / 结束 / 恢复、排序、状态点映射。
+// 子代理面板的展示规则（features/agents/agent-model.ts）：能不能操作、排序、状态点映射。
 import { describe, expect, it } from "vitest";
 import type { HubAgent } from "../src/shared/tsp/agent-hub.ts";
 import {
   agentContextPercent,
+  agentControlsSupported,
   agentElapsed,
   agentProgress,
   canKill,
@@ -39,24 +40,14 @@ const agent = (name: string, status: HubAgent["status"], stats: Partial<HubAgent
 });
 
 describe("子代理面板的操作规则", () => {
-  it("插话：运行 / 等待 / 空闲 / 挂起；结束：运行 / 等待；恢复：被结束 / 挂起（omp 自己的规则）", () => {
-    expect(["pending", "running", "idle", "parked"].every((status) => canSteer(status as HubAgent["status"]))).toBe(
-      true,
-    );
-    expect(["done", "failed", "aborted"].some((status) => canSteer(status as HubAgent["status"]))).toBe(false);
-    expect(canKill("running")).toBe(true);
-    expect(canKill("pending")).toBe(true);
-    expect(canKill("done")).toBe(false);
-    expect(canKill("aborted")).toBe(false);
-    expect(canRevive("aborted")).toBe(true);
-    expect(canRevive("parked")).toBe(true);
-    expect(canRevive("running")).toBe(false);
-    expect(canRevive("done")).toBe(false);
-  });
-
-  it("能进入对话（详情头部有“进入对话”）：运行 / 空闲 / 挂起 / 被结束（omp 聚焦即复活）；等待中（Hub 里还没有）/ 已完成 / 失败的没有", () => {
-    for (const status of ["running", "idle", "parked", "aborted"] as const) expect(canFocus(status)).toBe(true);
-    for (const status of ["pending", "done", "failed"] as const) expect(canFocus(status)).toBe(false);
+  it("pi 的 subagent 工具没有 Hub 通道，四个操作全部不可用（面板只提供查看）", () => {
+    expect(agentControlsSupported).toBe(false);
+    for (const status of ["pending", "running", "idle", "parked", "done", "failed", "aborted"] as const) {
+      expect(canSteer(status)).toBe(false);
+      expect(canFocus(status)).toBe(false);
+      expect(canKill(status)).toBe(false);
+      expect(canRevive(status)).toBe(false);
+    }
   });
 
   it("运行中的排前面，同类保持原来的顺序", () => {

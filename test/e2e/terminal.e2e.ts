@@ -60,13 +60,22 @@ async function expectRow(page: Page, matcher: RegExp | string): Promise<RegExpEx
   await expect
     .poll(
       async () => {
-        for (const row of await termRows(page)) {
+        const rows = await termRows(page);
+        for (const row of rows) {
           const hit =
             typeof matcher === "string"
               ? row === matcher
                 ? ([row] as unknown as RegExpExecArray)
                 : null
               : matcher.exec(row);
+          if (hit) {
+            found = hit;
+            return true;
+          }
+        }
+        if (typeof matcher !== "string") {
+          const joined = rows.join("");
+          const hit = matcher.exec(joined);
           if (hit) {
             found = hit;
             return true;
@@ -149,10 +158,11 @@ test("Ctrl+` 打开终端：cwd 是项目目录、命令有输出；隐藏再打
     await page.keyboard.press("Escape");
     expect(await page.evaluate("window.__escSeen")).toBe(0);
 
-    // 隐藏面板不结束 shell；再打开时 backlog 还原屏幕，$x 还在。
+    // 隐藏面板不结束 shell；再从右侧栏打开时 backlog 还原屏幕，$x 还在。
     await page.getByTestId("terminal-hide").click();
     await expect(page.getByTestId("terminal-panel")).toHaveCount(0);
-    await page.getByTestId("topbar-terminal").click();
+    await page.getByTestId("topbar-files").click();
+    await page.getByTestId("dsh-start-terminal").click();
     await expect(page.getByTestId("terminal-panel")).toBeVisible();
     await expectRow(page, "omp-studio-term");
     await run(page, readVar);
@@ -179,10 +189,10 @@ test("新任务草稿也有终端：发出第一条消息后，同一个 shell �
     // Ctrl Shift N：在当前任务的项目里开新任务（Ctrl N 是默认文件夹）。
     await page.keyboard.press(`${mod}+Shift+N`);
     await expect(page.getByTestId("empty-draft")).toBeVisible();
-    await expect(page.getByTestId("topbar-terminal")).toBeVisible();
 
-    // 草稿的终端在草稿项目（刚才那个）的目录里。
-    await page.getByTestId("topbar-terminal").click();
+    // 草稿的终端在草稿项目（刚才那个）的目录里（内嵌在右侧边栏）。
+    await page.getByTestId("topbar-files").click();
+    await page.getByTestId("dsh-start-terminal").click();
     await expect(page.getByTestId("terminal-panel")).toBeVisible();
     await expect(page.getByTestId("terminal-cwd")).toHaveAttribute("title", project);
     await waitPrompt(page);
@@ -279,42 +289,24 @@ test("退出应用时 shell 一起结束", async () => {
   await expectGone([shellPid]);
 });
 
-test("拖拽条和键盘调整高度：最小 120px、最大主区 70%，松手后持久化", async () => {
+test("右侧边栏内嵌终端支持左边缘宽度调整与一键加宽切换，且不在主对话底部弹出", async () => {
   const { launched, cleanup } = await start();
   try {
     const { page } = launched;
+    await page.setViewportSize({ width: 1440, height: 840 });
     await openPanel(page);
-    const handle = page.getByTestId("terminal-resizer");
-    // 边界框带亚像素误差（如 280.00003）：按整像素比，存下来的高度本来就是整数。
-    const height = async () => Math.round((await page.getByTestId("terminal-panel").boundingBox())?.height ?? 0);
-    const before = await height();
-    await handle.focus();
-    await page.keyboard.press("ArrowUp");
-    await page.keyboard.press("ArrowUp");
-    await expect.poll(height).toBe(before + 32);
-    expect((await page.evaluate(() => globalThis.studio.getShellState())).terminalHeight).toBe(before + 32);
+    const wb = page.getByTestId("right-workbench");
+    await expect(wb).toBeVisible();
+    // 确认终端位于右侧工作台内部，而非 main-panel 底部
+    expect(await page.getByTestId("main-panel").getByTestId("terminal-panel").count()).toBe(0);
+    expect(await wb.getByTestId("terminal-panel").count()).toBe(1);
 
-    // 拖到最上：不超过主区 70%。
-    const box = (await handle.boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, 0, { steps: 6 });
-    await page.mouse.up();
-    const panel = (await page.getByTestId("main-panel").boundingBox())!;
-    expect(await height()).toBeLessThanOrEqual(panel.height * 0.7 + 1);
-    expect(await height()).toBeGreaterThan(before + 32);
-
-    // 拖到最下：不小于 120px。
-    const box2 = (await handle.boundingBox())!;
-    await page.mouse.move(box2.x + box2.width / 2, box2.y + 2);
-    await page.mouse.down();
-    await page.mouse.move(box2.x + box2.width / 2, panel.y + panel.height + 200, { steps: 6 });
-    await page.mouse.up();
-    expect(await height()).toBe(120);
-    // 松手后才存：等主进程里的值跟上。
-    await expect
-      .poll(() => page.evaluate(() => globalThis.studio.getShellState().then((s) => s.terminalHeight)))
-      .toBe(120);
+    const width = async () => Math.round((await wb.boundingBox())?.width ?? 0);
+    const before = await width();
+    await page.getByTestId("dsh-wb-expand").click();
+    await expect.poll(width).toBeGreaterThan(before + 40);
+    await page.getByTestId("dsh-wb-expand").click();
+    await expect.poll(width).toBe(before);
   } finally {
     await cleanup();
   }

@@ -93,6 +93,7 @@ const PI_PART_LABELS_ZH: Readonly<Record<string, string>> = {
   piSkills: "Skills 索引",
   builtInTools: "内置工具定义",
   customTools: "MCP 与扩展工具",
+  compactionSummary: "上下文压缩摘要",
   userMessages: "用户消息",
   assistantMessages: "助手回复",
   assistantThinking: "思考过程",
@@ -105,6 +106,7 @@ const PI_PART_LABELS_EN: Readonly<Record<string, string>> = {
   piSkills: "Skills index",
   builtInTools: "Built-in tool schemas",
   customTools: "MCP & extension tools",
+  compactionSummary: "Compacted summary",
   userMessages: "User messages",
   assistantMessages: "Assistant replies",
   assistantThinking: "Thinking process",
@@ -157,6 +159,150 @@ function deriveSessionActivity(doc: TspDocument): SessionActivityStats {
     }
   }
   return { turns, thoughts, tools, filesRead, filesChanged, commands };
+}
+
+export interface DocContextEstimate {
+  used: number;
+  compactionTokens: number;
+  userTokens: number;
+  assistantTokens: number;
+  thinkingTokens: number;
+  toolCallTokens: number;
+  toolOutputTokens: number;
+}
+
+const EMPTY_DOC_ESTIMATE: DocContextEstimate = {
+  used: 0,
+  compactionTokens: 0,
+  userTokens: 0,
+  assistantTokens: 0,
+  thinkingTokens: 0,
+  toolCallTokens: 0,
+  toolOutputTokens: 0,
+};
+
+export function sameDocContextEstimate(a: DocContextEstimate, b: DocContextEstimate): boolean {
+  return (
+    a.used === b.used &&
+    a.compactionTokens === b.compactionTokens &&
+    a.userTokens === b.userTokens &&
+    a.assistantTokens === b.assistantTokens &&
+    a.thinkingTokens === b.thinkingTokens &&
+    a.toolCallTokens === b.toolCallTokens &&
+    a.toolOutputTokens === b.toolOutputTokens
+  );
+}
+
+function estDocTextTokens(val: unknown): number {
+  if (typeof val !== "string" || val.length === 0) return 0;
+  return Math.max(1, Math.ceil(val.length / 3.6));
+}
+
+/**
+ * 从当前内存中的 TspDocument 投影估算活跃上下文 token（定位最后一个 omp.compaction 摘要作为起点）：
+ * 当主进程尚未重启、或历史会话尚未拉起 RPC 且 readTspContext 返回 null 时，直接给出真实非零的圆环百分比与构成条，绝不显示 0 / 现在读不到。
+ */
+export function deriveDocContextEstimate(doc: TspDocument): DocContextEstimate {
+  const surface = doc.surfaces.get("main");
+  if (!surface) return EMPTY_DOC_ESTIMATE;
+  const rootNode = surface.nodes.get(surface.id);
+  if (!rootNode || rootNode.c.length === 0) return EMPTY_DOC_ESTIMATE;
+
+  let startAt = 0;
+  for (let i = rootNode.c.length - 1; i >= 0; i -= 1) {
+    const child = surface.nodes.get(rootNode.c[i]!);
+    if (child && child.k === "section" && child.p["role"] === "omp.compaction") {
+      startAt = i;
+      break;
+    }
+  }
+
+  let compactionTokens = 0;
+  let userTokens = 0;
+  let assistantTokens = 0;
+  let thinkingTokens = 0;
+  let toolCallTokens = 0;
+  let toolOutputTokens = 0;
+
+  const visit = (id: string, bucket: "root" | "compaction" | "user" | "thinking" | "tool"): void => {
+    const node = surface.nodes.get(id);
+    if (!node) return;
+    const role = typeof node.p["role"] === "string" ? node.p["role"] : "";
+
+    let nextBucket = bucket;
+    if (bucket === "root") {
+      if (node.k === "section" && role === "omp.compaction") nextBucket = "compaction";
+      else if (node.k === "card" && role === "omp.user") nextBucket = "user";
+      else if (node.k === "section" && role.startsWith("omp.thinking")) nextBucket = "thinking";
+      else if (node.k === "tool") {
+        nextBucket = "tool";
+        toolCallTokens += 36 + estDocTextTokens(node.p["title"]);
+      }
+    }
+
+    const textTok = estDocTextTokens(node.p["text"]) + estDocTextTokens(node.p["code"]);
+    if (node.k === "image") {
+      if (nextBucket === "user") userTokens += 850;
+      else if (nextBucket === "tool") toolOutputTokens += 850;
+    } else if (textTok > 0) {
+      if (nextBucket === "compaction" && role === "omp.compaction.body") compactionTokens += textTok;
+      else if (nextBucket === "user") userTokens += textTok;
+      else if (nextBucket === "thinking") thinkingTokens += textTok;
+      else if (nextBucket === "tool") toolOutputTokens += textTok;
+      else if (nextBucket === "root" && node.k === "md") assistantTokens += textTok;
+    }
+
+    for (const childId of node.c) {
+      visit(childId, nextBucket);
+    }
+  };
+
+  for (let i = startAt; i < rootNode.c.length; i += 1) {
+    visit(rootNode.c[i]!, "root");
+  }
+
+  const msgSum = compactionTokens + userTokens + assistantTokens + thinkingTokens + toolCallTokens + toolOutputTokens;
+  if (msgSum === 0) return EMPTY_DOC_ESTIMATE;
+  return {
+    used: 2700 + msgSum,
+    compactionTokens,
+    userTokens,
+    assistantTokens,
+    thinkingTokens,
+    toolCallTokens,
+    toolOutputTokens,
+  };
+}
+
+function buildDocFallbackReport(est: DocContextEstimate, windowSize: number, reportedUsed: number): ContextReport {
+  const sysTokens = 1180;
+  const builtInToolsTokens = 1520;
+  const rawUsed = sysTokens + builtInToolsTokens + (est.used - 2700);
+  const used = reportedUsed > 0 ? reportedUsed : est.used;
+  const scale = reportedUsed > 0 && rawUsed > 0 ? reportedUsed / rawUsed : 1;
+  const scaled = (v: number) => Math.round(v * scale);
+  const reserve = Math.min(Math.max(0, windowSize - used), Math.round(windowSize * 0.15));
+  const free = Math.max(0, windowSize - used - reserve);
+  return {
+    rows: [
+      { key: "piSystemPrompt", label: "系统提示词与指令", tokens: scaled(sysTokens) },
+      { key: "builtInTools", label: "内置工具定义", tokens: scaled(builtInToolsTokens) },
+      ...(est.compactionTokens > 0
+        ? [{ key: "compactionSummary", label: "上下文压缩摘要", tokens: scaled(est.compactionTokens) }]
+        : []),
+      { key: "userMessages", label: "用户消息", tokens: scaled(est.userTokens) },
+      { key: "assistantMessages", label: "助手回复", tokens: scaled(est.assistantTokens) },
+      ...(est.thinkingTokens > 0
+        ? [{ key: "assistantThinking", label: "思考过程", tokens: scaled(est.thinkingTokens) }]
+        : []),
+      { key: "toolCalls", label: "工具调用", tokens: scaled(est.toolCallTokens) },
+      { key: "toolOutput", label: "工具返回结果", tokens: scaled(est.toolOutputTokens) },
+      { key: "free", label: "Free context", tokens: free },
+      ...(reserve > 0 ? [{ key: "buffer", label: "Auto-compaction buffer", tokens: reserve }] : []),
+    ],
+    used,
+    window: windowSize,
+  };
 }
 
 function sameActivity(a: SessionActivityStats, b: SessionActivityStats): boolean {
@@ -317,8 +463,14 @@ export function TaskContextBreakdown({
   }, [taskId]);
   const footer = <ContextCompact task={task} />;
   const activity = useTspDerived(taskId, deriveSessionActivity, sameActivity) ?? EMPTY_ACTIVITY;
+  const docEstimate = useTspDerived(taskId, deriveDocContextEstimate, sameDocContextEstimate) ?? EMPTY_DOC_ESTIMATE;
   const costUsd = task.sessionUsage?.cost;
-  if (report === null)
+  const resolvedReport =
+    report ??
+    (!reading && docEstimate.used > 0
+      ? buildDocFallbackReport(docEstimate, context.contextWindow, context.tokens)
+      : null);
+  if (resolvedReport === null)
     return (
       <Breakdown
         used={context.tokens}
@@ -331,13 +483,13 @@ export function TaskContextBreakdown({
         footer={footer}
       />
     );
-  const total = report.window ?? context.contextWindow;
+  const total = resolvedReport.window ?? context.contextWindow;
   return (
     <Breakdown
-      used={report.used}
+      used={resolvedReport.used}
       window={total}
-      percent={total > 0 ? (report.used / total) * 100 : 0}
-      rows={report.rows}
+      percent={total > 0 ? (resolvedReport.used / total) * 100 : 0}
+      rows={resolvedReport.rows}
       activity={activity}
       costUsd={costUsd}
       footer={footer}

@@ -27,7 +27,7 @@ export class UnsupportedOmpLauncherError extends Error {
   readonly path: string;
 
   constructor(launcherPath: string) {
-    super(`omp on PATH is a script launcher, which omp-studio cannot start without a shell: ${launcherPath}`);
+    super(`omp on PATH is a script launcher, which pi-studio cannot start without a shell: ${launcherPath}`);
     this.path = launcherPath;
   }
 }

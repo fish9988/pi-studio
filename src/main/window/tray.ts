@@ -75,7 +75,7 @@ export function createTray(): void {
   if (process.platform === "darwin") image.setTemplateImage(true);
   tray = new Tray(image);
   tray.setToolTip(t(resolveLocale(), "notify.tray.name"));
-  // mac：设了 setContextMenu 后左键也弹菜单、不再触发 click（推测，未实测），所以菜单第一项"打开 omp-studio"是 mac 上找回窗口的入口；
+  // mac：设了 setContextMenu 后左键也弹菜单、不再触发 click（推测，未实测），所以菜单第一项"打开 pi-studio"是 mac 上找回窗口的入口；
   // Windows 左键仍直接打开窗口。
   tray.on("click", actions.open);
   // 右键菜单在显示前重新生成不可行（setContextMenu 才生效），鼠标移上图标时先刷新，覆盖语言切换。

@@ -14,7 +14,7 @@
   border: 0;
   border-left: 1px solid var(--border-subtle);
   border-radius: 0;
-  animation: panel-in var(--dur-slow) var(--ease-out);
+  animation: none;
 }
 .file-preview:focus {
   outline: none;
@@ -328,34 +328,40 @@
   outline-offset: 1px;
 }
 
-/* 文件页顶部的工作区目录行（/add-dir）：任务目录 + 额外目录 + 添加按钮；窄时折行 */
+/* 文件页顶部的工作区目录行（/add-dir）：单行横向滚动轻胶囊条，告别多行挤压 */
 .file-preview-roots {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-1) var(--space-2-5);
   font-size: var(--fs-xs);
   border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.file-preview-roots::-webkit-scrollbar {
+  display: none;
 }
 .file-preview-root-group {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  max-width: 100%;
 }
 .file-preview-root {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
   max-width: 14em;
-  height: var(--control-h-xs);
+  height: 24px;
   padding: 0 var(--space-2);
   font: inherit;
   color: var(--text-2);
   background: transparent;
-  border: 1px solid var(--border-subtle);
+  border: 0;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -465,4 +471,366 @@
 .file-preview-outline-item:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+/* ───────── DSH / Antigravity 右侧边栏搜索栏与开始启动器 (图3 & 图8) ───────── */
+
+.dsh-sidebar-omni {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 32px;
+  margin: var(--space-1-5) var(--space-2-5);
+  padding: 0 var(--space-2-5);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-3);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+
+.dsh-sidebar-omni:focus-within {
+  background: var(--bg-raised);
+  border-color: var(--border-strong);
+  color: var(--text-2);
+}
+
+.dsh-sidebar-omni-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  outline: none;
+}
+
+.dsh-sidebar-omni-input::placeholder {
+  color: var(--text-3);
+}
+
+.dsh-sidebar-omni-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dsh-sidebar-omni-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dsh-sidebar-omni-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 180px;
+  margin: 0 var(--space-2-5) var(--space-1-5);
+  padding: var(--space-1);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  overflow-y: auto;
+}
+
+.dsh-sidebar-omni-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  width: 100%;
+  padding: 5px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dsh-sidebar-omni-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dsh-sidebar-omni-item-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───────── 文件树内联新建 / 重命名 / 删除栏 ───────── */
+
+.file-tree-prompt-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  margin: var(--space-1-5) var(--space-2);
+  padding: var(--space-2) var(--space-2-5);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+
+.file-tree-prompt-label {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.file-tree-prompt-row,
+.file-tree-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.file-tree-prompt-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+
+.file-tree-prompt-input:focus {
+  border-color: var(--accent);
+}
+
+.file-tree-prompt-btn {
+  height: 26px;
+  padding: 0 var(--space-2-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.file-tree-prompt-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.file-tree-prompt-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.file-tree-prompt-btn-primary:hover {
+  background: var(--accent);
+  color: #fff;
+  filter: brightness(1.06);
+}
+
+.file-tree-prompt-btn-danger {
+  background: var(--st-error);
+  border-color: var(--st-error);
+  color: #fff;
+}
+
+/* ───────── 图片 / SVG 画布背景模式与浮层尺寸信息 ───────── */
+
+.file-preview-image {
+  position: relative;
+}
+
+.file-preview-image[data-bg="grid"] {
+  background-color: var(--bg-sunken);
+  background-image:
+    linear-gradient(45deg, rgba(128, 128, 128, 0.1) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(128, 128, 128, 0.1) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(128, 128, 128, 0.1) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(128, 128, 128, 0.1) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+}
+
+.file-preview-image[data-bg="light"] {
+  background: #f8f7f4;
+}
+
+.file-preview-image[data-bg="dark"] {
+  background: #18181b;
+}
+
+.file-preview-image-hud {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2-5);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.file-preview-image-bg-btn {
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.file-preview-image-bg-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ───────── CSV / TSV 数据表格预览与 JSON 结构树预览 ───────── */
+
+.file-preview-table-wrap {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.file-preview-table-meta {
+  padding: var(--space-1-5) var(--space-3);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.file-preview-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.file-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+}
+
+.file-preview-table th,
+.file-preview-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.file-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-weight: var(--fw-strong);
+}
+
+.file-preview-table-idx {
+  width: 36px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-align: right;
+  user-select: none;
+}
+
+.file-preview-json-tree {
+  padding: var(--space-3) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-code-sm);
+  line-height: 1.6;
+}
+
+.file-preview-json-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.file-preview-json-toggle:hover {
+  background: var(--bg-hover);
+}
+
+.file-preview-json-caret {
+  width: 12px;
+  color: var(--text-3);
+}
+
+.file-preview-json-key {
+  color: var(--accent);
+}
+
+.file-preview-json-meta {
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+}
+
+.file-preview-json-val[data-type="str"] {
+  color: var(--diff-add-fg);
+}
+
+.file-preview-json-val[data-type="num"] {
+  color: #d97706;
+}
+
+.file-preview-json-val[data-type="lit"] {
+  color: #7c3aed;
+}
+
+.file-preview-media-audio {
+  width: min(100%, 360px);
+}
+
+.file-preview-media-video {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: var(--radius-md);
 }

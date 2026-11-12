@@ -38,7 +38,7 @@ import { useFold } from "../use-fold.ts";
 import { useEntrance } from "../entrance.ts";
 import { useAge } from "../use-clock.ts";
 import { useTspEnded } from "../tsp-context.ts";
-import { useSettings } from "../../../store/settings-store.ts";
+import { currentLocale, useSettings } from "../../../store/settings-store.ts";
 
 // ───────── tool ─────────
 
@@ -110,7 +110,7 @@ function CommandText({ text, lang }: { text: string; lang: string | undefined })
 const CD_PREFIX =
   /^\s*(?:cd|Set-Location|sl|pushd|chdir)(?:\s+\/d)?\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:;|&&|\r?\n)\s*/i;
 const ENV_PREFIX =
-  /^\s*(?:\$env:[A-Za-z_][\w]*\s*\+?=\s*(?:"[^"]*"|'[^']*'|[^\s;]+)|export\s+[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&]+)|set\s+[A-Za-z_]\w*=[^&\r\n]*)\s*(?:;|&&|\r?\n)\s*/i;
+  /^\s*(?:\$(?:env:)?[A-Za-z_][\w]*\s*\+?=\s*(?:"[^"]*"|'[^']*'|[^\s;]+)|export\s+[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|[^\s;&]+)|set\s+[A-Za-z_]\w*=[^&\r\n]*)\s*(?:;|&&|\r?\n)\s*/i;
 
 /** 剥离命令开头的 `cd <dir>;` / `$env:X = …;` 等噪音（复刻自 pi-agent-desktop-more lib/work-timeline.ts）。 */
 export function stripCommandNoise(command: string): string {
@@ -124,6 +124,50 @@ export function stripCommandNoise(command: string): string {
   return trimmed || command.trim();
 }
 
+function isCommandToolName(name: string | undefined): boolean {
+  const n = (name ?? "").toLowerCase();
+  return n === "bash" || n === "powershell" || n === "shell" || n === "eval";
+}
+
+function isWriteOrEditToolName(name: string | undefined): boolean {
+  const n = (name ?? "").toLowerCase();
+  return n === "write" || n === "edit" || n === "ast_edit" || n === "apply_patch";
+}
+
+function localizedToolTitle(name: string | undefined, rawTitle: TspText | undefined): TspText | undefined {
+  if (currentLocale() !== "zh-CN" || typeof rawTitle !== "string") return rawTitle;
+  const n = (name ?? "").toLowerCase();
+  const rawLower = rawTitle.trim().toLowerCase();
+  if (
+    isCommandToolName(n) &&
+    (rawLower === "bash" || rawLower === "powershell" || rawLower === "shell" || rawLower === "eval")
+  ) {
+    return "运行命令";
+  }
+  if (
+    (n === "read" || n === "read_file" || n === "view") &&
+    (rawLower === "read" || rawLower === "read_file" || rawLower === "view")
+  ) {
+    return "读取文件";
+  }
+  if ((n === "edit" || n === "ast_edit" || n === "apply_patch") && (rawLower === "edit" || rawLower === n)) {
+    return "编辑";
+  }
+  if (n === "write" && rawLower === "write") return "写入";
+  if ((n === "grep" || n === "search") && (rawLower === "grep" || rawLower === "search")) return "搜索文件内容";
+  if ((n === "find" || n === "glob") && (rawLower === "find" || rawLower === "glob")) return "查找文件";
+  if (n === "ls" && (rawLower === "list" || rawLower === "ls")) return "列出目录";
+  if (
+    (n === "context" || n === "memory" || n === "inject" || n === "context_inject") &&
+    (rawLower === n || rawLower === "context")
+  ) {
+    return "上下文注入";
+  }
+  if (n === "web_search" && (rawLower === "web search" || rawLower === "web_search")) return "搜索网页";
+  if (n === "fetch" && rawLower === "fetch") return "抓取网页";
+  return rawTitle;
+}
+
 function openToolFile(p: Readonly<Record<string, unknown>>, ctx: TspContext): void {
   const href = asString(p.href);
   if (href !== undefined && /^file:\/\//i.test(href)) {
@@ -132,6 +176,15 @@ function openToolFile(p: Readonly<Record<string, unknown>>, ctx: TspContext): vo
   }
   const target = p.target;
   if (typeof target === "string" && target.trim() !== "") {
+    const lineMatch = /^(.*?):(\d+)(?:[-:]\d+)?$/.exec(target.trim());
+    if (lineMatch) {
+      const cleanPath = lineMatch[1]!.trim();
+      const lineNum = Number.parseInt(lineMatch[2]!, 10);
+      if (cleanPath !== "") {
+        openFilePreview(ctx.taskId, cleanPath, Number.isFinite(lineNum) && lineNum > 0 ? lineNum : undefined);
+        return;
+      }
+    }
     const clean = target.replace(/(?::\d+(?:[-:]\d+)?|\s+\(\d+.*\))$/, "").trim();
     if (clean !== "") openFilePreview(ctx.taskId, clean);
   }
@@ -139,9 +192,19 @@ function openToolFile(p: Readonly<Record<string, unknown>>, ctx: TspContext): vo
 
 function Target({ p, ctx }: { p: Readonly<Record<string, unknown>>; ctx: TspContext }) {
   const target = p.target as TspText | undefined;
-  if (target === undefined) return null;
+  // 工具参数还在流式生成（主进程先给 pending / running，target 陆续补进来）：先占个位，别让卡片头空着一截。
+  if (target === undefined) {
+    const streaming = p.status === "pending" || p.status === "running";
+    if (!streaming) return null;
+    return (
+      <span className="tsp-tool-target pending" aria-busy="true">
+        {currentLocale() === "zh-CN" ? "准备中…" : "Preparing…"}
+      </span>
+    );
+  }
   const kind = asString(p.targetKind) ?? "text";
   const href = asString(p.href);
+  const toolName = asString(p.name);
   let body: ReactNode;
   if (typeof target !== "string") body = <TspSpans text={target} />;
   else if (kind === "command") body = <CommandText text={stripCommandNoise(target)} lang={asString(p.lang)} />;
@@ -149,11 +212,18 @@ function Target({ p, ctx }: { p: Readonly<Record<string, unknown>>; ctx: TspCont
     const match = /^(.*?)(:\d+(?:[-:]\d+)?)?$/.exec(target);
     const path = match?.[1] ?? target;
     const position = match?.[2];
-    const cut = path.lastIndexOf("/") + 1;
-    body = (
+    const normalized = path.replace(/\\/g, "/");
+    const cut = normalized.lastIndexOf("/") + 1;
+    const filenameOnly = isWriteOrEditToolName(toolName) && cut > 0;
+    body = filenameOnly ? (
       <>
-        <span className="dir">{path.slice(0, cut)}</span>
-        <span className="name">{path.slice(cut)}</span>
+        <span className="name">{normalized.slice(cut)}</span>
+        {position && <span className="ln">{position}</span>}
+      </>
+    ) : (
+      <>
+        <span className="dir">{normalized.slice(0, cut)}</span>
+        <span className="name">{normalized.slice(cut)}</span>
         {position && <span className="ln">{position}</span>}
       </>
     );
@@ -168,10 +238,11 @@ function Target({ p, ctx }: { p: Readonly<Record<string, unknown>>; ctx: TspCont
   } else body = target;
   const canOpenFile =
     kind === "path" && (typeof target === "string" || (href !== undefined && /^file:\/\//i.test(href)));
+  const tooltip = typeof target === "string" && (kind === "command" || kind === "path") ? target : href;
   return (
     <span
       className={`tsp-tool-target ${kind}`}
-      title={href ?? (kind === "command" && typeof target === "string" ? target : undefined)}
+      title={tooltip}
       onClick={
         canOpenFile
           ? (event) => {
@@ -208,9 +279,20 @@ function useJustFinished(running: boolean): [boolean, () => void] {
   return [finished, () => setFinished(false)];
 }
 
-function ToolStatusGlyph({ status, fresh, settle }: { status: ToolStatus; fresh: boolean; settle(): void }) {
-  if (status === "running") return <i className="tsp-tool-spin" />;
-  if (status === "error") return <TspIcon name="x-circle" />;
+function ToolStatusGlyph({
+  status,
+  fresh,
+  settle,
+  suppressErrorGlyph,
+}: {
+  status: ToolStatus;
+  fresh: boolean;
+  settle(): void;
+  suppressErrorGlyph?: boolean | undefined;
+}) {
+  // pending 也要转：参数还在流式生成时卡片头上不能没有"在动"的信号（转标记复用运行中的那一套）。
+  if (status === "running" || status === "pending") return <i className="tsp-tool-spin" />;
+  if (status === "error") return suppressErrorGlyph ? null : <i className="tsp-tool-err-dot" aria-hidden="true" />;
   if (status === "cancelled") return <TspIcon name="slash-circle" />;
   if (status === "done" && fresh)
     return (
@@ -242,6 +324,7 @@ function toolPreview(preview: unknown): ToolPreview {
 }
 
 function ToolTime({ status, age, took }: { status: ToolStatus; age: number | undefined; took: number | undefined }) {
+  // pending（参数还在流式生成）也算进行中：主进程会给 pending 节点带 `age: 0`，age 到了这里就按 useAge 实时走字。
   const live = status === "running" || status === "pending";
   const value = useAge(age, live && age !== undefined);
   if (live ? age === undefined : took === undefined && age === undefined) return null;
@@ -264,8 +347,11 @@ export function Tool(props: NodeProps) {
   const collapsible = p.collapsible === true;
   const [collapsed, toggle] = useFold(props, collapsible && p.collapsed === true);
   const preview = toolPreview(p.preview);
-  // 设置"工具调用只显示标题"（toolHeadsOnly）：折叠时不画 omp 给的预览。wait 卡除外：它的预览就是后台作业的进度磁贴。
-  const headsOnly = (useSettings()?.toolHeadsOnly ?? false) && p.name !== "wait";
+  // 设置"工具调用只显示标题"（toolHeadsOnly）或"自动收起 Diff"（autoCollapseDiffs）：折叠时不画 edit/write 的大段 diff 预览，点卡片头再展开。
+  const runtimeSettings = useSettings();
+  const headsOnly = (runtimeSettings?.toolHeadsOnly ?? false) && p.name !== "wait";
+  const autoCollapseDiffs = runtimeSettings?.autoCollapseDiffs ?? true;
+  const isDiffTool = p.name === "edit" || p.name === "write";
   const inline = p.frame === "inline";
   const exit = asNumber(p.exit);
   const command =
@@ -300,7 +386,8 @@ export function Tool(props: NodeProps) {
   const hasWebSources =
     p.name === "web_search" &&
     childIds.some((id) => peekTspNode(ctx.taskId, ctx.sf, id)?.p["role"] === "omp.tool.files");
-  const hideCollapsedPreview = headsOnly || (p.name === "web_search" && !hasWebSources);
+  const hideCollapsedPreview =
+    headsOnly || (isDiffTool && autoCollapseDiffs) || (p.name === "web_search" && !hasWebSources);
 
   let content: ReactNode = null;
   let fold = collapsible ? OPEN_FOLD : NO_FOLD;
@@ -360,11 +447,17 @@ export function Tool(props: NodeProps) {
         onKeyDown={onHeadKey}
       >
         <span className="tsp-tool-ic">
-          <TspIcon name={toolIconName(asString(p.name) ?? "")} />
+          {isCommandToolName(asString(p.name)) ? (
+            <span className="tsp-tool-cmd-prompt" aria-hidden="true">
+              ›
+            </span>
+          ) : (
+            <TspIcon name={toolIconName(asString(p.name) ?? "")} />
+          )}
         </span>
         <span className="tsp-tool-line">
           <span className="tsp-tool-title">
-            <TspSpans text={p.title as TspText | undefined} />
+            <TspSpans text={localizedToolTitle(asString(p.name), p.title as TspText | undefined)} />
           </span>
           {nodeRole(node) === ASK_TOOL_ROLE ? <AskTarget p={p} id={node.id} ctx={ctx} /> : <Target p={p} ctx={ctx} />}
           {meta.map((m, index) => (
@@ -383,15 +476,20 @@ export function Tool(props: NodeProps) {
               <TspSpans text={note} />
             </span>
           )}
-          {exit !== undefined && exit !== 0 && (
-            <span className="tsp-chip tsp-tool-exit" data-status="error">
-              exit {exit}
+          {((exit !== undefined && exit !== 0) || (isCommandToolName(asString(p.name)) && status === "error")) && (
+            <span className="tsp-tool-exit-note" data-testid="tsp-tool-exit-note">
+              {currentLocale() === "zh-CN" ? `• 退出码 ${exit ?? 1}` : `• exit ${exit ?? 1}`}
             </span>
           )}
         </span>
         <ToolTime status={reported} age={asNumber(p.age)} took={asNumber(p.took)} />
         <span className="tsp-tool-st">
-          <ToolStatusGlyph status={status} fresh={justFinished} settle={settleFinished} />
+          <ToolStatusGlyph
+            status={status}
+            fresh={justFinished}
+            settle={settleFinished}
+            suppressErrorGlyph={(exit !== undefined && exit !== 0) || isCommandToolName(asString(p.name))}
+          />
         </span>
         {collapsible && (
           <span className="tsp-chev" data-collapsed={collapsed || undefined}>

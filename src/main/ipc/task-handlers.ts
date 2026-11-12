@@ -6,8 +6,7 @@ import path from "node:path";
 import { chatsDir } from "../tasks/chats-dir.ts";
 import { exportFileName } from "../tasks/export-name.ts";
 import { exportedFile, exportTarget, recordExport } from "../tasks/export-record.ts";
-import { limits, TERMINAL_LOGIN_ID } from "../../shared/ipc.ts";
-import type { HandlerGroup } from "../../shared/ipc.ts";
+import { limits, TERMINAL_LOGIN_ID, type HandlerGroup, type TaskId } from "../../shared/ipc.ts";
 import { canOpenDirectly, resolveInsideReal } from "./task-file-path.ts";
 import { parseRootIndex, rootDir } from "../files/task-roots.ts";
 import { terminalLogin } from "../login/terminal-login-instance.ts";
@@ -40,6 +39,50 @@ function parseCreateTaskInput(value: unknown) {
     ...(record["model"] !== undefined && { model: parseModelKey(record["model"]) }),
     ...(record["thinkingLevel"] !== undefined && { thinkingLevel: parseThinkingLevel(record["thinkingLevel"]) }),
   };
+}
+
+async function resolveTaskFilePath(id: TaskId, rel: string, root: unknown): Promise<string> {
+  const pool = await getTaskPool();
+  const rootIdx = parseRootIndex(root);
+  const taskCwd = pool.taskCwd(id);
+  const wsDirs = pool.taskWorkspaceDirs(id);
+  let cleaned = rel
+    .trim()
+    .replace(/^file:\/\//i, "")
+    .replace(/^\/+(?=[A-Za-z]:[\\/])/, "");
+  try {
+    cleaned = decodeURIComponent(cleaned);
+  } catch {
+    // keep cleaned
+  }
+  cleaned = cleaned.replace(/#L\d+(?:-L?\d+)?.*$/i, "").replace(/(?<!^[A-Za-z]):\d+(?:[:-]\d+)?$/, "");
+
+  const toRel = (base: string, input: string): string => {
+    if (!path.isAbsolute(input) && !path.win32.isAbsolute(input)) return input;
+    let target = input;
+    if (process.platform === "win32" && /^[a-zA-Z]:/.test(base) && /^[a-zA-Z]:/.test(target)) {
+      if (base[0]!.toLowerCase() === target[0]!.toLowerCase()) {
+        target = base[0]! + target.slice(1);
+      }
+    }
+    const r = path.relative(base, target);
+    return r === "" || r.startsWith("..") || path.isAbsolute(r) ? input : r;
+  };
+
+  const primaryRoot = rootDir(taskCwd, wsDirs, rootIdx);
+  try {
+    return await resolveInsideReal(primaryRoot, toRel(primaryRoot, cleaned));
+  } catch (err) {
+    if (root !== undefined) throw err;
+    for (const wsDir of wsDirs) {
+      try {
+        return await resolveInsideReal(wsDir, toRel(wsDir, cleaned));
+      } catch {
+        // try next workspace dir
+      }
+    }
+    throw err;
+  }
 }
 
 export const taskHandlers: HandlerGroup<
@@ -118,11 +161,12 @@ export const taskHandlers: HandlerGroup<
   // entryId 是会话树面板里的会话条目 id，null = 当前分支最后一条用户消息；主进程在会话文件里查，查不到就拒绝。
   forkTask: async (taskId, entryId) =>
     (await getTaskPool()).forkTask(parseTaskId(taskId), entryId === null ? null : parseString(entryId, "entryId", 200)),
-  branchTask: async (taskId, entryId, summarize) =>
+  branchTask: async (taskId, entryId, summarize, revertFiles) =>
     (await getTaskPool()).branchTask(
       parseTaskId(taskId),
       parseString(entryId, "entryId", 200),
       summarize === undefined ? false : parseBoolean(summarize, "summarize"),
+      revertFiles === undefined ? false : parseBoolean(revertFiles, "revertFiles"),
     ),
   labelTreeEntry: async (taskId, entryId, label) =>
     (await getTaskPool()).labelTreeEntry(
@@ -141,12 +185,7 @@ export const taskHandlers: HandlerGroup<
   },
 
   openTaskFile: async (taskId, relPath, root) => {
-    const pool = await getTaskPool();
-    const id = parseTaskId(taskId);
-    const file = await resolveInsideReal(
-      rootDir(pool.taskCwd(id), pool.taskWorkspaceDirs(id), parseRootIndex(root)),
-      parseString(relPath, "relPath", 1024),
-    );
+    const file = await resolveTaskFilePath(parseTaskId(taskId), parseString(relPath, "relPath", 1024), root);
     if (!canOpenDirectly(file))
       throw new Error(
         "only plain text, code, image and document files are opened directly; reveal them in the folder instead",
@@ -157,14 +196,8 @@ export const taskHandlers: HandlerGroup<
   },
 
   revealTaskFile: async (taskId, relPath, root) => {
-    const pool = await getTaskPool();
-    const id = parseTaskId(taskId);
-    shell.showItemInFolder(
-      await resolveInsideReal(
-        rootDir(pool.taskCwd(id), pool.taskWorkspaceDirs(id), parseRootIndex(root)),
-        parseString(relPath, "relPath", 1024),
-      ),
-    );
+    const file = await resolveTaskFilePath(parseTaskId(taskId), parseString(relPath, "relPath", 1024), root);
+    shell.showItemInFolder(file);
   },
 
   openTaskFolder: async (taskId) => {

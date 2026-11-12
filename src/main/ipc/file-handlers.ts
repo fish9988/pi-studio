@@ -1,8 +1,10 @@
 // `@` 文件引用补全、右侧文件面板的文件树和预览：目录由主进程按任务（或新任务草稿的项目、默认文件夹）查出，渲染进程不传根路径；
 // 任务可以多选一个根：`root` 下标（0 / 缺省 = 任务 cwd，n = 第 n 个 `/add-dir` 额外工作区目录，路径取自主进程记的 omp 输出，见 task-roots.ts）。
 // `@` 补全只在任务 cwd 里找（目前不扫额外目录）。补全只返回相对路径，结果条数有上限；树一次只列一层。
-import { stat } from "node:fs/promises";
+import { promises as fsPromises } from "node:fs";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { shell } from "electron";
 import type { HandlerGroup, ProjectFilesTarget } from "../../shared/ipc.ts";
 import { listDirectory } from "../files/list-directory.ts";
 import { ProjectFileIndex, parseFileQuery } from "../files/project-files.ts";
@@ -11,6 +13,7 @@ import { chatsDir } from "../tasks/chats-dir.ts";
 import { readPreviewFile } from "../files/preview-file.ts";
 import { parseOneOf, parseProjectId, parseRecord, parseString, parseTaskId } from "./validate.ts";
 import { parseRootIndex, rootDir } from "../files/task-roots.ts";
+import { resolveInside, resolveInsideReal } from "./task-file-path.ts";
 
 const index = new ProjectFileIndex();
 
@@ -38,7 +41,15 @@ export async function targetCwd(target: ProjectFilesTarget): Promise<string> {
   return project.path;
 }
 
-export const fileHandlers: HandlerGroup<"listProjectFiles" | "readPreviewFile" | "listDirectory"> = {
+export const fileHandlers: HandlerGroup<
+  | "listProjectFiles"
+  | "readPreviewFile"
+  | "listDirectory"
+  | "createFileEntry"
+  | "renameFileEntry"
+  | "deleteFileEntry"
+  | "revealProjectFile"
+> = {
   async readPreviewFile(target, relPath) {
     const parsed = parseFilesTarget(target);
     const cwd = await targetCwd(parsed);
@@ -49,6 +60,15 @@ export const fileHandlers: HandlerGroup<"listProjectFiles" | "readPreviewFile" |
       if (!path.isAbsolute(raw) && !raw.includes("..") && !raw.startsWith("~")) {
         const matched = await index.findBySuffix(cwd, raw);
         if (matched !== null) return readPreviewFile(cwd, matched);
+        if (parsed.kind === "task" && parsed.root === undefined) {
+          const pool = await getTaskPool();
+          for (const wsDir of pool.taskWorkspaceDirs(parsed.taskId)) {
+            const wsDirect = await readPreviewFile(wsDir, raw);
+            if (wsDirect.kind !== "missing") return wsDirect;
+            const wsMatched = await index.findBySuffix(wsDir, raw);
+            if (wsMatched !== null) return readPreviewFile(wsDir, wsMatched);
+          }
+        }
       }
       return direct;
     } catch (err) {
@@ -84,7 +104,8 @@ export const fileHandlers: HandlerGroup<"listProjectFiles" | "readPreviewFile" |
         if (docJson.includes(wantNorm)) {
           const parentDir = path.dirname(cleaned);
           const baseName = path.basename(cleaned);
-          return await readPreviewFile(parentDir, baseName);
+          const res = await readPreviewFile(parentDir, baseName);
+          return { ...res, path: cleaned };
         }
       } catch {
         // fall through to throw original error
@@ -108,5 +129,62 @@ export const fileHandlers: HandlerGroup<"listProjectFiles" | "readPreviewFile" |
     )
       return [];
     return index.search(cwd, q);
+  },
+  async createFileEntry(target, relPath, kind) {
+    const parsed = parseFilesTarget(target);
+    const cwd = await targetCwd(parsed);
+    const rawRel = parseString(relPath, "relPath", 1024);
+    const entryKind = parseOneOf(kind, "kind", ["file", "dir"]);
+    await mkdir(cwd, { recursive: true });
+    const targetPath = resolveInside(cwd, rawRel);
+    const parentDir = path.dirname(targetPath);
+    await mkdir(parentDir, { recursive: true });
+    if (entryKind === "dir") {
+      await mkdir(targetPath, { recursive: false });
+    } else {
+      await writeFile(targetPath, "", { flag: "wx" });
+    }
+    index.invalidate(cwd);
+  },
+  async renameFileEntry(target, oldRelPath, newName) {
+    const parsed = parseFilesTarget(target);
+    const cwd = await targetCwd(parsed);
+    const rawOld = parseString(oldRelPath, "oldRelPath", 1024);
+    const rawName = parseString(newName, "newName", 255).trim();
+    if (rawName === "" || rawName === "." || rawName === ".." || /[\\/:*?"<>|\0]/.test(rawName)) {
+      throw new Error("invalid file name");
+    }
+    const oldAbs = await resolveInsideReal(cwd, rawOld);
+    const parentRel = path.posix.dirname(rawOld.replaceAll("\\", "/"));
+    const nextRel = parentRel === "." || parentRel === "" ? rawName : `${parentRel}/${rawName}`;
+    const newAbs = resolveInside(cwd, nextRel);
+    await fsPromises.rename(oldAbs, newAbs);
+    index.invalidate(cwd);
+    return nextRel;
+  },
+  async deleteFileEntry(target, relPath) {
+    const parsed = parseFilesTarget(target);
+    const cwd = await targetCwd(parsed);
+    const rawRel = parseString(relPath, "relPath", 1024);
+    const absPath = await resolveInsideReal(cwd, rawRel);
+    try {
+      await shell.trashItem(absPath);
+    } catch {
+      await rm(absPath, { recursive: true, force: false });
+    }
+    index.invalidate(cwd);
+  },
+  async revealProjectFile(target, relPath) {
+    const parsed = parseFilesTarget(target);
+    const cwd = await targetCwd(parsed);
+    const rawRel = parseString(relPath, "relPath", 1024, { allowEmpty: true });
+    if (rawRel === "") {
+      await mkdir(cwd, { recursive: true });
+      const err = await shell.openPath(cwd);
+      if (err !== "") throw new Error(err);
+      return;
+    }
+    const absPath = await resolveInsideReal(cwd, rawRel);
+    shell.showItemInFolder(absPath);
   },
 };

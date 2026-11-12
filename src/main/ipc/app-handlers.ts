@@ -30,14 +30,16 @@ import {
 import { chatsDir } from "../tasks/chats-dir.ts";
 import { studioReleaseNotes, whatsNewForThisLaunch } from "../whats-new.ts";
 import { syncPreferredShellToOmp } from "./omp-handlers.ts";
+import { familyOfTheme } from "../../shared/themes.ts";
 import {
   parseBackdropMode,
   parseBackdropStrength,
   parseBoolean,
+  parseColorMode,
   parseExternalUrl,
+  parseFontSize,
   parseInteger,
   parseLocalePreference,
-  parseFontSize,
   parseOneOf,
   parseRecord,
   parseString,
@@ -53,6 +55,7 @@ export const appHandlers: HandlerGroup<
   | "getSettings"
   | "setLocale"
   | "setTheme"
+  | "setColorMode"
   | "setBackdrop"
   | "setBackdropStrength"
   | "chooseBackdropImage"
@@ -86,6 +89,11 @@ export const appHandlers: HandlerGroup<
   getSettings: async () => getSettings(),
   setLocale: async (value) => updateSettings({ locale: parseLocalePreference(value) }),
   setTheme: async (value) => updateSettings({ theme: parseThemePreference(value) }),
+  setColorMode: async (value) => {
+    const colorMode = parseColorMode(value);
+    const currentTheme = getSettings().theme;
+    updateSettings({ colorMode, theme: familyOfTheme(currentTheme) });
+  },
   setBackdrop: async (value) => {
     const backdrop = parseBackdropMode(value);
     // custom 要先有图：渲染进程没选过图时走 chooseBackdropImage，那里复制好图再切过来。

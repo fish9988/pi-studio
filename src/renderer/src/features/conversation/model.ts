@@ -6,6 +6,7 @@ import type {
   AssistantMessage,
   ToolResultMessage,
 } from "../../../../shared/omp-wire/rpc-wire.generated.ts";
+import { classifyAssistantText } from "../../../../shared/assistant-text-kind.ts";
 import { resultText } from "./tool-info.ts";
 
 export interface ToolStep {
@@ -55,9 +56,13 @@ function toolFromResultMessage(
 
 function textOf(message: AssistantMessage): string {
   return message.content
-    .flatMap((block) =>
-      block.type === "text" ? [block.text] : block.type === "thinking" && block.narration ? [block.thinking] : [],
-    )
+    .flatMap((block) => {
+      if (block.type === "text") {
+        const classified = classifyAssistantText(block.text, block.textSignature);
+        return classified.kind === "process" ? [classified.answer].filter((t) => t !== "") : [block.text];
+      }
+      return block.type === "thinking" && block.narration ? [block.thinking] : [];
+    })
     .join("\n\n")
     .trim();
 }
@@ -84,6 +89,16 @@ function buildTurn(group: readonly Entry[], index: number, live: boolean): Turn 
     const isConclusion = item === conclusion;
     item.message.content.forEach((block, blockIndex) => {
       const key = `${item.key}#${blockIndex}`;
+      if (block.type === "text") {
+        // 漏在正文通道里的思维/旁白：子代理面板里也按过程显示，不当结论。
+        const classified = classifyAssistantText(block.text, block.textSignature);
+        if (classified.kind === "process") {
+          if (classified.reasoning !== "") steps.push({ kind: "thinking", key, text: classified.reasoning });
+          if (classified.answer !== "" && !isConclusion)
+            steps.push({ kind: "narration", key: `${key}/answer`, text: classified.answer });
+          return;
+        }
+      }
       if (block.type === "thinking" && !block.narration && block.thinking.trim() !== "")
         steps.push({ kind: "thinking", key, text: block.thinking });
       else if ((block.type === "text" || (block.type === "thinking" && block.narration)) && !isConclusion) {

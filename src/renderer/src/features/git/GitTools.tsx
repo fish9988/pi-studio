@@ -1,16 +1,16 @@
-// 任务条右侧的 git 工具：分支胶囊（照终端版 omp 的状态栏标 `*改动 ?未跟踪`，worktree 任务另标领先提交数，点开是 Git 菜单）+ 评审按钮。
-// 基分支、改动数、领先提交数的完整说法在胶囊的悬停提示里。任务目录不是 git 仓库（或没有 git）时都不渲染。
-import { useEffect, useState } from "react";
+// 顶栏右侧极简 Git 分支轻胶囊（Antigravity × DSH）：
+// - 显示分支简称（如 `master`），有未提交改动时带精致小圆点；
+// - 左键点击直接在右侧并排分栏工作台中打开 `Review` 标签页（绝不全屏遮挡聊天流）；
+// - 右键打开快捷 Git 动作菜单（提交 / 推送 / 创建 PR / 合并回 / 丢弃 worktree）。
+import { useEffect, useState, type MouseEvent } from "react";
 import type { GitStatus } from "../../../../shared/git.ts";
 import type { TaskId } from "../../../../shared/ipc.ts";
 import { useT } from "../../i18n/use-t.ts";
-import { withShortcut } from "../../app/platform-keys.ts";
-import { ArrowUp, Branch, ChevronDown, Commit, Diff, External, Trash } from "../../icons.tsx";
+import { ArrowUp, Branch, Commit, Diff, External, Trash } from "../../icons.tsx";
 import { useTask } from "../../store/index.ts";
 import { openReview } from "../../store/review-store.ts";
-import { IconButton } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
-import { anchorBelow, Menu, type MenuAnchor, type MenuEntry } from "../../ui/Menu.tsx";
+import { Menu, type MenuAnchor, type MenuEntry } from "../../ui/Menu.tsx";
 import { mergeBack, pushBranch } from "./git-actions.ts";
 import { openGitDialog } from "./git-dialog-store.ts";
 import { useGitVersion, useTaskWorktree } from "./git-store.ts";
@@ -22,10 +22,8 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
   const updatedAt = task?.updatedAt ?? 0;
   const version = useGitVersion(taskId);
   const worktree = useTaskWorktree(taskId, updatedAt);
-  // 状态连同它是哪个任务的一起记：切到别的任务的第一帧，上一个任务的分支按钮不能还挂在顶栏上（不是 git 仓库的任务一个都不该有）。
   const [loaded, setLoaded] = useState<{ taskId: TaskId; status: GitStatus | null } | null>(null);
   const status = loaded?.taskId === taskId ? loaded.status : null;
-  // 只记打开的位置；菜单项每次渲染现算，开着时切语言或 git 状态变了也跟着变。
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
 
   useEffect(() => {
@@ -42,9 +40,9 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
   if (status?.kind !== "ok") return null;
   const label = worktree?.branch ?? status.branch.head ?? t("git.merge.detached");
   const ahead = worktree?.commitsAhead ?? 0;
-  // omp 的 `*N`：有暂存或工作区改动的已跟踪文件（含冲突）；`?N`：未跟踪的文件。
   const untracked = status.files.filter((file) => file.unstaged === "untracked").length;
   const changed = status.files.length - untracked;
+  const isDirty = changed + untracked > 0;
   const summary = [
     t("git.bar.branch", { branch: label }),
     worktree && t("git.bar.worktree", { base: worktree.baseBranch }),
@@ -55,9 +53,15 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
     .filter((part) => typeof part === "string")
     .join(" · ");
 
-  // 动作菜单：图标 + 分隔线；破坏性的"丢弃 worktree…"红字放最后、前面一条分隔线；不可用项第二行写原因。
   const menuItems = (): MenuEntry[] => {
     const items: MenuEntry[] = [
+      {
+        id: "review",
+        label: t("review.open"),
+        icon: <Diff />,
+        onSelect: () => openReview(taskId),
+      },
+      { kind: "separator", id: "sep-review" },
       {
         id: "commit",
         label: t("git.menu.commit"),
@@ -74,7 +78,6 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
         onSelect: () => void pushBranch(t, taskId),
       },
     ];
-    // 创建 PR 要先推送：没有可用远端（或 detached HEAD）时不可行，直接不列；gh 缺失 / 未登录由结果 toast 说明。
     if (status.canPush) {
       items.push({
         id: "pr",
@@ -104,7 +107,10 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
     return items;
   };
 
-  const toggleMenu = (button: HTMLElement) => setMenu(menu !== null ? null : anchorBelow(button));
+  const handleContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setMenu({ x: event.clientX, y: event.clientY, returnFocus: event.currentTarget });
+  };
 
   return (
     <>
@@ -112,33 +118,23 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
         type="button"
         className="topbar-branch"
         data-testid="git-menu"
+        data-dirty={isDirty ? "true" : undefined}
         data-worktree={worktree !== null || undefined}
-        aria-haspopup="menu"
-        aria-expanded={menu !== null}
-        aria-label={`${t("git.bar.menu")} · ${summary}`}
+        aria-label={`${summary} · ${t("review.open")}`}
         title={summary}
-        onClick={(event) => toggleMenu(event.currentTarget)}
+        onClick={() => openReview(taskId)}
+        onContextMenu={handleContextMenu}
       >
-        <Branch size={14} />
+        <Branch size={13} />
         <span className="topbar-branch-name" data-testid="git-branch">
           {label}
         </span>
-        {changed > 0 && (
-          <span className="topbar-branch-count" data-testid="git-changed">
-            *{changed}
-          </span>
-        )}
-        {untracked > 0 && (
-          <span className="topbar-branch-count" data-testid="git-untracked">
-            ?{untracked}
-          </span>
-        )}
+        {isDirty && <span className="topbar-branch-dirty" data-testid="git-dirty-dot" aria-hidden="true" />}
         {ahead > 0 && (
           <span className="topbar-branch-ahead" data-testid="git-ahead">
             ↑{ahead}
           </span>
         )}
-        <ChevronDown size={12} />
       </button>
       {task?.prNumber != null && (
         <button
@@ -152,14 +148,6 @@ export function GitTools({ taskId }: { taskId: TaskId }) {
           #{task.prNumber}
         </button>
       )}
-      <IconButton
-        label={t("review.open")}
-        tip={withShortcut(t("review.open"), "Ctrl Shift D")}
-        testId="topbar-review"
-        onClick={() => openReview(taskId)}
-      >
-        <Diff size={16} />
-      </IconButton>
       {menu && <div className="git-menu-scrim" />}
       {menu && <Menu anchor={menu} items={menuItems()} label={t("git.bar.menu")} onClose={() => setMenu(null)} />}
     </>

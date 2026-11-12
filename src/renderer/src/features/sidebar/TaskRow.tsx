@@ -1,12 +1,12 @@
 // 任务行（spec §4.2）：[状态点][标题][尾部]。选中用 --bg-raised 底 + 细描边，不改字重。
 // memo：props 是任务对象（没变的任务在 store 里是同一个对象）、几个布尔值和稳定的 rows；尾部的相对时间各行自己从时钟里取，
-// 时钟一跳只有文字变了的行重画。
+// 时钟一跳只有文字变了的行重画。运行中的行尾追加 2×2 四点交互动效。
 import { memo, useRef } from "react";
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import { limits, type Locale, type SessionSummary, type TaskState } from "../../../../shared/ipc.ts";
 import { Branch, Dots, Pin } from "../../icons.tsx";
 import { IconButton } from "../../ui/controls.tsx";
-import { StatusDot } from "./StatusDot.tsx";
+import { RunningFourDots, StatusDot } from "./StatusDot.tsx";
 import { taskTail } from "../../../../shared/ui/task-time.ts";
 import { taskTitle } from "../../../../shared/ui/sidebar-model.ts";
 import { useCoarseClock } from "./task-time.ts";
@@ -95,6 +95,7 @@ export const TaskRow = memo(function TaskRow({
   const cleanTitle = taskTitle(task);
   const title = cleanTitle === "" ? t("task.untitled") : cleanTitle;
   const tail = useCoarseClock((now) => taskTail(t, rows.locale, task, now));
+  const isRunning = task.status === "running" || task.status === "starting";
 
   if (renaming)
     return <RenameInput task={task} title={title} t={t} onDone={(value) => rows.onCommitRename(task, value)} />;
@@ -106,6 +107,7 @@ export const TaskRow = memo(function TaskRow({
       data-menu=""
       data-selected={selected}
       data-status={task.status}
+      data-running={isRunning || undefined}
       data-pinned={pinned || undefined}
       data-unread={unread || undefined}
       data-testid="task-row"
@@ -141,7 +143,7 @@ export const TaskRow = memo(function TaskRow({
         <span className="sb-row-title" title={title}>
           {title}
         </span>
-        {unread && task.status !== "running" && task.status !== "needs_you" && (
+        {unread && !isRunning && task.status !== "needs_you" && (
           <span className="sb-unread-dot" title={t("sidebar.unreadHere")} aria-label={t("sidebar.unreadHere")} />
         )}
         {pinned && (
@@ -164,7 +166,10 @@ export const TaskRow = memo(function TaskRow({
             <Branch size={12} />
           </span>
         )}
-        <span className="sb-row-tail">{tail}</span>
+        <span className="sb-row-tail">
+          {tail !== null && <span className="sb-row-tail-text">{tail}</span>}
+          {isRunning && <RunningFourDots label={t("status.running")} />}
+        </span>
       </button>
       <IconButton
         className="sb-row-more"
@@ -173,7 +178,9 @@ export const TaskRow = memo(function TaskRow({
         aria-haspopup="menu"
         onClick={(event) => {
           const box = event.currentTarget.getBoundingClientRect();
-          rows.onOpenMenu(task, box.left, box.bottom + 4, event.currentTarget);
+          const mainBtn =
+            event.currentTarget.parentElement?.querySelector<HTMLElement>(".sb-row-main") ?? event.currentTarget;
+          rows.onOpenMenu(task, box.left, box.bottom + 4, mainBtn);
         }}
       >
         <Dots />

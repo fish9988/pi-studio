@@ -49,8 +49,22 @@ import {
 import type { RowHandlers } from "./TaskRow.tsx";
 import { useHistorySessions } from "./use-history-sessions.ts";
 import { useSidebarMenus } from "./use-sidebar-menus.tsx";
-import { usePinnedIds, useUnreadTaskIds } from "./sidebar-prefs-store.ts";
+import {
+  folderAliasKey,
+  setFolderAlias,
+  useFolderAliases,
+  useHiddenFolderKeys,
+  usePinnedIds,
+  useUnreadTaskIds,
+} from "./sidebar-prefs-store.ts";
 import "./sidebar.css";
+
+function isActiveSidebarItem(item: SidebarFolder["items"][number]): boolean {
+  return (
+    item.kind === "task" &&
+    (item.task.status === "running" || item.task.status === "starting" || item.task.status === "needs_you")
+  );
+}
 
 export function Sidebar() {
   const t = useT();
@@ -67,10 +81,14 @@ export function Sidebar() {
   const defaultLabel = t("empty.defaultFolder");
   const pinnedIds = usePinnedIds();
   const unreadTaskIds = useUnreadTaskIds();
+  const hiddenFolderKeys = useHiddenFolderKeys();
+  const folderAliases = useFolderAliases();
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
   const [limits, setLimits] = useState<Record<string, number>>({});
   const [tabStop, setTabStop] = useState("");
   const [renamingId, setRenamingId] = useState<TaskState["id"] | null>(null);
+  const [renamingFolderKey, setRenamingFolderKey] = useState<string | null>(null);
+  const [activeOnly, setActiveOnly] = useState(false);
   // 斜杠命令 /rename（不带新名字）：当前任务的行进入就地改名；侧栏收起时 App 同时把它展开。
   useEffect(
     () =>
@@ -105,40 +123,89 @@ export function Sidebar() {
 
   const order = useShellValue("historyOrder");
   const sessions = useHistorySessions(searching, historyKey);
-  // 任务和会话合成一个列表（搜索同时过滤两者）；默认文件夹（chats 目录）叫"默认文件夹"，不露出目录名。
-  const folders = useMemo(
+  const activeCount = useMemo(
     () =>
-      buildFolders({
-        projects: projectsState.list,
-        tasks: tasksState.list,
-        sessions,
-        hidden,
-        query,
-        defaultCwd: chatsDir,
-        pinnedIds,
-      }).map((folder) => (isDefaultFolder(folder.cwd, chatsDir) ? { ...folder, label: defaultLabel } : folder)),
-    [projectsState.list, tasksState.list, sessions, hidden, query, chatsDir, defaultLabel, pinnedIds],
+      tasksState.list.filter(
+        (task) =>
+          !hidden.has(task.id) &&
+          (task.status === "running" || task.status === "starting" || task.status === "needs_you"),
+      ).length,
+    [tasksState.list, hidden],
   );
-  const timeline = useMemo(
-    () =>
-      order === "time"
-        ? buildTimeline({ projects: projectsState.list, tasks: tasksState.list, sessions, hidden, query, pinnedIds })
-        : [],
-    [order, projectsState.list, tasksState.list, sessions, hidden, query, pinnedIds],
-  );
+  // 任务和会话合成一个列表（搜索同时过滤两者）；默认文件夹（chats 目录）叫"默认文件夹"，并应用用户重命名的目录别名。
+  const folders = useMemo(() => {
+    const built = buildFolders({
+      projects: projectsState.list,
+      tasks: tasksState.list,
+      sessions,
+      hidden,
+      query,
+      defaultCwd: chatsDir,
+      pinnedIds,
+    })
+      .filter(
+        (folder) =>
+          searching ||
+          folder.project !== null ||
+          !hiddenFolderKeys.has(folder.key) ||
+          folder.items.some((item) => item.kind === "task" && item.task.id === selectedTaskId),
+      )
+      .map((folder) => {
+        const alias = folderAliases[folderAliasKey(folder.cwd)];
+        if (alias !== undefined) return { ...folder, label: alias };
+        return isDefaultFolder(folder.cwd, chatsDir) ? { ...folder, label: defaultLabel } : folder;
+      });
+    if (!activeOnly) return built;
+    return built
+      .map((folder) => ({ ...folder, items: folder.items.filter(isActiveSidebarItem) }))
+      .filter((folder) => folder.items.length > 0);
+  }, [
+    projectsState.list,
+    tasksState.list,
+    sessions,
+    hidden,
+    query,
+    chatsDir,
+    defaultLabel,
+    pinnedIds,
+    searching,
+    hiddenFolderKeys,
+    selectedTaskId,
+    folderAliases,
+    activeOnly,
+  ]);
+  const timeline = useMemo(() => {
+    if (order !== "time") return [];
+    const built = buildTimeline({
+      projects: projectsState.list,
+      tasks: tasksState.list,
+      sessions,
+      hidden,
+      query,
+      pinnedIds,
+    }).map((item) => {
+      const cwd = item.kind === "task" ? item.task.cwd : item.session.cwd;
+      const alias = folderAliases[folderAliasKey(cwd)];
+      return alias !== undefined ? { ...item, projectLabel: alias } : item;
+    });
+    return activeOnly ? built.filter(isActiveSidebarItem) : built;
+  }, [order, projectsState.list, tasksState.list, sessions, hidden, query, pinnedIds, folderAliases, activeOnly]);
   const waiting = useMemo(() => waitingTasks(tasksState.list, hidden), [tasksState.list, hidden]);
   const labelOf = (projectId: ProjectId) => {
     const project = projectsState.list.find((candidate) => candidate.id === projectId);
     if (project === undefined) return "";
+    const alias = folderAliases[folderAliasKey(project.path)];
+    if (alias !== undefined) return alias;
     return isDefaultFolder(project.path, chatsDir)
       ? defaultLabel
       : (projectLabels(projectsState.list).get(projectId) ?? "");
   };
 
-  // 搜索时忽略折叠，匹配的行都要看得见；否则用户点过的优先，没点过的看有没有选中/在跑/等你确认的任务。
+  // 搜索或筛选进行中会话时忽略折叠，匹配的行都要看得见；否则用户点过的优先，没点过的看有没有选中/在跑/等你确认的任务。
   const isOpen = useCallback(
-    (folder: SidebarFolder) => searching || (openOverride[folder.key] ?? defaultOpen(folder, selectedTaskId)),
-    [searching, openOverride, selectedTaskId],
+    (folder: SidebarFolder) =>
+      searching || activeOnly || (openOverride[folder.key] ?? defaultOpen(folder, selectedTaskId)),
+    [searching, activeOnly, openOverride, selectedTaskId],
   );
   // 因为选中 / 在跑 / 等你确认而展开的文件夹记成"展开"：任务跑完、换了选中项都不再自己收起，只有用户点了才折叠。
   const autoOpened = useMemo(
@@ -160,9 +227,12 @@ export function Sidebar() {
 
   const { menu, openTaskMenu, openSessionMenu, openProjectMenu } = useSidebarMenus({
     t,
+    locale,
     selectedTaskId,
+    chatsDir,
     projectTaskIds: (project) => tasksState.list.filter((task) => task.projectId === project.id).map((task) => task.id),
-    onRename: (task) => setRenamingId(task.id),
+    onRename: (taskId) => setRenamingId(taskId),
+    onRenameFolder: (folderKey) => setRenamingFolderKey(folderKey),
   });
 
   // 行的回调：一份稳定的对象（只在语言变了时换新），回调里读最新的选中任务和菜单，任务行的 memo 才有用。
@@ -321,7 +391,7 @@ export function Sidebar() {
           data-testid="sidebar-plugins"
           onClick={() => showView("settings", { section: "extensions" })}
         >
-          <Puzzle size={15} />
+          <Puzzle size={15} className="icon" strokeWidth={1.5} />
           <span className="sb-new-label">{t("settings.extensions")}</span>
         </button>
       </div>
@@ -362,11 +432,14 @@ export function Sidebar() {
             folders={folders}
             timeline={timeline}
             searching={searching}
+            activeOnly={activeOnly}
+            activeCount={activeCount}
             isOpen={isOpen}
             limits={limits}
             selectedTaskId={selectedTaskId}
             tabStopId={tabStopId}
             renamingId={renamingId}
+            renamingFolderKey={renamingFolderKey}
             unreadTaskIds={unreadTaskIds}
             rows={rows}
             onToggle={(folder, open) => setOpenOverride((current) => ({ ...current, [folder.key]: open }))}
@@ -377,14 +450,22 @@ export function Sidebar() {
                 return next;
               })
             }
+            onToggleActiveOnly={setActiveOnly}
             onShowMore={(key) =>
               setLimits((current) => ({
                 ...current,
                 [key]: (current[key] ?? (key === timeLimitKey ? initialByTime : initialPerFolder)) + showMoreStep,
               }))
             }
-            onNewTask={(folder) => void startDraftInFolder(folder, t)}
+            onNewTask={(folder) => void startDraftInFolder(folder, t, chatsDir)}
             onOpenProjectMenu={openProjectMenu}
+            onCommitFolderRename={(folder, nextName) => {
+              setRenamingFolderKey(null);
+              if (nextName === null) return;
+              const trimmed = nextName.trim();
+              if (trimmed === folder.label) return;
+              setFolderAlias(folder.cwd, trimmed === "" ? null : trimmed);
+            }}
           />
           {searching && folders.length === 0 && timeline.length === 0 && (
             <p className="sb-note" role="status">

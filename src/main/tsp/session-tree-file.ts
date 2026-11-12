@@ -3,7 +3,7 @@
 // （实测 omp 18.12.5：/tree 里 `current` 就是文件的最后一个条目）。
 // 例外：`/tree` 在进程内移动叶子，移动本身不写文件，下一个新条目出现之前文件看不出来；`LeafOverride` 就是给这段空档用的
 // （studio 自己发起的回溯会记下来，见 TspRunner.rewindTo）。
-import type { SessionTreeNode } from "../../shared/ipc.ts";
+import type { PromptImage, SessionTreeNode } from "../../shared/ipc.ts";
 import { isRecord } from "../../shared/type-guards.ts";
 import { buildSessionTree, userEntryText } from "../tasks/session-tree.ts";
 import {
@@ -126,10 +126,12 @@ export async function readSessionEntries(file: string): Promise<SessionEntry[]> 
   return (await entryReaders.read(file)).entries.entries();
 }
 
-/** 回溯目标：一条用户消息（完整文字、父条目）和回溯时文件最后一个条目（LeafOverride 的 afterEntryId）。 */
+/** 回溯目标：一条用户消息（完整文字、图片附件、父条目）和回溯时文件最后一个条目（LeafOverride 的 afterEntryId）。 */
 export interface RewindTarget {
   parentId: string | null;
   text: string;
+  /** 原用户消息里的图片块；没有图片时不设置（exactOptionalPropertyTypes）。 */
+  images?: PromptImage[];
   lastEntryId: string | null;
 }
 
@@ -137,9 +139,12 @@ export interface RewindTarget {
 export function findUserEntry(entries: readonly SessionEntry[], entryId: string): RewindTarget | null {
   const entry = entries.find((candidate) => candidate.id === entryId);
   if (entry === undefined || userEntryText(entry.raw) === null) return null;
+  const text = fullUserText(entry.raw);
+  const images = fullUserImages(entry.raw);
   return {
     parentId: entry.parentId,
-    text: fullUserText(entry.raw),
+    text,
+    ...(images.length > 0 ? { images } : {}),
     lastEntryId: entries[entries.length - 1]?.id ?? null,
   };
 }
@@ -164,4 +169,22 @@ function fullUserText(entry: Record<string, unknown>): string {
       isRecord(block) && block["type"] === "text" && typeof block["text"] === "string" ? [block["text"]] : [],
     )
     .join("\n");
+}
+
+function isPromptImageMime(value: unknown): value is PromptImage["mimeType"] {
+  return value === "image/png" || value === "image/jpeg" || value === "image/webp" || value === "image/gif";
+}
+
+/** 用户消息里的图片块（base64 数据 + MIME 类型）；回溯后放进 studio 输入框的就是它们。 */
+function fullUserImages(entry: Record<string, unknown>): PromptImage[] {
+  const message = entry["message"];
+  if (!isRecord(message)) return [];
+  const content = message["content"];
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((block: unknown): PromptImage[] => {
+    if (!isRecord(block) || block["type"] !== "image") return [];
+    const data = block["data"];
+    const mimeType = block["mimeType"];
+    return typeof data === "string" && isPromptImageMime(mimeType) ? [{ data, mimeType }] : [];
+  });
 }

@@ -3,7 +3,7 @@
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import type { SessionSummary, TaskId } from "../../../../shared/ipc.ts";
 import { CopyIcon, External, FileIcon, Folder, Info, Pencil, Pin, Trash } from "../../icons.tsx";
-import { clearSelection } from "../../store/index.ts";
+import { clearSelection, upsertTask } from "../../store/index.ts";
 import { reportError } from "../../ui/errors.ts";
 import type { MenuEntry } from "../../ui/Menu.tsx";
 import { pushToast } from "../dialogs/index.ts";
@@ -109,6 +109,7 @@ export function buildTaskMenu(options: {
       onSelect: () =>
         void attempt(t, async () => {
           const title = await window.studio.smartRenameTask(taskId);
+          refreshHistorySessions();
           pushToast({ level: "info", message: t("task.smartRenamed", { title }) });
         }),
     },
@@ -188,7 +189,11 @@ export function buildTaskMenu(options: {
   ];
 }
 
-export function buildSessionMenu(options: { t: TFunction; session: SessionSummary }): MenuEntry[] {
+export function buildSessionMenu(options: {
+  t: TFunction;
+  session: SessionSummary;
+  onRenamedToTask?(taskId: TaskId): void;
+}): MenuEntry[] {
   const { t, session } = options;
   const pinned = session.pinned || isItemPinned(session.id);
   return [
@@ -199,6 +204,32 @@ export function buildSessionMenu(options: { t: TFunction; session: SessionSummar
       onSelect: () => {
         toggleItemPinned(session.id);
       },
+    },
+    {
+      id: "rename",
+      label: t("task.rename"),
+      icon: <Pencil />,
+      shortcut: "F2",
+      onSelect: () =>
+        void attempt(t, async () => {
+          const task = await window.studio.resumeSession(session.id);
+          upsertTask(task);
+          refreshHistorySessions();
+          options.onRenamedToTask?.(task.id);
+        }),
+    },
+    {
+      id: "smartRename",
+      label: t("task.smartRename"),
+      icon: <SparkleMenuIcon />,
+      onSelect: () =>
+        void attempt(t, async () => {
+          const task = await window.studio.resumeSession(session.id);
+          upsertTask(task);
+          const title = await window.studio.smartRenameTask(task.id);
+          refreshHistorySessions();
+          pushToast({ level: "info", message: t("task.smartRenamed", { title }) });
+        }),
     },
     {
       id: "copyId",

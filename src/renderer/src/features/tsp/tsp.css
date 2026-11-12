@@ -103,6 +103,10 @@
   flex-direction: column;
   min-height: 0;
 }
+/* 右侧工作台左缘有 4px 调宽条（.file-preview-resizer），滚动条离分隔线留出 4px 死区，不然拖滚动条容易变成拖宽面板。 */
+.tsp-surface > .osb {
+  right: var(--space-1);
+}
 /* screen surface（如 /settings）盖住整个对话区，连输入框一起 */
 .tsp-surface[data-mode="screen"] {
   position: absolute;
@@ -206,35 +210,46 @@
 .tsp-jump {
   position: absolute;
   left: 50%;
-  bottom: var(--space-3);
+  bottom: 12px;
   transform: translateX(-50%);
   z-index: var(--z-sticky);
-  height: var(--control-h-md);
-  padding: 0 var(--space-4);
-  border: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--bg-overlay);
-  color: var(--text);
+  background: color-mix(in srgb, var(--bg-overlay) 88%, transparent);
+  backdrop-filter: blur(8px);
+  color: var(--text-2);
   font: inherit;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--shadow-1);
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
 }
 .tsp-jump:hover {
-  background: var(--bg-hover);
+  background: var(--bg-overlay);
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 .tsp-jump:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
-/* 对话线（复刻 dsh-claude-style turn-nav）：
- * 平时贴在对话区右缘竖直居中，每条用户消息显示一根 20×2px 的横刻度（当前轮加深变长）；
- * 鼠标悬停到刻度轨时，原位展开 288px 宽的轮次列表浮层卡片，显示每一轮的提问摘要与右侧对齐刻度线，支持滚轮浏览与点击跳转。 */
+/* 对话线（复刻 dsh-claude-style turn-nav 电梯条）：
+ * 贴在对话区右缘（距右边界约 12px）竖直居中，每条用户消息显示一根 10×2px（透明度 0.25）的横刻度，
+ * 当前视口回合自动加长至 18px（透明度 0.85）；
+ * 鼠标移入刻度区域时，左侧浮出精致列表卡片展示提问单行摘要，点击平滑滚动定位至该轮顶部。 */
 .tsp-convline {
   position: absolute;
   top: var(--space-6);
   bottom: var(--space-6);
-  right: calc(var(--scrollbar-hit) + 4px);
+  right: 12px;
   z-index: calc(var(--z-sticky) + 3);
   display: flex;
   flex-direction: column;
@@ -246,11 +261,11 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  width: 28px;
+  width: 26px;
   max-height: min(calc(100% - 16px), 320px);
   padding: 6px 4px;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border-radius: 12px;
   background: transparent;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -267,31 +282,31 @@
   display: none;
 }
 .tsp-convline-card[data-open] {
-  width: 288px;
+  width: 280px;
   max-width: calc(100vw - 32px);
   padding: 6px;
   background: var(--bg-overlay);
-  border-color: var(--border);
+  border-color: var(--border-subtle);
   box-shadow: var(--shadow-2);
 }
 .tsp-convline-tick {
   flex: none;
-  height: 24px;
+  height: 22px;
   width: 100%;
-  padding: 0 4px;
+  padding: 0 2px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-2);
   font-family: var(--font-sans);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   font-weight: var(--fw-regular);
-  line-height: 24px;
+  line-height: 22px;
   text-align: left;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-2-5);
   cursor: pointer;
   pointer-events: auto;
   transition:
@@ -299,6 +314,8 @@
     color var(--dur-fast) var(--ease-out);
 }
 .tsp-convline-card[data-open] .tsp-convline-tick {
+  height: 26px;
+  line-height: 26px;
   padding: 0 8px 0 10px;
   justify-content: space-between;
 }
@@ -319,14 +336,14 @@
 }
 .tsp-convline-dash {
   flex: none;
-  width: 20px;
+  width: 10px;
   height: 2px;
   border-radius: 2px;
-  background: var(--border-strong);
-  transform: scaleX(0.6);
-  transform-origin: right center;
+  background: var(--text);
+  opacity: 0.25;
   transition:
-    transform var(--dur-fast) var(--ease-out),
+    width var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out);
 }
 .tsp-convline-tick:hover {
@@ -336,15 +353,16 @@
   background: var(--bg-hover);
 }
 .tsp-convline-tick:hover .tsp-convline-dash {
-  transform: scaleX(0.9);
-  background: var(--text-2);
+  width: 14px;
+  opacity: 0.55;
 }
 .tsp-convline-tick[aria-current] {
   color: var(--text);
   font-weight: var(--fw-medium);
 }
 .tsp-convline-tick[aria-current] .tsp-convline-dash {
-  transform: none;
+  width: 18px;
+  opacity: 0.85;
   background: var(--text);
 }
 .tsp-convline-tick:focus-visible {
@@ -501,39 +519,122 @@
   background: var(--bg-tool);
   box-shadow: inset 0 0 0 1px var(--border-subtle);
 }
-/* 错误卡（omp.error）：和出错的过程卡片一样只染底色、不描边（白底加一圈淡红线在浅色下几乎看不出边，2026-10-29 审计）。
- * omp 的动作（Copy error / Switch model）画成安静的小按钮，studio 的"重试"（session-info/RetryButton）排在同一行最前面。 */
+/* 错误条（omp.error）：DSH 风格克制单行错误条 —— 左侧小红点 + 本轮运行失败 + 精炼原因摘要（原始堆栈默认折叠）+ 右侧重试按钮 */
 .tsp-card[data-role="omp.error"] {
-  background: var(--st-error-soft);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--st-error) 5%, var(--bg-sunken));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-error) 18%, var(--border-subtle));
+  border-radius: 10px;
 }
-.tsp-card[data-role="omp.error"] > .tsp-card-body {
-  flex-flow: row wrap;
+.tsp-card[data-role="omp.error"].tsp-error-bar-card {
+  padding: 6px 12px;
+  gap: 6px;
+}
+.tsp-error-bar {
+  display: flex;
   align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  min-width: 0;
 }
-.tsp-card[data-role="omp.error"] > .tsp-card-body > * {
-  order: 1;
+.tsp-error-bar-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
 }
-.tsp-card[data-role="omp.error"] > .tsp-card-body > :not([data-role="omp.error.actions"], .si-retry) {
-  flex: 1 0 100%;
-  order: 0;
+/* 可点区域（摘要行）：没有原生控件外观，整块和卡片融为一体；展开态用 data-expanded，
+   鼠标悬停只是轻微一层背景色（绝不能改 opacity，否则看着像消失了）。 */
+.tsp-error-bar-main[data-expandable] {
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--dur-fast) var(--ease-out);
 }
-.tsp-card[data-role="omp.error"] > .tsp-card-body > .si-retry {
-  order: 0;
+.tsp-error-bar-main[data-expandable]:hover {
+  background: var(--bg-hover);
+}
+.tsp-error-bar-main[data-expandable]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.tsp-error-bar-main[data-expandable]:hover .tsp-error-summary {
+  color: var(--text);
+}
+.tsp-error-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--st-error);
+}
+.tsp-error-label {
+  flex: none;
+  margin-right: var(--space-1);
+  font-weight: var(--fw-medium);
+  color: var(--st-error);
+  white-space: nowrap;
+}
+.tsp-error-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tsp-error-chev {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tsp-error-chev[data-expanded] {
+  transform: rotate(0deg);
+}
+.tsp-error-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+.tsp-error-bar-actions > [data-role="omp.error.actions"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tsp-error-bar-actions .si-retry {
   margin-top: 0;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-xs);
+}
+.tsp-error-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: var(--fs-xs);
+  color: var(--text-2);
 }
 .tsp-row[data-role="omp.error.action"] {
-  gap: var(--space-1-5);
-  height: var(--control-h-sm);
+  gap: var(--space-1);
+  height: 24px;
   align-items: center;
-  padding: 0 var(--space-2-5);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-md);
   color: var(--text-2);
+  font-size: var(--fs-xs);
   cursor: pointer;
-}
-/* 没有"重试"（任务还在跑、不是末尾那张卡）时，第一颗动作的字和上面的错误文字对齐：按钮的左内边距挪到卡片留白里 */
-.tsp-card[data-role="omp.error"] > .tsp-card-body:not(:has(> .si-retry)) > [data-role="omp.error.actions"] {
-  margin-left: calc(-1 * var(--space-2-5));
 }
 .tsp-row[data-role="omp.error.action"]:hover {
   background: var(--bg-hover);
@@ -769,13 +870,13 @@
   color: var(--tsp-c-info);
 }
 .tsp-t-code {
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
-  box-shadow: 0 0 0 1px var(--border-subtle);
-  color: var(--tsp-c-code);
+  padding: 2px 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-hover));
+  color: color-mix(in srgb, var(--accent) 68%, var(--text));
   font-family: var(--font-mono);
-  font-size: 0.92em;
+  font-size: 0.88em;
 }
 .tsp-t-mono,
 .tsp-t-num {
@@ -892,11 +993,42 @@
 .tsp-math .md {
   font-size: var(--fs-base);
 }
-/* 思考折叠里的内容：次要色、小一号 */
+/* 思考折叠里的内容：无衬线流式排版、次要色、紧凑段落间距 */
 [data-role^="omp.thinking"] .tsp-md .md {
   color: var(--text-2);
+  font-family: var(--font-sans);
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
+}
+[data-role^="omp.thinking"] .tsp-md .md .md-block + .md-block {
+  margin-top: var(--space-1-5);
+}
+[data-role^="omp.thinking"] .tsp-md .md :is(h1, h2, h3, h4, h5, h6) {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: var(--fw-strong);
+}
+[data-role^="omp.thinking"] .tsp-md .md .md-block:first-child > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+[data-role^="omp.thinking"][data-live]
+  .tsp-md
+  .md
+  > .md-block:last-child
+  > :is(p, ul > li, ol > li, h1, h2, h3, h4, h5, h6):last-child::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  margin-left: 4px;
+  vertical-align: -1px;
+  border-radius: 1.5px;
+  background: var(--accent);
+  animation: tsp-pulse var(--dur-breathe) var(--tick-breathe) infinite;
+  animation-play-state: var(--play-state);
 }
 [data-role="omp.task.assignment"] .md {
   color: var(--text-2);
@@ -998,29 +1130,38 @@
 }
 .tsp-dl {
   display: flex;
+  align-items: baseline;
+  min-height: 20px;
+  padding-right: var(--space-2);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .tsp-dl[data-kind="add"] {
   background: var(--diff-add-bg);
+  box-shadow: inset 2px 0 0 var(--diff-add-fg);
 }
 .tsp-dl[data-kind="del"] {
   background: var(--diff-del-bg);
+  box-shadow: inset 2px 0 0 var(--diff-del-fg);
 }
 /* 列宽 --tsp-dgw 同 .tsp-gut（最少 3 位，text.tsx 的 Diff 按最大行号算） */
 .tsp-dg {
   flex: none;
   box-sizing: content-box;
   width: var(--tsp-dgw, 3ch);
-  padding-right: var(--space-2);
+  padding: 0 6px;
   text-align: right;
   white-space: nowrap;
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
   color: var(--text-3);
+  opacity: 0.72;
   user-select: none;
 }
 .tsp-dm {
   flex: none;
   width: 2ch;
+  text-align: center;
   color: var(--text-3);
   user-select: none;
 }
@@ -1048,7 +1189,9 @@
 .tsp-dsep {
   display: flex;
   gap: var(--space-3);
-  padding: 0 var(--space-3);
+  padding: 2px var(--space-3);
+  background: color-mix(in srgb, var(--bg-sunken) 65%, var(--bg-raised));
+  border-block: 1px solid var(--border-subtle);
   color: var(--text-3);
   font-size: var(--fs-code-sm);
 }
@@ -1339,9 +1482,17 @@
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: var(--radius-md);
-  box-shadow: 0 0 0 1px var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--border);
   object-fit: contain;
+  transition:
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.tsp-image.zoom:hover .tsp-img-frame {
+  box-shadow:
+    0 0 0 1.5px var(--accent),
+    var(--shadow-1);
 }
 .tsp-img-over {
   position: absolute;
@@ -2125,6 +2276,13 @@
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
 }
+/* 工具参数还在流式生成时的占位（nodes/work.tsx 的 Target）：灰字、不可点，等 target 到了再换成真的路径 / 命令。 */
+.tsp-tool-target.pending {
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  cursor: default;
+}
 .tsp-tool:not(.collapsed) .tsp-tool-target.command {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -2176,8 +2334,30 @@
   color: var(--text-3);
   font-size: var(--fs-xs);
 }
+.tsp-tool-cmd-prompt {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-3);
+}
 .tsp-tool-exit {
   flex: none;
+}
+.tsp-tool-exit-note {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--st-waiting-text);
+  white-space: nowrap;
+}
+.tsp-tool-err-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--st-error);
+  opacity: 0.72;
 }
 .tsp-tool-time {
   flex: none;
@@ -2244,7 +2424,7 @@
   flex-direction: column;
   min-width: 0;
   max-width: 100%;
-  max-height: min(360px, 45vh);
+  max-height: min(260px, 40vh);
   overflow: auto;
 }
 .tsp-tool-body:hover::-webkit-scrollbar-thumb,
@@ -2267,6 +2447,13 @@
 .tsp-tool-body > .tsp-md,
 .tsp-tool-body > .tsp-text {
   padding: var(--space-1) var(--space-3);
+}
+.tsp-tool-body > .tsp-image {
+  padding: var(--space-2) var(--space-3);
+}
+.tsp-tool-body > .tsp-image .tsp-img-frame {
+  max-height: 220px;
+  width: auto;
 }
 /* bash 这类卡片的 body 是一层 col(omp.run):命令(code,自带内边距)+ 输出(ansi)+ 底栏(row,Done / Running / Exit)。
  * 输出和底栏也要和命令对齐,不贴卡片左边。折叠着按 preview 夹紧时 body 包在 Clamp 里(.tsp-tool-clamp),同样留边:
@@ -2823,84 +3010,48 @@
 
 /* ───────────────────────── omp 的区块（按 role；omp 自己的命名，不在规范里） ───────────────────────── */
 
-/* 用户消息：靠右的气泡，上方是 omp 原始时间/复制，右下方是 DSH 同款「撤回回退 / 原位编辑 / 分叉」操作栏 */
+/* 用户消息：靠右暖石色气泡，无边框（border: none），圆角 16px */
 .tsp-card[data-role="omp.user"] {
   position: relative;
   align-self: flex-end;
   max-width: 82%;
-  margin-top: var(--space-2);
-  margin-bottom: var(--space-4);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-6);
   background: var(--bg-bubble);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
-  border-radius: 16px;
-}
-.tsp-card[data-role="omp.user"][data-editing] {
-  width: min(560px, 82%);
-  background: transparent;
+  border: none;
   box-shadow: none;
+  border-radius: var(--radius-bubble);
 }
 .tsp-card[data-role="omp.user"] .tsp-card-body {
   padding: var(--space-2-5) var(--space-3-5);
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
-/* 用户消息里的图片：omp 发来的是缩成宽 200 的显示图，w/h 就是它的尺寸，没给 max；窄长的截图会被放大
- * （实测 omp 18.12.6：44×220 的截图成了 200×1000）。宽高都交给图片自己的比例，装进 100×100 的框
- * （2026-10-25 仓库所有者：200 还是太大），点开看大图 */
+.tsp-row[data-role="omp.user.images"] {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
 .tsp-row[data-role="omp.user.images"] .tsp-img-frame {
   width: auto;
   height: auto;
-  max-width: 100px;
-  max-height: 100px;
+  max-width: 120px;
+  max-height: 120px;
+  object-fit: cover;
 }
+/* 彻底隐藏旧版气泡上方的重复按钮行，仅保留气泡右下角的复制与撤回 */
 .tsp-row[data-role="omp.user.tools"] {
-  position: absolute;
-  right: 0;
-  /* 贴着气泡上沿，间隙用 padding 填：行在气泡的 :hover 范围内，鼠标从气泡移到按钮的路上不会中断悬停 */
-  bottom: 100%;
-  padding-bottom: var(--space-0-5);
-  gap: var(--space-1);
-  color: var(--text-3);
-  font-size: var(--fs-2xs);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  display: none;
 }
-/* 键盘聚焦（:focus-visible）也显示；鼠标点过按钮留下的焦点不算，否则点完复制鼠标移走按钮还挂着 */
-.tsp-card[data-role="omp.user"]:hover .tsp-row[data-role="omp.user.tools"],
-.tsp-card[data-role="omp.user"][data-kbd-focus] .tsp-row[data-role="omp.user.tools"] {
-  opacity: 1;
-  pointer-events: auto;
-}
-/* 悬停桥：按钮行靠右、比气泡窄，鼠标从气泡中部斜着移向按钮时会经过气泡上方、按钮行左边的空白，
-   那里既不是气泡也不是按钮行，悬停会断。悬停期间在气泡上方铺一条同宽、和按钮行一样高的透明条接住；
-   只在悬停时存在，平时不挡上方内容的点击和选择。 */
-.tsp-card[data-role="omp.user"]:hover::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 100%;
-  height: calc(var(--icon-md) + var(--space-0-5));
-}
-.tsp-icon[data-role="omp.user.tool"] {
-  border-radius: var(--radius-sm);
-}
-.tsp-icon[data-role="omp.user.tool"]:hover {
-  background: var(--bg-active);
-  color: var(--text);
-}
-.tsp-icon[role="button"]:focus-visible {
-  outline: 2px solid var(--focus-ring);
-}
-/* 用户气泡右下角的「撤回回退 / 编辑重发 / 从此分叉」操作栏与原位编辑器（复刻 message-actions.css） */
+/* 用户气泡右下角操作栏（仅保留 复制 / 撤回；注意不用 ::after 遮挡按钮点击区，靠自身的 padding-top 承接鼠标悬停） */
 .tsp-user-actions {
   position: absolute;
   right: 0;
   top: 100%;
+  z-index: 5;
   padding-top: var(--space-1);
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  white-space: nowrap;
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-fast) var(--ease-out);
@@ -2911,11 +3062,11 @@
   pointer-events: auto;
 }
 .tsp-user-action-btn {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-3);
   display: inline-flex;
@@ -2930,59 +3081,136 @@
   background: var(--bg-hover);
   color: var(--text);
 }
+.tsp-user-action-btn[data-copied] {
+  color: var(--st-done);
+}
 .tsp-user-action-btn:disabled {
   opacity: 0.4;
   cursor: default;
 }
-.tsp-user-editor {
+
+/* 反重力（Antigravity）同款 Confirm Undo 确认撤回弹窗 */
+.tsp-undo-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--bg-scrim);
+}
+.tsp-undo-modal {
+  width: min(440px, calc(100vw - 32px));
+  padding: 20px 22px 18px;
+  border-radius: 16px;
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-modal);
+  border: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  width: 100%;
-}
-.tsp-user-editor-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 10px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 14px;
-  background: var(--bg-raised);
+  gap: 14px;
   color: var(--text);
-  font: inherit;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  resize: vertical;
 }
-.tsp-user-editor-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.tsp-user-editor-row {
+.tsp-undo-head {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
 }
-.tsp-user-editor-cancel,
-.tsp-user-editor-save {
-  height: 28px;
+.tsp-undo-title {
+  font-size: 15px;
+  font-weight: var(--fw-strong);
+  color: var(--text);
+}
+.tsp-undo-close {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.tsp-undo-close:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tsp-undo-desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.tsp-undo-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  align-self: flex-start;
+}
+.tsp-undo-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.tsp-undo-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 2px;
+}
+.tsp-undo-btn-cancel {
+  height: 32px;
   padding: 0 14px;
+  border: 0;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background: var(--bg-raised);
+  background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
   cursor: pointer;
 }
-.tsp-user-editor-save {
-  border-color: transparent;
-  background: var(--accent);
-  color: #ffffff;
+.tsp-undo-btn-cancel:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
 }
-.tsp-user-editor-save:disabled {
-  opacity: 0.5;
+.tsp-undo-btn-confirm {
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: var(--text-on-accent);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.tsp-undo-btn-confirm:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+.tsp-undo-btn-confirm:disabled {
+  opacity: 0.55;
   cursor: default;
+}
+.tsp-undo-enter-glyph {
+  font-size: 12px;
+  opacity: 0.85;
 }
 .tsp-badge[data-role="omp.reaction"] {
   height: auto;
@@ -2996,47 +3224,109 @@
   font-family: var(--font-mono);
 }
 
-/* 助手回答：无框，思考折叠 + 正文 */
+/* 助手回答：无框，思考折叠 + 正文 + 安静的单行弱化底栏 */
 .tsp-col[data-role="omp.assistant"] {
   gap: var(--space-2);
 }
 .tsp-section[data-role^="omp.thinking"] {
   color: var(--text-2);
 }
-/* 思考头照 Tern 里的 omp：`✳ Thinking… 2.7s ›`，斜体，折叠箭头跟在用时后面（不在行首） */
 .tsp-section[data-role^="omp.thinking"] > .tsp-section-head {
   align-self: flex-start;
-  padding-right: var(--space-1);
-  font-style: italic;
+  max-width: 100%;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border-radius: 6px;
+  font-style: normal;
+  color: var(--text-3);
 }
 .tsp-section[data-role^="omp.thinking"] > .tsp-section-head > .tsp-head {
   flex: 0 1 auto;
+  min-width: 0;
+  gap: 4px;
 }
 .tsp-section[data-role^="omp.thinking"] > .tsp-section-head > .tsp-chev {
   order: 1;
 }
-.tsp-row[data-role="omp.turn.usage"] {
-  gap: var(--space-1-5);
+.tsp-section[data-role^="omp.thinking"] > .tsp-section-head[aria-expanded="false"] > .tsp-chev {
+  display: none;
+}
+.tsp-row[data-role="omp.turn.usage"],
+.tsp-assistant-bare-foot {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  min-height: 22px;
+  margin-top: 2px;
   color: var(--text-3);
   font-size: var(--fs-2xs);
-  opacity: 0.8;
+  opacity: 0.45;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
-/* 空闲回顾（omp.recap）：omp 终端里是 "※ recap: …" 淡色斜体；节点里的 `history` 图标（时钟）只是 TSP 的占位。
-   隐藏它，改用 ※ 记号；悬停提示是 omp 原样的英文（labels.ts，过程区不汉化）。 */
-.tsp-row[data-role="omp.recap"] {
-  align-items: flex-start;
-  gap: var(--space-1-5);
-  padding-block: var(--space-2);
+.tsp-col[data-role="omp.assistant"]:hover > .tsp-row[data-role="omp.turn.usage"],
+.tsp-col[data-role="omp.assistant"]:focus-within > .tsp-row[data-role="omp.turn.usage"],
+.tsp-col[data-role="omp.assistant"]:hover > .tsp-assistant-bare-foot,
+.tsp-col[data-role="omp.assistant"]:focus-within > .tsp-assistant-bare-foot {
+  opacity: 0.96;
+}
+.tsp-row[data-role="omp.turn.usage"] > .tsp-icon:not([data-role="omp.turn.copy"]) {
+  display: none;
+}
+.tsp-turn-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
   color: var(--text-3);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.tsp-turn-copy-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tsp-turn-copy-btn[data-copied] {
+  color: var(--st-done);
+}
+.tsp-turn-foot-dot {
+  color: var(--text-3);
+  opacity: 0.6;
+  user-select: none;
+}
+/* 空闲回顾（omp.recap）与收敛后的复杂回合单行总结（omp.turn.recap） */
+.tsp-row[data-role="omp.recap"],
+.tsp-row[data-role="omp.turn.recap"] {
+  align-items: center;
+  gap: var(--space-1-5);
+  padding-block: 2px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
   font-style: italic;
 }
 .tsp-row[data-role="omp.recap"] > .tsp-icon {
   display: none;
 }
-.tsp-row[data-role="omp.recap"]::before {
+.tsp-row[data-role="omp.recap"]::before,
+.tsp-row[data-role="omp.turn.recap"]::before {
   content: "※";
   font-style: normal;
   flex: none;
+  color: var(--text-3);
+}
+.tsp-turn-summary-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* omp 状态行（切模型的 "Session-only model: …" 等）：终端里是对话里一行暗色文字，留在原地（MainFlow.tsx）。
    最多露两行（Clamp 按 --tsp-lh 量行数，所以它跟着这里的行高）。 */
@@ -3047,13 +3337,12 @@
   line-height: var(--lh-sm);
   overflow-wrap: anywhere;
 }
-/* omp 的警告行（`row role=omp.notice.warning`，警告图标 + 文字）：备用模型切换 "Fallback: a -> b" 也是这一行。
-   原来照普通行画，混在对话里看不出来（2026-11-06）；画成警告色的底条。 */
+/* omp 的警告行（`row role=omp.notice.warning`，警告图标 + 文字）：备用模型切换 "Fallback: a -> b" 也是这一行。 */
 .tsp-row[data-role="omp.notice.warning"] {
   padding: var(--space-1-5) var(--space-2-5);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--st-waiting) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-waiting) 30%, transparent);
+  background: color-mix(in srgb, var(--st-waiting) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-waiting) 24%, transparent);
 }
 .tsp-icon[data-role="omp.turn.copy"] {
   border-radius: var(--radius-sm);
@@ -3062,41 +3351,97 @@
   background: var(--bg-active);
   color: var(--text);
 }
-/* omp 在复制图标后面单独发一个 "·" 文本节点：图标不是一段文字，这个分隔点读起来像列表断了头，不画（2026-10-29 审计） */
 .tsp-row[data-role="omp.turn.usage"] > [data-role="omp.turn.copy"] + .tsp-text {
   display: none;
 }
 
-/* ───────── 过程组汇总头与单列/平铺容器（严格对齐 dsh-claude-style chat-fold 与 process-column.css） ───────── */
+/* ───────── DSH 风格三层无外框思考与工具调用流（去盒子化重构） ───────── */
 .tsp-process-group {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-1-5);
 }
+/* 第一层：回合耗时状态头 `已完成，用时 X分X秒 ⌄`（12.5px 柔和次级灰字，无横跨底边线） */
+.tsp-process-done-bar {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  margin-bottom: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: var(--fw-regular);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.tsp-process-done-bar:hover {
+  color: var(--text-2);
+  background: var(--bg-hover);
+}
+.tsp-process-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  animation: tsp-pulse var(--dur-breathe) var(--tick-breathe) infinite;
+  animation-play-state: var(--play-state);
+}
+/* done bar 上的实时耗时数字：和摘要行里的那一份同一套字体，不抢标签的色 */
+.tsp-process-done-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tsp-process-done-chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  transform: rotate(0deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tsp-process-done-chev[data-collapsed] {
+  transform: rotate(-90deg);
+}
+/* 第二层：过程聚合摘要行 `[☑ 极简图标] 执行 X 次思考，调用 Y 次工具 ⌄` */
 .tsp-process-summary {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1-5);
-  min-height: 26px;
-  padding: var(--space-0-5) var(--space-1-5);
-  margin-left: calc(var(--space-1-5) * -1);
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 8px;
+  margin-left: -8px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
+  font-size: 13px;
+  font-weight: var(--fw-regular);
   cursor: pointer;
   transition:
     color var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out);
 }
 .tsp-process-summary:hover {
-  color: var(--text-2);
+  color: var(--text);
   background: var(--bg-hover);
+}
+.tsp-process-summary-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
 }
 .tsp-process-summary-sep {
   color: var(--text-3);
@@ -3106,29 +3451,36 @@
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text-3);
+  font-size: var(--fs-xs);
 }
 .tsp-process-summary-chev {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 12px;
   height: 12px;
+  color: var(--text-3);
+  transform: rotate(0deg);
   transition: transform var(--dur-fast) var(--ease-out);
 }
 .tsp-process-summary[aria-expanded="false"] .tsp-process-summary-chev {
   transform: rotate(-90deg);
 }
+/* 第三层：展开后的子步骤列表 —— 无外框、无底色、无行间横线、左侧微缩进 8px */
 .tsp-process-group-body {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
   max-width: 100%;
-  margin-top: var(--space-1-5);
+  margin-top: 2px;
+  padding-left: 8px;
+  background: transparent;
+  box-shadow: none;
+  border: 0;
 }
 .tsp-process-group-body:not([data-trajectory]) {
-  max-height: min(400px, 50vh);
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-.tsp-process-group-body[data-layout="column"]:not([data-trajectory]) {
+  max-height: min(440px, 54vh);
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -3137,103 +3489,202 @@
   background-color: var(--scrollbar-thumb);
 }
 .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
+  margin: 2px 0 6px 8px;
+  padding: 2px 8px 4px 12px;
+  border-left: 2px solid var(--border);
+  box-shadow: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-2);
   max-height: min(300px, 40vh);
   overflow-x: hidden;
   overflow-y: auto;
 }
+.tsp-section[data-role^="omp.thinking"][data-live] > .tsp-section-body {
+  border-left-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
 .tsp-process-group-body[hidden] {
   display: none;
 }
-/* 思考行的单行摘要预览 */
-.tsp-thought-dot {
-  flex: none;
-  color: var(--text-3);
-  margin-inline: 2px;
-}
+/* 思考行收起态：首句摘要 + 末尾小箭头 `›`。这里是纯文本预览，不用斜体：斜体会被读成「Markdown 强调被解析糊了」。 */
 .tsp-thought-preview {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   color: var(--text-3);
   font-style: normal;
-  font-size: var(--fs-sm);
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 单列卡片模式（Column，对齐 process-column.css）：
-   - 外层 8px 圆角 + 1px 实线描边（用外圈 0 0 0 1px box-shadow 画，不改变内部元素 x 坐标）
-   - 相邻两行之间 0.5px 分割线
-   - 每行高 36px，左右内边距 12px，工具行隐藏前导图标（>_ 等），思考行正体显示 + 右侧对齐折叠箭头 */
-.tsp-process-group-body[data-layout="column"] {
-  border-radius: 8px;
-  background: var(--bg-raised);
-  box-shadow: 0 0 0 1px var(--border);
-  overflow: hidden;
-}
-.tsp-process-group-body[data-layout="column"] > * + * {
-  border-top: 0.5px solid var(--border);
-}
-.tsp-process-group-body[data-layout="column"] > .tsp-section[data-role^="omp.thinking"] > .tsp-section-head {
-  width: 100%;
-  min-height: 36px;
-  padding: var(--space-1-5) var(--space-3);
+.tsp-thought-arrow {
+  flex: none;
+  color: var(--text-3);
   font-style: normal;
+  font-size: 13px;
+  line-height: 1;
+}
+@keyframes tsp-fold-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tsp-process-group-body[data-layout="column"],
+.tsp-process-group-body[data-layout="flat"] {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  border: 0;
+}
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-section[data-role^="omp.thinking"]
+  > .tsp-section-head {
+  width: 100%;
+  min-height: 28px;
+  padding: 3px 8px;
+  margin-left: 0;
+  border-radius: 6px;
+  font-style: normal;
+  color: var(--text-3);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-section[data-role^="omp.thinking"]
+  > .tsp-section-head:hover {
+  background: var(--bg-hover);
   color: var(--text-2);
 }
-.tsp-process-group-body[data-layout="column"]
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
   > .tsp-section[data-role^="omp.thinking"]
   > .tsp-section-head
   > .tsp-head {
-  color: var(--text);
-  font-weight: var(--fw-medium);
+  flex: 0 1 auto;
+  max-width: 100%;
+  color: var(--text-3);
+  font-weight: var(--fw-regular);
+  font-size: 13px;
 }
-.tsp-process-group-body[data-layout="column"]
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
   > .tsp-section[data-role^="omp.thinking"]
-  > .tsp-section-head
-  > .tsp-chev {
-  order: 3;
-  margin-left: auto;
+  > .tsp-section-body {
+  animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
-.tsp-process-group-body[data-layout="column"] > .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
-  padding: 0 var(--space-3) var(--space-2-5);
-  margin-left: 0;
-  box-shadow: none;
-}
-.tsp-process-group-body[data-layout="column"] > .tsp-tool {
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children) > .tsp-tool {
   background: transparent;
-  border-radius: 0;
+  border-radius: 6px;
   box-shadow: none;
+  transition: background-color var(--dur-base) var(--ease-out);
 }
-.tsp-process-group-body[data-layout="column"] > .tsp-tool > .tsp-tool-head {
-  min-height: 36px;
-  padding: var(--space-1-5) var(--space-3);
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool
+  > .tsp-tool-bar {
+  display: none;
 }
-.tsp-process-group-body[data-layout="column"] > .tsp-tool > .tsp-tool-head .tsp-tool-title + .tsp-tool-target::before {
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool
+  > .tsp-tool-head {
+  min-height: 28px;
+  padding: 3px 8px;
+  gap: 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool
+  > .tsp-tool-head:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool
+  > .tsp-tool-head
+  .tsp-tool-title {
+  font-weight: var(--fw-regular);
+  color: var(--text-2);
+}
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool
+  > .tsp-tool-head
+  > .tsp-tool-ic {
+  display: inline-flex;
+  color: var(--text-3);
+  opacity: 0.85;
+}
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool
+  > .tsp-tool-head
+  .tsp-tool-title
+  + .tsp-tool-target::before {
   content: "· ";
   color: var(--text-3);
   font-weight: var(--fw-regular);
 }
-.tsp-process-group-body[data-layout="column"] > .tsp-tool.collapsed > .tsp-tool-body {
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool.collapsed
+  > .tsp-tool-body,
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool.collapsed
+  > .tsp-tool-clamp {
   display: none;
 }
-.tsp-process-group-body[data-layout="column"] > .tsp-tool > .tsp-tool-head > .tsp-tool-ic {
-  display: none;
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool:not(.collapsed)
+  > .tsp-tool-body {
+  margin: 4px 0 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  max-height: min(260px, 40vh);
+  overflow-y: auto;
+  animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
-.tsp-process-group-body[data-layout="column"] > .tsp-tool.inline > .tsp-tool-body {
-  margin: 0;
-  padding: 0 var(--space-3) var(--space-2-5);
+:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool.inline
+  > .tsp-tool-body {
+  padding: var(--space-1-5) var(--space-3) var(--space-2);
   box-shadow: none;
 }
-/* 平铺极简模式（Flat）：无外框，工具行在折叠且无预览时褪去灰底色块，保持极简平铺列表感 */
-.tsp-process-group-body[data-layout="flat"] {
-  gap: var(--space-1);
+.tsp-explore-group-children,
+.tsp-dsh-file-body,
+.tsp-ag-list {
+  animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
-.tsp-process-group-body[data-layout="flat"] > .tsp-section[data-role^="omp.thinking"] > .tsp-section-head {
-  font-style: normal;
+@media (prefers-reduced-motion: reduce) {
+  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+    > .tsp-section[data-role^="omp.thinking"]
+    > .tsp-section-body,
+  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+    > .tsp-tool:not(.collapsed)
+    > .tsp-tool-body,
+  .tsp-explore-group-children,
+  .tsp-dsh-file-body,
+  .tsp-ag-list {
+    animation: none;
+  }
 }
-.tsp-process-group-body[data-layout="flat"] > .tsp-tool.card.collapsed.nopreview.st-done:not([data-tone]) {
-  background: transparent;
-  box-shadow: none;
+:root[data-motion="reduced"]
+  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-section[data-role^="omp.thinking"]
+  > .tsp-section-body,
+:root[data-motion="reduced"]
+  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
+  > .tsp-tool:not(.collapsed)
+  > .tsp-tool-body,
+:root[data-motion="reduced"] .tsp-explore-group-children,
+:root[data-motion="reduced"] .tsp-dsh-file-body,
+:root[data-motion="reduced"] .tsp-ag-list {
+  animation: none;
 }
 /* ───────── 图 5 DSH 双列交付文件卡片 + 图 6 反重力（Antigravity）可展开/可搜索文件变更 Diff 面板 ───────── */
 .tsp-deliverables-host {
@@ -3401,19 +3852,26 @@
   border-color: var(--border-strong);
 }
 
-/* 图 6：反重力（Antigravity）底部 N files changed +M -K 折叠与搜索面板 */
+/* 图 4：反重力（Antigravity）底部 N files changed +M -K 独立圆角卡片面板 */
 .tsp-ag-panel {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 .tsp-ag-head {
   display: flex;
   align-items: center;
   gap: var(--space-2-5);
-  min-height: 32px;
-  padding: 2px 4px;
+  min-height: 38px;
+  padding: 6px 10px 4px 12px;
+  background: transparent;
+}
+.tsp-ag-panel[data-open] > .tsp-ag-head {
+  padding-bottom: 2px;
 }
 .tsp-ag-toggle {
   display: inline-flex;
@@ -3440,15 +3898,15 @@
 .tsp-ag-totals {
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 6px;
 }
 .tsp-ag-search {
-  width: min(200px, 35%);
+  width: min(172px, 32%);
   height: 24px;
   padding: 0 var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-raised);
   color: var(--text);
   font: inherit;
   font-size: var(--fs-2xs);
@@ -3456,7 +3914,6 @@
 }
 .tsp-ag-search:focus {
   border-color: var(--accent);
-  background: var(--bg-raised);
 }
 .tsp-ag-review-btn {
   margin-left: auto;
@@ -3467,37 +3924,38 @@
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-sunken);
+  background: var(--bg-raised);
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
   cursor: pointer;
   transition:
     background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
 .tsp-ag-review-btn:hover {
   background: var(--bg-hover);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 .tsp-ag-list {
   display: flex;
   flex-direction: column;
-  margin-top: var(--space-1);
+  padding: 4px 0;
 }
 .tsp-ag-file {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-radius: var(--radius-sm);
 }
 .tsp-ag-file-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
-  padding: 3px 6px;
-  border-radius: var(--radius-sm);
+  min-height: 32px;
+  padding: 3px 12px;
   cursor: pointer;
   user-select: none;
   transition: background-color var(--dur-fast) var(--ease-out);
@@ -3510,47 +3968,39 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
+  width: 24px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: var(--fw-strong);
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1;
+  letter-spacing: -0.02em;
   color: var(--text-2);
+  background: transparent;
 }
 .tsp-ag-file-badge[data-kind="js"] {
   color: var(--st-waiting);
-  background: color-mix(in srgb, var(--st-waiting) 12%, transparent);
 }
 .tsp-ag-file-badge[data-kind="ts"],
-.tsp-ag-file-badge[data-kind="md"] {
+.tsp-ag-file-badge[data-kind="md"],
+.tsp-ag-file-badge[data-kind="sh"] {
   color: var(--link);
-  background: color-mix(in srgb, var(--link) 10%, transparent);
 }
 .tsp-ag-file-badge[data-kind="tsx"],
 .tsp-ag-file-badge[data-kind="css"] {
   color: var(--syn-func);
-  background: color-mix(in srgb, var(--syn-func) 10%, transparent);
 }
 .tsp-ag-file-badge[data-kind="json"] {
   color: var(--syn-number);
-  background: color-mix(in srgb, var(--syn-number) 12%, transparent);
 }
 .tsp-ag-file-badge[data-kind="py"] {
   color: var(--syn-string);
-  background: color-mix(in srgb, var(--syn-string) 12%, transparent);
 }
 .tsp-ag-file-badge[data-kind="html"],
 .tsp-ag-file-badge[data-kind="svg"] {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: #e06c4d;
 }
 .tsp-ag-file-badge[data-kind="img"] {
   color: var(--syn-keyword);
-  background: color-mix(in srgb, var(--syn-keyword) 12%, transparent);
 }
 .tsp-ag-file-name {
   flex: none;
@@ -3581,7 +4031,7 @@
   flex: none;
   display: inline-flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
   padding-left: var(--space-2);
   white-space: nowrap;
@@ -3615,6 +4065,19 @@
   background: var(--bg-tool);
   max-height: min(320px, 42vh);
   overflow-y: auto;
+}
+.tsp-ag-file > .tsp-dsh-file-body {
+  margin: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: var(--bg-sunken);
+  max-height: min(360px, 46vh);
+}
+.tsp-ag-file > .tsp-dsh-file-body > .tsp-diff {
+  border-radius: 0;
 }
 .tsp-dsh-file-body:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
@@ -3898,15 +4361,16 @@
 .tsp-explore-group-head {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   width: 100%;
-  min-height: 36px;
-  padding: var(--space-1-5) var(--space-3);
+  min-height: 28px;
+  padding: 3px 8px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-sm);
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
@@ -3915,8 +4379,8 @@
 }
 .tsp-explore-group-title {
   flex: none;
-  color: var(--text);
-  font-weight: var(--fw-medium);
+  color: var(--text-2);
+  font-weight: var(--fw-regular);
 }
 .tsp-explore-group-preview {
   flex: 1;
@@ -3934,11 +4398,10 @@
 .tsp-explore-group-children {
   display: flex;
   flex-direction: column;
-  border-top: 0.5px solid var(--border);
-  background: var(--bg-sunken);
-}
-.tsp-explore-group-children > * + * {
-  border-top: 0.5px solid var(--border-subtle);
+  gap: 2px;
+  padding-left: 8px;
+  border: 0;
+  background: transparent;
 }
 .tsp-ag-diff-btn {
   flex: none;

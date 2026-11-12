@@ -1,8 +1,9 @@
 /* Markdown 渲染样式（spec 4.9 / 4.10）。只用 tokens.css 里的变量。 */
 .md {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: var(--fs-prose);
-  line-height: 1.65;
+  line-height: 1.7;
+  letter-spacing: 0.005em;
   color: var(--text);
   overflow-wrap: anywhere;
 }
@@ -14,42 +15,43 @@
   margin-bottom: 0;
 }
 .md-block + .md-block {
-  margin-top: var(--space-3-5);
+  margin-top: var(--space-4);
 }
 
 .md p {
-  margin: var(--space-2-5) 0;
+  margin: 0.85em 0;
 }
 .md h1,
 .md h2,
-.md h3,
+.md h3 {
+  font-family: var(--font-sans);
+  margin: 1.4em 0 0.55em;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--text);
+}
 .md h4,
 .md h5,
 .md h6 {
-  font-family: var(--font-display);
-  margin: var(--space-6) 0 var(--space-2-5);
-  font-weight: var(--fw-strong);
+  font-family: var(--font-sans);
+  font-size: var(--fs-prose);
+  line-height: 1.55;
+  margin: 1.2em 0 0.45em;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
 }
 .md h1 {
   font-size: var(--fs-xl);
-  line-height: var(--lh-xl);
+  line-height: 1.38;
 }
 .md h2 {
   font-size: var(--fs-lg);
-  line-height: var(--lh-lg);
+  line-height: 1.44;
 }
 .md h3 {
   font-size: 16px;
-  line-height: 24px;
-}
-.md h4,
-.md h5,
-.md h6 {
-  font-size: var(--fs-prose);
-  line-height: var(--lh-prose);
-  margin: var(--space-4) 0 var(--space-2);
+  line-height: 1.5;
 }
 .md .md-block:first-child > h1:first-child,
 .md .md-block:first-child > h2:first-child,
@@ -59,14 +61,20 @@
 
 .md ul,
 .md ol {
-  margin: var(--space-2) 0;
-  padding-left: var(--space-5);
+  margin: 0.75em 0;
+  padding-left: 24px;
 }
 .md ul ul {
   list-style-type: circle;
 }
+.md ul ul ul {
+  list-style-type: square;
+}
+.md li {
+  line-height: 1.7;
+}
 .md li + li {
-  margin-top: var(--space-1-5);
+  margin-top: 0.4em;
 }
 .md li::marker {
   color: var(--text-2);
@@ -90,8 +98,9 @@
 }
 .md li > ul,
 .md li > ol {
-  margin-top: var(--space-1-5);
-  margin-bottom: var(--space-1-5);
+  margin-top: 0.35em;
+  margin-bottom: 0.35em;
+  padding-left: 20px;
 }
 .md li.md-task {
   list-style: none;
@@ -138,59 +147,123 @@
   text-decoration-color: var(--link);
 }
 
-/* 行内代码胶囊：复刻 dsh-claude-style typography.css（1px 细边框 + 浅底色 + 紧凑行高） */
+/* 普通行内代码（不可点击）：柔和陶土红/暖棕字色配极浅底色，无边框 */
 .md-code-inline {
   font-family: var(--font-mono);
-  font-size: calc(1em - 1px);
-  line-height: 1.2;
-  padding: 1px 4px;
-  background: var(--bg-sunken);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  font-size: 0.85em;
+  line-height: 1.4;
+  padding: 2px 5px;
+  margin: 0 1.5px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
+  border: none;
+  border-radius: 5px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
-/* 反重力风格可点击文件胶囊（图 6：带 JS / TS / {} / M↓ 语言彩色前缀徽标，点击在右侧栏预览） */
+/* Antigravity 风格可点击行内文件/目录胶囊：极淡中性暖灰底色、无边框、左侧精致小巧类型徽标（伪元素不污染复制文本） */
 .md-file-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 1px 6px 1px 5px;
-  border-radius: 5px;
-  cursor: pointer;
-  vertical-align: baseline;
-  transition:
-    border-color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
-}
-.md-file-chip:hover {
-  border-color: var(--border-strong);
+  padding: 2px 7px 2px 6px;
+  margin: 0 2px;
+  border: none;
+  border-radius: 6px;
   background: var(--bg-hover);
+  color: var(--text);
+  font-size: 0.84em;
+  font-weight: var(--fw-medium);
+  vertical-align: baseline;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
-.md-file-chip-badge {
+.md-file-chip::before {
+  content: attr(data-file-badge);
   font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: var(--fw-strong);
+  font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--text-2);
+  flex: none;
 }
-.md-file-chip-badge[data-kind="js"] {
+.md-file-chip[data-file-kind="js"]::before,
+.md-link.md-file-link[data-file-kind="js"]::before {
   color: var(--st-waiting);
 }
-.md-file-chip-badge[data-kind="ts"],
-.md-file-chip-badge[data-kind="md"],
-.md-file-chip-badge[data-kind="py"] {
+.md-file-chip[data-file-kind="ts"]::before,
+.md-file-chip[data-file-kind="md"]::before,
+.md-file-chip[data-file-kind="py"]::before,
+.md-file-chip[data-file-kind="sh"]::before,
+.md-link.md-file-link[data-file-kind="ts"]::before,
+.md-link.md-file-link[data-file-kind="md"]::before,
+.md-link.md-file-link[data-file-kind="py"]::before,
+.md-link.md-file-link[data-file-kind="sh"]::before {
   color: var(--link);
 }
-.md-file-chip-badge[data-kind="brace"] {
+.md-file-chip[data-file-kind="brace"]::before,
+.md-file-chip[data-file-kind="css"]::before,
+.md-link.md-file-link[data-file-kind="brace"]::before,
+.md-link.md-file-link[data-file-kind="css"]::before {
   color: var(--syn-func);
 }
-.md-file-chip-badge[data-kind="html"] {
+.md-file-chip[data-file-kind="html"]::before,
+.md-link.md-file-link[data-file-kind="html"]::before {
   color: var(--accent);
 }
-.md-file-chip-badge[data-kind="img"] {
-  color: var(--syn-keyword);
+.md-file-chip[data-file-kind="img"]::before,
+.md-file-chip[data-file-kind="dir"]::before,
+.md-link.md-file-link[data-file-kind="img"]::before,
+.md-link.md-file-link[data-file-kind="dir"]::before {
+  color: var(--text-2);
+}
+.md-file-chip:hover {
+  background: var(--bg-active);
+  text-decoration: none;
+}
+
+/* Markdown 文件链接（同款无边框中性暖灰胶囊 + 左侧类型徽标） */
+.md-link.md-file-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px 2px 6px;
+  margin: 0 2px;
+  border: none;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text);
+  text-decoration: none;
+  text-shadow: none;
+  vertical-align: baseline;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.md-link.md-file-link::before {
+  content: attr(data-file-badge);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text-2);
+  flex: none;
+}
+.md-file-link-pill {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+  line-height: 1.4;
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+.md-link.md-file-link:hover {
+  background: var(--bg-active);
+  text-decoration: none;
 }
 /* 公式：KaTeX 输出，颜色继承正文，字号跟正文一致；块级居中，太宽时横向滚动。 */
 .md-math,
@@ -224,18 +297,20 @@
   border-radius: var(--radius-md);
 }
 
-/* 表格：复刻 dsh-claude-style typography.css（12px 圆角描边外框 + 暖灰表头底色 + 0.5px 竖向与横向分割线） */
+/* 表格：DSH 风格无竖线表格（10px 圆角极淡外框 + 微弱暖灰/暗灰表头 + 仅保留横向极淡行分隔线 + 自适应列宽不生硬铺满） */
 .md-table {
+  width: fit-content;
   max-width: 100%;
   margin: var(--space-3-5) 0;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   background: var(--bg-raised);
   overflow-x: auto;
 }
 .md-table table {
   border-collapse: collapse;
-  min-width: 100%;
+  width: auto;
+  max-width: 100%;
 }
 .md-table thead th,
 .md-table thead td {
@@ -244,24 +319,22 @@
   line-height: var(--lh-base);
   color: var(--text);
   font-weight: var(--fw-strong);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .md-table th,
 .md-table td {
   padding: 10px 16px;
   font-size: var(--fs-base);
   line-height: 1.55;
-  border-bottom: 0.5px solid var(--border);
+  border-left: none;
+  border-right: none;
+  border-bottom: 1px solid var(--border-subtle);
   text-align: left;
   vertical-align: top;
   overflow-wrap: break-word;
 }
 .md-table tbody tr:last-child > td {
   border-bottom: 0;
-}
-.md-table th + th,
-.md-table td + td {
-  border-left: 0.5px solid var(--border);
 }
 /* 流式光标：末尾 2px 强调色竖条。0% 帧即静态终态（reduced-motion 下常亮）。 */
 @keyframes md-caret-pulse {
@@ -288,13 +361,13 @@
   animation-play-state: var(--play-state);
 }
 
-/* 代码块：复刻 dsh-claude-style typography.css（12px 圆角白底/凸起卡片 + 头部与正文一体无横线分割 + 舒展留白） */
+/* 代码块：DSH 风格柔和下沉/工具底色 + 极淡 1px 描边 */
 .md-codeblock {
   position: relative;
-  margin: var(--space-3) 0;
-  border-radius: 12px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
+  margin: var(--space-3-5) 0;
+  border-radius: 10px;
+  background: var(--bg-tool);
+  border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
 .md-codehead {
@@ -394,6 +467,15 @@
 }
 .md-line {
   display: inline;
+}
+.md-line[data-focus-line] {
+  display: inline-block;
+  width: 100%;
+  margin: 0 calc(var(--space-2) * -1);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 .md-diff-add {
   color: var(--diff-add-fg);

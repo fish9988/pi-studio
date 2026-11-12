@@ -21,6 +21,66 @@
   }
 }
 
+.review[data-embedded="true"] {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  container-type: inline-size;
+  animation: none;
+}
+
+.review[data-embedded="true"] .rv-head {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 38px;
+  padding: var(--space-1) var(--space-3);
+  gap: var(--space-1-5);
+}
+
+.review[data-embedded="true"] .rv-title {
+  font-size: var(--fs-sm);
+}
+
+.review[data-embedded="true"] .rv-side {
+  width: clamp(200px, 28%, 256px);
+}
+
+@container (max-width: 660px) {
+  .review[data-embedded="true"] .rv-body {
+    flex-direction: column;
+  }
+
+  .review[data-embedded="true"] .rv-side {
+    width: 100%;
+    max-height: 38%;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+
+.rv-session-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+}
+
+.rv-session-pill:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 /* ───────── 头 ───────── */
 
 .rv-head {

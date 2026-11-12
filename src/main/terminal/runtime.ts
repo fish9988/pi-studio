@@ -37,8 +37,9 @@ let manager: TerminalManager | null = null;
 
 /** 任务的有效目录；草稿的项目目录，无项目的草稿用 chats 目录（和 ensureChatsProject 一样现建）。 */
 async function terminalCwd(pool: TaskPool, key: TerminalKey): Promise<string> {
-  const draft = parseDraftKey(key);
-  if (draft === undefined) return pool.taskCwd(key as TaskId);
+  const baseKey = key.replace(/#t\d+$/, "") as TerminalKey;
+  const draft = parseDraftKey(baseKey);
+  if (draft === undefined) return pool.taskCwd(baseKey as TaskId);
   if (draft.projectId === null) {
     const dir = chatsDir();
     await mkdir(dir, { recursive: true });

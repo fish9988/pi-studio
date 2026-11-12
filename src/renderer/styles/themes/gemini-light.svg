@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMaxYMax slice">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f8faff"/><stop offset="0.6" stop-color="#f1f5fe"/><stop offset="1" stop-color="#e8effd"/></linearGradient>
+<radialGradient id="blueGlow" cx="1320" cy="720" r="560" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4285f4" stop-opacity="0.18"/><stop offset="0.55" stop-color="#4285f4" stop-opacity="0.06"/><stop offset="1" stop-color="#f8faff" stop-opacity="0"/></radialGradient>
+<radialGradient id="violetGlow" cx="1460" cy="580" r="440" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#a142f4" stop-opacity="0.14"/><stop offset="1" stop-color="#f8faff" stop-opacity="0"/></radialGradient>
+<linearGradient id="starMain" x1="1180" y1="520" x2="1520" y2="880" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1a73e8"/><stop offset="0.5" stop-color="#9334e6"/><stop offset="1" stop-color="#e85d75"/></linearGradient>
+</defs>
+<rect width="1600" height="1000" fill="url(#sky)"/>
+<rect width="1600" height="1000" fill="url(#blueGlow)"/>
+<rect width="1600" height="1000" fill="url(#violetGlow)"/>
+<g fill="none" stroke="#1a73e8" stroke-opacity="0.08" stroke-width="1.2">
+<circle cx="1360" cy="700" r="190"/><circle cx="1360" cy="700" r="290"/><circle cx="1360" cy="700" r="390"/>
+</g>
+<path d="M1360 520 C1370 652 1408 690 1540 700 C1408 710 1370 748 1360 880 C1350 748 1312 710 1180 700 C1312 690 1350 652 1360 520 Z" fill="url(#starMain)" opacity="0.22"/>
+<path d="M1175 505 C1180 560 1195 575 1250 580 C1195 585 1180 600 1175 655 C1170 600 1155 585 1100 580 C1155 575 1170 560 1175 505 Z" fill="#1a73e8" opacity="0.18"/>
+</svg>

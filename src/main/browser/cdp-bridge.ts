@@ -295,7 +295,7 @@ export class CdpBridge {
     const reply = sessionId === undefined ? {} : { sessionId };
     try {
       if (BLOCKED_METHODS.has(method))
-        throw new CdpError(`'${method}' is not allowed in the omp-studio browser`, -32000);
+        throw new CdpError(`'${method}' is not allowed in the pi-studio browser`, -32000);
       let result: unknown;
       const session = sessionId === undefined ? undefined : this.#sessions.get(sessionId);
       if (sessionId === undefined) result = this.#browserCommand(client, state, method, params);

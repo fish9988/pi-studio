@@ -1,10 +1,10 @@
 // 列表里的一行（spec §4.2、§4.5）：studio 任务用 TaskRow，还没挂在任务上的历史会话用 SessionRow（点开 = 恢复成任务）。两种行同高（--row-task）、同一套行样式。
-import { memo, useState } from "react";
+import { memo } from "react";
 import type { SessionSummary, TaskId } from "../../../../shared/ipc.ts";
-import { Dots } from "../../icons.tsx";
+import { Dots, Pin } from "../../icons.tsx";
 import { sessionTitle, type SidebarItem } from "../../../../shared/ui/sidebar-model.ts";
 import { formatTaskTime } from "../../../../shared/ui/task-time.ts";
-import { selectTask } from "../../store/index.ts";
+import { selectTask, upsertTask } from "../../store/index.ts";
 import { IconButton } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { SessionStatusDot } from "./StatusDot.tsx";
@@ -16,12 +16,12 @@ interface SessionRowProps {
   session: SessionSummary;
   tabStop: boolean;
   pinned?: boolean | undefined;
+  projectLabel?: string | undefined;
   rows: RowHandlers;
 }
 
-const SessionRow = memo(function SessionRow({ session, tabStop, pinned, rows }: SessionRowProps) {
+const SessionRow = memo(function SessionRow({ session, tabStop, pinned, projectLabel, rows }: SessionRowProps) {
   const { t, locale } = rows;
-  const [hovered, setHovered] = useState(false);
   const label = sessionTitle(session) ?? t("history.untitled");
   const navId = `session:${session.id}`;
   const time = useCoarseClock((now) => formatTaskTime(t, locale, session.modifiedAt, now));
@@ -29,11 +29,9 @@ const SessionRow = memo(function SessionRow({ session, tabStop, pinned, rows }: 
     <div
       className="sb-row"
       data-flip-key={session.id}
-      data-menu=""
+      data-menu={rows.onOpenSessionMenu ? "" : undefined}
       data-pinned={pinned || undefined}
       data-testid="sidebar-session"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       onContextMenu={(event) => {
         if (!rows.onOpenSessionMenu) return;
         event.preventDefault();
@@ -55,11 +53,24 @@ const SessionRow = memo(function SessionRow({ session, tabStop, pinned, rows }: 
         onClick={() =>
           void window.studio
             .resumeSession(session.id)
-            .then((task) => selectTask(task.id))
+            .then((task) => {
+              upsertTask(task);
+              return selectTask(task.id);
+            })
             .catch((error: unknown) => reportError(t, error, (message) => t("history.resumeFailed", { message })))
         }
         onKeyDown={(event) => {
-          if (event.key === "Delete") {
+          if (event.key === "F2") {
+            event.preventDefault();
+            void window.studio
+              .resumeSession(session.id)
+              .then((task) => {
+                upsertTask(task);
+                refreshHistorySessions();
+                rows.onStartRename(task);
+              })
+              .catch((error: unknown) => reportError(t, error));
+          } else if (event.key === "Delete") {
             event.preventDefault();
             removeHistorySessionOptimistic(session.id);
             void window.studio
@@ -71,9 +82,19 @@ const SessionRow = memo(function SessionRow({ session, tabStop, pinned, rows }: 
       >
         <SessionStatusDot session={session} t={t} />
         <span className="sb-row-title">{label}</span>
+        {pinned && (
+          <span className="sb-row-pin" title={t("task.unpin")} aria-hidden="true">
+            <Pin size={11} />
+          </span>
+        )}
+        {projectLabel !== undefined && projectLabel !== "" && (
+          <span className="sb-row-project" title={projectLabel}>
+            {projectLabel}
+          </span>
+        )}
         <span className="sb-row-tail">{time}</span>
       </button>
-      {hovered && rows.onOpenSessionMenu && (
+      {rows.onOpenSessionMenu && (
         <IconButton
           className="sb-row-more"
           label={t("task.more")}
@@ -81,7 +102,9 @@ const SessionRow = memo(function SessionRow({ session, tabStop, pinned, rows }: 
           aria-haspopup="menu"
           onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect();
-            rows.onOpenSessionMenu!(session, box.left, box.bottom + 4, event.currentTarget);
+            const mainBtn =
+              event.currentTarget.parentElement?.querySelector<HTMLElement>(".sb-row-main") ?? event.currentTarget;
+            rows.onOpenSessionMenu!(session, box.left, box.bottom + 4, mainBtn);
           }}
         >
           <Dots />
@@ -111,7 +134,15 @@ export function ItemRow({
   rows,
 }: ItemRowProps) {
   if (item.kind === "session")
-    return <SessionRow session={item.session} tabStop={tabStopId === item.key} pinned={item.pinned} rows={rows} />;
+    return (
+      <SessionRow
+        session={item.session}
+        tabStop={tabStopId === item.key}
+        pinned={item.pinned}
+        projectLabel={showProjectLabel ? item.projectLabel : undefined}
+        rows={rows}
+      />
+    );
   return (
     <TaskRow
       task={item.task}

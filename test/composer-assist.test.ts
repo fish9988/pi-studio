@@ -140,3 +140,33 @@ describe("@ 文件引用补全", () => {
     if (midRef) expect(applyFileCompletion(mid, 7, midRef, "src/a.ts").text).toBe("see @src/a.ts tail");
   });
 });
+
+describe("智能重命名辅助与回退（ai-helper）", () => {
+  it("识别寒暄（hello/你好/在吗），优先采用首条实质问题并跳过与当前标题相同的 20 字前缀", async () => {
+    const { cleanGeneratedTitle, fallbackSmartTitle, isTrivialGreeting } =
+      await import("../src/main/tasks/ai-helper.ts");
+    expect(isTrivialGreeting("hello")).toBe(true);
+    expect(isTrivialGreeting("你好！")).toBe(true);
+    expect(isTrivialGreeting("在吗？")).toBe(true);
+    expect(isTrivialGreeting("麻烦证明中值定理")).toBe(false);
+
+    // 首条是 hello，第二条是实质问题时，跳过 hello 提取实质标题并去掉礼貌前缀
+    expect(fallbackSmartTitle("hello", "好的，下面为您证明拉格朗日中值定理。", "麻烦证明中值定理", "hello")).toBe(
+      "证明中值定理",
+    );
+
+    // 当长提问的前 20 字已被选为临时标题时，剥离礼貌前缀生成不同的精炼标题
+    expect(
+      fallbackSmartTitle(
+        "请帮我排查登录接口在高并发下偶发返回 502 的原因",
+        "已定位到连接池耗尽问题",
+        "",
+        "请帮我排查登录接口在高并发下偶发返回 5",
+      ),
+    ).toBe("排查登录接口在高并发下偶发返回 502");
+
+    // 清理模型生成的标题（剥离 <think>、前缀标签与引号标点，拒绝纯寒暄）
+    expect(cleanGeneratedTitle("<think>思考中</think>\n标题：「拉格朗日中值定理证明」。")).toBe("拉格朗日中值定理证明");
+    expect(cleanGeneratedTitle("hello")).toBe("");
+  });
+});

@@ -1,6 +1,6 @@
 // 往输入框加附件：图片（粘贴 / 拖入，转成 WebP）和文件（拖入 / 粘贴；路径只在主进程，这里只有 id）。
 // 都在光标处插入占位符（输入框里显示成 `#N` 芯片）。Composer 和 DraftComposer 共用。
-import { useCallback, useEffect, type DragEvent, type RefObject } from "react";
+import { useCallback, useEffect, useState, type DragEvent, type RefObject } from "react";
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import type { ComposerFile, TaskId } from "../../../../shared/ipc.ts";
 import { useT } from "../../i18n/use-t.ts";
@@ -32,8 +32,10 @@ async function convertImageFiles(files: Iterable<File>, t: TFunction): Promise<D
 }
 
 export interface Attach {
+  dragging: boolean;
   addFiles(files: Iterable<File>): Promise<void>;
   onDragOver(event: DragEvent): void;
+  onDragLeave(event: DragEvent): void;
   onDrop(event: DragEvent): void;
 }
 
@@ -45,6 +47,7 @@ export function useAttach(
 ): Attach {
   const t = useT();
   const labels = useChipLabels();
+  const [dragging, setDragging] = useState(false);
 
   /** 现在的光标（文字里的偏移）；输入框没有焦点（拖入）时没有可靠的光标：null = 插在末尾。 */
   const caretNow = useCallback((): number | null => {
@@ -89,12 +92,35 @@ export function useAttach(
   );
   useEffect(() => window.studio.onComposerFilesAdded(addComposerFiles), [addComposerFiles]);
 
+  useEffect(() => {
+    if (!dragging) return;
+    const reset = () => setDragging(false);
+    window.addEventListener("dragend", reset);
+    window.addEventListener("drop", reset);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("dragend", reset);
+      window.removeEventListener("drop", reset);
+      window.removeEventListener("blur", reset);
+    };
+  }, [dragging]);
+
   return {
+    dragging,
     addFiles,
     onDragOver: (event) => {
-      if ([...event.dataTransfer.items].some((item) => item.kind === "file")) event.preventDefault();
+      if ([...event.dataTransfer.items].some((item) => item.kind === "file")) {
+        event.preventDefault();
+        setDragging(true);
+      }
+    },
+    onDragLeave: (event) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+        setDragging(false);
+      }
     },
     onDrop: (event) => {
+      setDragging(false);
       if (event.dataTransfer.files.length === 0) return;
       event.preventDefault();
       void addFiles(event.dataTransfer.files);

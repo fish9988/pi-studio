@@ -11,6 +11,7 @@ import {
   type UserMessage,
 } from "../../../../shared/tsp/user-messages.ts";
 import { useT } from "../../i18n/use-t.ts";
+import { noteProgrammaticTop, noteSmoothScroll } from "../conversation/scroll-intent.ts";
 import { useTspDerived } from "./tsp-store.ts";
 
 const NONE: readonly UserMessage[] = [];
@@ -19,6 +20,8 @@ const PREVIEW_CHARS = 80;
 const LANDING_GAP = 16;
 /** 落点高亮淡掉的时长：提示动画，不走 --dur-* 档（那些在减少动效下归零）。 */
 const LANDING_FLASH_MS = 900;
+/** 平滑滚动的预算：到点就把落点钉正（并解除这段时间的"程序滚动"抑制）。比实际动画长一点，动画被提前打断也能落到点上。 */
+const SMOOTH_SETTLE_MS = 280;
 
 function preview(text: string): string {
   const line = text.replace(/\s+/g, " ").trim();
@@ -88,7 +91,16 @@ function holdLanding(scroller: HTMLElement, place: () => void): () => void {
   return stop;
 }
 
-export function ConversationLine({ taskId, scroller }: { taskId: TaskId; scroller: RefObject<HTMLElement | null> }) {
+export function ConversationLine({
+  taskId,
+  scroller,
+  onProgrammaticScroll,
+}: {
+  taskId: TaskId;
+  scroller: RefObject<HTMLElement | null>;
+  /** 跳转是程序改 scrollTop：转给吸附引擎记账，否则流式增量会按旧锚点把视口拽回底部。 */
+  onProgrammaticScroll?: ((options?: { away?: boolean }) => void) | undefined;
+}) {
   const t = useT();
   const messages = useTspDerived(taskId, userMessages, sameUserMessages, USER_MESSAGE_NODES) ?? NONE;
   const [current, setCurrent] = useState(0);
@@ -140,16 +152,54 @@ export function ConversationLine({ taskId, scroller }: { taskId: TaskId; scrolle
       const el = scroller.current;
       const target = el === null ? null : card(el, id);
       if (el === null || target === null) return;
+      // 落点固定：每次改 scrollTop 都记账（holdLanding 里也会反复调），不然会被当成用户上滑。
       const place = () => {
         const delta = target.getBoundingClientRect().top - el.getBoundingClientRect().top - LANDING_GAP;
-        if (Math.abs(delta) > 0.5) el.scrollTop += delta;
+        if (Math.abs(delta) > 0.5) {
+          el.scrollTop += delta;
+          noteProgrammaticTop(el, el.scrollTop);
+        }
       };
       stopLanding.current?.();
-      place();
-      stopLanding.current = holdLanding(el, place);
+      const reduced =
+        document.documentElement.dataset.motion === "reduced" ||
+        (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      /** 落到点上、重新取阅读锚点，然后进入 holdLanding 保持落点。 */
+      const land = () => {
+        place();
+        onProgrammaticScroll?.();
+        stopLanding.current = holdLanding(el, place);
+      };
+      // 一开始就脱离吸底：否则流式中途的一次贴底会把平滑滚动或落点直接拽回底部。
+      onProgrammaticScroll?.({ away: true });
+      if (reduced) {
+        land();
+      } else {
+        const initialDelta = target.getBoundingClientRect().top - el.getBoundingClientRect().top - LANDING_GAP;
+        // 平滑滚动的每一帧 scrollTop 都和记账值对不上：这段时间内不解除跟随、也不做锚点补偿。
+        // 预算比下面 settle 的定时器长，避免定时器到点时抑制已经过期（只差一帧）又被当成用户滚动。
+        noteSmoothScroll(el, SMOOTH_SETTLE_MS * 2);
+        el.scrollTo({ top: el.scrollTop + initialDelta, behavior: "smooth" });
+        let settled = false;
+        const settle = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(settleTimer);
+          for (const type of USER_SCROLL_EVENTS) el.removeEventListener(type, cancel, true);
+          land();
+        };
+        const cancel = () => {
+          settled = true;
+          clearTimeout(settleTimer);
+          for (const type of USER_SCROLL_EVENTS) el.removeEventListener(type, cancel, true);
+        };
+        const settleTimer = window.setTimeout(settle, SMOOTH_SETTLE_MS);
+        for (const type of USER_SCROLL_EVENTS) el.addEventListener(type, cancel, { capture: true, passive: true });
+        stopLanding.current = cancel;
+      }
       flashLanding(target);
     },
-    [scroller],
+    [scroller, onProgrammaticScroll],
   );
 
   // Alt+↑ / Alt+↓ 在当前会话的用户消息刻度之间快速跳转

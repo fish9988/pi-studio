@@ -334,3 +334,16 @@ describe("resolveAgentDir", () => {
     expect(resolveAgentDir({ PI_CONFIG_DIR: ".pi-dev" }, "H")).toBe(path.join("H", ".pi-dev", "agent"));
   });
 });
+
+describe("parseSessionTailTitle（长会话末尾追加的 session_info / title_change 覆盖旧标题）", () => {
+  it("提取文件尾部最后一条 session_info.name 或 title_change.title", async () => {
+    const { parseSessionTailTitle } = await import("../src/main/history/session-index.ts");
+    const chunk = [
+      "partial-line-at-boundary",
+      JSON.stringify({ type: "message", message: { role: "assistant", content: "hi" } }),
+      JSON.stringify({ type: "session_info", id: "s1", name: "初次命名" }),
+      JSON.stringify({ type: "session_info", id: "s2", name: "智能重命名后的最终标题" }),
+    ].join("\n");
+    expect(parseSessionTailTitle(chunk)).toBe("智能重命名后的最终标题");
+  });
+});

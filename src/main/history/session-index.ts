@@ -215,6 +215,30 @@ export function parseSessionTail(text: string, truncated: boolean): SessionLastT
   return undefined;
 }
 
+/** 从文件末尾一段扫描最后一条 `session_info` 或 `title_change`，避免长会话重命名追加在文件尾部时前缀读不到。 */
+export function parseSessionTailTitle(text: string, truncated = true): string | null {
+  const lines = text.split("\n");
+  if (truncated) lines.shift();
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = lines[index]!;
+    if (line.trim() === "") continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(entry)) continue;
+    if (entry["type"] === "session_info" && typeof entry["name"] === "string") {
+      return sanitizeText(entry["name"]);
+    }
+    if (entry["type"] === "title_change" && typeof entry["title"] === "string") {
+      return sanitizeText(entry["title"]);
+    }
+  }
+  return null;
+}
+
 /** 读文件末尾 maxBytes 字节；返回文本和"前面是否还有没读到的"。 */
 async function readSuffix(file: string, size: number, maxBytes: number): Promise<{ text: string; truncated: boolean }> {
   const length = Math.min(size, maxBytes);
@@ -228,13 +252,20 @@ async function readSuffix(file: string, size: number, maxBytes: number): Promise
   }
 }
 
-/** 一个会话文件最后一轮的结果；末尾放宽后仍找不到完整的消息条目时为 null。 */
-async function readSessionLastTurn(file: string, size: number): Promise<SessionLastTurn> {
+/** 一个会话文件最后一轮的结果与尾部最新标题；末尾放宽后仍找不到完整的消息条目时 lastTurn 为 null。 */
+async function readSessionTailMeta(
+  file: string,
+  size: number,
+): Promise<{ lastTurn: SessionLastTurn; tailTitle: string | null }> {
   const tail = await readSuffix(file, size, TAIL_BYTES);
+  const tailTitle = parseSessionTailTitle(tail.text, tail.truncated);
   const found = parseSessionTail(tail.text, tail.truncated);
-  if (found !== undefined || !tail.truncated) return found ?? null;
+  if (found !== undefined || !tail.truncated) return { lastTurn: found ?? null, tailTitle };
   const extended = await readSuffix(file, size, EXTENDED_PREFIX_BYTES);
-  return parseSessionTail(extended.text, extended.truncated) ?? null;
+  return {
+    lastTurn: parseSessionTail(extended.text, extended.truncated) ?? null,
+    tailTitle: tailTitle ?? parseSessionTailTitle(extended.text, extended.truncated),
+  };
 }
 
 interface CacheEntry {
@@ -318,9 +349,14 @@ export class SessionIndex {
 
     let head: ParsedHead | null;
     let lastTurn: SessionLastTurn = null;
+    let tailTitle: string | null = null;
     try {
       head = await readSessionHead(file, info.size);
-      if (head !== null) lastTurn = await readSessionLastTurn(file, info.size);
+      if (head !== null) {
+        const meta = await readSessionTailMeta(file, info.size);
+        lastTurn = meta.lastTurn;
+        tailTitle = meta.tailTitle;
+      }
     } catch (error) {
       if (isMissing(error)) return null;
       // 被占用、权限等：这一次跳过，不缓存，下次重试。
@@ -337,7 +373,7 @@ export class SessionIndex {
               id: head.id,
               file,
               cwd: head.cwd,
-              title: head.title,
+              title: tailTitle ?? head.title,
               firstPrompt: head.firstPrompt,
               lastTurn,
               modifiedAt: info.mtimeMs,

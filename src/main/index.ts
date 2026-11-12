@@ -18,6 +18,10 @@ import { installShutdown } from "./window/shutdown.ts";
 import { quitWhenParentExits } from "./window/orphan-guard.ts";
 import { createTray } from "./window/tray.ts";
 
+// 应用名：任务栏、托盘提示、系统通知都读它（通知标题缺省用 app.getName()）。和 electron-builder.yml 的 productName 一致，
+// 免得开发时（未打包，读 package.json 的 name）和装好的版本显示的名字不一样。AppUserModelId 归 main-window.ts 的 setAppDetails，这里不动。
+app.setName("pi-studio");
+
 // 测试隔离（docs/architecture/testing.md「隔离用户数据、不留残留」）：只在未打包时生效。启动它的测试进程没了就跟着退出，不留后台进程。
 const testUserData = app.isPackaged ? undefined : process.env["STUDIO_USER_DATA"];
 if (testUserData) app.setPath("userData", testUserData);

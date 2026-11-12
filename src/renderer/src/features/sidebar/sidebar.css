@@ -186,6 +186,161 @@
   align-items: center;
   gap: var(--space-1);
 }
+.sb-active-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.sb-active-filter:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.sb-active-filter[data-has-active] {
+  color: var(--text);
+}
+.sb-active-filter[data-active] {
+  background: var(--sb-active-pill-bg);
+  border-color: var(--sb-active-pill-border);
+  color: var(--sb-active-pill-fg);
+  box-shadow: var(--shadow-1);
+  font-weight: var(--fw-medium);
+}
+.sb-active-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-active);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+}
+.sb-active-filter[data-active] .sb-active-filter-count {
+  background: var(--accent-soft);
+  color: currentColor;
+}
+
+/* 进行中四点：2×2 小方阵，四颗点错峰呼吸；idle 时改为静态四阶透明度 */
+.sb-four-dots,
+.sb-dot.sb-four-dots {
+  display: inline-grid;
+  flex: none;
+  place-content: center;
+  grid-template-columns: repeat(2, 4px);
+  grid-template-rows: repeat(2, 4px);
+  gap: 2px;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  color: var(--sb-running-dots);
+  opacity: 0.88;
+}
+.sb-four-dots.sb-four-dots-sm {
+  grid-template-columns: repeat(2, 3px);
+  grid-template-rows: repeat(2, 3px);
+  gap: 1.5px;
+  width: 10px;
+  height: 10px;
+}
+.sb-four-dots-idle {
+  color: currentColor;
+  opacity: 0.72;
+}
+.sb-four-dot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+.sb-four-dot[data-agent-state-dot] {
+  animation: sb-four-dot-pulse var(--dur-four-dot) ease-in-out infinite;
+  animation-play-state: var(--play-state);
+}
+.sb-four-dot[data-agent-state-dot]:nth-child(1) {
+  animation-delay: 0s;
+}
+.sb-four-dot[data-agent-state-dot]:nth-child(2) {
+  animation-delay: -1.05s;
+}
+.sb-four-dot[data-agent-state-dot]:nth-child(3) {
+  animation-delay: -0.35s;
+}
+.sb-four-dot[data-agent-state-dot]:nth-child(4) {
+  animation-delay: -0.7s;
+}
+.sb-four-dots-idle .sb-four-dot:nth-child(1) {
+  opacity: 0.9;
+}
+.sb-four-dots-idle .sb-four-dot:nth-child(2) {
+  opacity: 0.58;
+}
+.sb-four-dots-idle .sb-four-dot:nth-child(3) {
+  opacity: 0.68;
+}
+.sb-four-dots-idle .sb-four-dot:nth-child(4) {
+  opacity: 0.34;
+}
+.sb-active-filter[data-active] .sb-four-dots {
+  color: currentColor;
+  opacity: 0.95;
+}
+@keyframes sb-four-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-four-dot[data-agent-state-dot] {
+    animation: none;
+  }
+  .sb-four-dot[data-agent-state-dot]:nth-child(1) {
+    opacity: 0.92;
+  }
+  .sb-four-dot[data-agent-state-dot]:nth-child(2) {
+    opacity: 0.58;
+  }
+  .sb-four-dot[data-agent-state-dot]:nth-child(3) {
+    opacity: 0.7;
+  }
+  .sb-four-dot[data-agent-state-dot]:nth-child(4) {
+    opacity: 0.32;
+  }
+}
+:root[data-motion="reduced"] .sb-four-dot[data-agent-state-dot] {
+  animation: none;
+}
+:root[data-motion="reduced"] .sb-four-dot[data-agent-state-dot]:nth-child(1) {
+  opacity: 0.92;
+}
+:root[data-motion="reduced"] .sb-four-dot[data-agent-state-dot]:nth-child(2) {
+  opacity: 0.58;
+}
+:root[data-motion="reduced"] .sb-four-dot[data-agent-state-dot]:nth-child(3) {
+  opacity: 0.7;
+}
+:root[data-motion="reduced"] .sb-four-dot[data-agent-state-dot]:nth-child(4) {
+  opacity: 0.32;
+}
+
 .sb-toggle-all {
   --btn-h: 22px;
   color: var(--text-3);
@@ -211,11 +366,13 @@
   padding-left: var(--space-2);
 }
 .sb-group-title {
+  flex: none;
   margin: 0;
   padding: var(--space-1) var(--space-2);
   color: var(--text-3);
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
+  white-space: nowrap;
 }
 .sb-group-head {
   position: relative;
@@ -231,19 +388,23 @@
   gap: var(--space-1-5);
   min-width: 0;
   height: 100%;
-  /* 右侧常驻一个 ＋（在此项目新建任务），＋ 左边一格是行数或 ⋯；名称始终让出这两格，展开/折叠时名称不跳 */
+  /* 平时右侧仅弱化显示会话计数；悬停时浮现 ⋯ 与 ＋，预留右侧空间保证标题不跳动 */
   padding: 0 calc(2 * var(--control-h-sm) + var(--space-1)) 0 var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-weight: 600;
+  font-weight: var(--fw-medium);
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
+}
+.sb-group-editing .sb-group-toggle {
+  padding-right: var(--space-2);
 }
 .sb-group-toggle[data-collapsed="true"] {
   color: var(--text-2);
   font-weight: var(--fw-medium);
 }
-.sb-group-toggle:hover {
+.sb-group-head:hover .sb-group-toggle,
+.sb-group-head[data-menu-open="true"] .sb-group-toggle {
   background: var(--bg-hover);
   color: var(--text);
 }
@@ -251,12 +412,12 @@
   display: inline-flex;
   align-items: center;
   flex: none;
-  color: var(--accent);
-  opacity: 0.9;
+  color: var(--text-2);
+  opacity: 0.82;
 }
 .sb-group-toggle[data-collapsed="true"] .sb-folder-icon {
   color: var(--text-3);
-  opacity: 0.85;
+  opacity: 0.72;
 }
 .sb-group-body {
   position: relative;
@@ -264,10 +425,12 @@
   padding-left: 7px;
   border-left: 1px solid var(--border-subtle);
 }
-/* 箭头跟在名称后面（2026-10-27 仓库所有者）：展开朝下，折叠朝右；名称太长被省略时箭头不被挤掉 */
+/* 箭头跟在名称后面：展开朝下，折叠朝右；名称太长被省略时箭头不被挤掉 */
 .sb-chevron {
   display: inline-flex;
   flex: none;
+  color: var(--text-3);
+  opacity: 0.75;
   transition: transform var(--dur-fast) var(--ease-out);
   transform: rotate(90deg);
 }
@@ -284,27 +447,47 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 行数和 ⋯ 叠在 ＋ 左边同一格：折叠显示行数，展开显示 ⋯，交叉淡入淡出（一个缩小淡出，一个放大淡入） */
+/* 平时仅弱化显示会话数量（透明度 0.4），隐藏常驻 + 与 ⋯；仅悬停/聚焦/开菜单时浮现 + 与 ⋯ */
 .sb-group-count {
   position: absolute;
   top: 0;
-  right: calc(var(--control-h-sm) + var(--space-0-5));
+  right: var(--space-1-5);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: var(--space-1-5);
   min-width: var(--control-h-sm);
   height: var(--control-h-sm);
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+  font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s linear var(--dur-fast);
+}
+.sb-group-count[data-shown] {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s;
 }
 .sb-group-count .sb-waiting-diamond {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 .sb-group-action {
   position: absolute;
   top: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .sb-group-head .sb-group-new {
   right: 0;
@@ -314,27 +497,26 @@
   color: var(--text);
 }
 .sb-group-more {
-  right: calc(var(--control-h-sm) + var(--space-0-5));
+  right: var(--control-h-sm);
+  color: var(--text-3);
 }
-.sb-group-count,
-.sb-group-head .sb-group-more {
+.sb-group-more:hover {
+  color: var(--text);
+}
+.sb-group-head:hover .sb-group-count,
+.sb-group-head:focus-within .sb-group-count,
+.sb-group-head[data-menu-open="true"] .sb-group-count {
   opacity: 0;
   visibility: hidden;
-  transform: scale(var(--scale-pop));
   transition:
-    opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out),
-    visibility 0s linear var(--dur-base);
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s linear var(--dur-fast);
 }
-.sb-group-count[data-shown],
-.sb-group-head .sb-group-more[data-shown] {
+.sb-group-head:hover .sb-group-action,
+.sb-group-head:focus-within .sb-group-action,
+.sb-group-head[data-menu-open="true"] .sb-group-action {
   opacity: 1;
-  visibility: visible;
-  transform: none;
-  transition:
-    opacity var(--dur-base) var(--ease-out),
-    transform var(--dur-base) var(--ease-out),
-    visibility 0s;
+  pointer-events: auto;
 }
 .sb-group-empty {
   margin: 0;
@@ -361,29 +543,40 @@
   align-items: center;
   height: var(--row-task);
   border-radius: var(--radius-md);
-  transition: background-color var(--dur-fast) var(--ease-out);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
-.sb-row:hover {
+.sb-row:hover,
+.sb-row[data-menu-open="true"] {
   background: var(--bg-hover);
 }
 .sb-row[data-selected="true"] {
-  background: var(--bg-active);
+  background: var(--sb-row-selected-bg);
+  box-shadow: var(--sb-row-selected-shadow);
+}
+:root[data-glass] .sb-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--sb-row-selected-bg) 82%, transparent);
 }
 .sb-row-main {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   min-width: 0;
   height: 100%;
   padding: 0 var(--space-2);
   border-radius: var(--radius-md);
   color: var(--text-2);
+  transition: color var(--dur-fast) var(--ease-out);
 }
 .sb-row[data-selected="true"] .sb-row-main,
 .sb-row[data-status="needs_you"] .sb-row-main {
   color: var(--text);
   font-weight: var(--fw-medium);
+}
+.sb-row[data-running] .sb-row-main {
+  color: var(--text);
 }
 .sb-row-title {
   flex: 1;
@@ -391,43 +584,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-/* 运行中任务标题流光扫过（复刻 DSH rail-shell sb-title-shimmer，3s 离散帧驱动、跟随 --play-state） */
-.sb-row[data-status="running"] .sb-row-title {
-  background: linear-gradient(
-    105deg,
-    currentColor 0%,
-    currentColor 34%,
-    var(--accent) 50%,
-    currentColor 66%,
-    currentColor 100%
-  );
-  background-size: 240% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: sb-title-shimmer 3000ms steps(60, end) infinite;
-  animation-play-state: var(--play-state);
-}
-@keyframes sb-title-shimmer {
-  from {
-    background-position: 140% 50%;
-  }
-  to {
-    background-position: -100% 50%;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .sb-row[data-status="running"] .sb-row-title {
-    background: none;
-    color: inherit;
-    animation: none;
-  }
-}
-:root[data-motion="reduced"] .sb-row[data-status="running"] .sb-row-title {
-  background: none;
-  color: inherit;
-  animation: none;
 }
 .sb-row-pin {
   flex: none;
@@ -456,19 +612,14 @@
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
-.sb-running-dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--st-running);
-  animation: sb-halo var(--dur-breathe) var(--tick-breathe) infinite;
-  animation-play-state: var(--play-state);
-}
 /* 时间一列：所有行的右边对齐；任务行 hover 时 ⋯ 盖在这一格上（最小宽 = ⋯ 的宽），所以任务行不再另外让位。
    无衬线 + 等宽数字（2026-10-29：原来等宽字体，"40 分钟"里中文落到回退字体、数字和中文之间空一大格，英文 Just now 又宽得挤掉标题） */
 .sb-row-tail {
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
   min-width: var(--control-h-sm);
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
@@ -479,18 +630,27 @@
     opacity var(--dur-fast) var(--ease-out),
     visibility 0s;
 }
+.sb-row-tail-text {
+  white-space: nowrap;
+}
 .sb-row-more {
   position: absolute;
   right: var(--space-0-5);
   opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .sb-row:hover .sb-row-more,
 .sb-row:focus-within .sb-row-more,
+.sb-row[data-menu-open="true"] .sb-row-more,
 .sb-row-more[aria-expanded="true"] {
   opacity: 1;
 }
 .sb-row[data-menu]:hover .sb-row-tail,
-.sb-row[data-menu]:focus-within .sb-row-tail {
+.sb-row[data-menu]:focus-within .sb-row-tail,
+.sb-row[data-menu][data-menu-open="true"] .sb-row-tail {
   opacity: 0;
   visibility: hidden;
   /* 隐藏时 visibility 等淡出放完再切，不然看不到渐隐。 */
@@ -514,7 +674,7 @@
   outline: none;
 }
 
-/* ───── 状态图标：14px 放在 16×16 槽位里；形状 + 颜色双信号（进行中转动的弧 / 需要介入琥珀底 ! / 已完成圆圈对勾 / 失败红底 × / 历史会话中断虚线圈暂停号） ───── */
+/* ───── 状态图标：16×16 槽位里放状态标记；进行中由四点特效表达，形状 + 颜色双信号（需要介入琥珀底 ! / 已完成圆圈对勾 / 失败红底 × / 历史会话中断） ───── */
 .sb-dot {
   position: relative;
   display: inline-flex;
@@ -524,13 +684,6 @@
   width: var(--icon-md);
   height: var(--icon-md);
 }
-.sb-dot-hollow {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--text-3);
-  opacity: 0.65;
-}
 .sb-dot-mark {
   display: block;
   flex: none;
@@ -539,7 +692,7 @@
   overflow: visible;
 }
 .sb-dot-running {
-  color: var(--st-running);
+  color: var(--sb-running-dots);
 }
 .sb-dot-waiting {
   color: var(--st-waiting);
@@ -549,16 +702,18 @@
 }
 .sb-dot-none {
   width: 0;
-  margin-right: calc(var(--space-2) * -1);
+  margin-right: calc(var(--space-1-5) * -1);
   opacity: 0;
   pointer-events: none;
   overflow: hidden;
 }
 .sb-dot-error {
   color: var(--st-error);
+  opacity: 0.55;
 }
 .sb-dot-interrupted {
   color: var(--text-3);
+  opacity: 0.5;
 }
 .sb-dot-fill {
   fill: currentColor;
@@ -567,59 +722,12 @@
   fill: currentColor;
   opacity: 0.16;
 }
-.sb-dot-ink {
-  fill: var(--text-on-accent);
-}
-.sb-dot-ink-stroke,
-.sb-dot-stroke,
-.sb-dot-ring,
-.sb-dot-track,
-.sb-dot-arc {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.sb-dot-ink-stroke {
-  stroke: var(--text-on-accent);
-  stroke-width: 1.7;
-}
-.sb-dot-stroke {
-  stroke: currentColor;
-  stroke-width: 1.7;
-}
 .sb-dot-ring {
+  fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
-}
-/* 中断：虚线圈（一圈 8 段）里一个暂停号；用次要文字色，不抢"完成 / 失败"的眼 */
-.sb-dot-dashed {
-  stroke-dasharray: 3.5 1.8;
-}
-.sb-dot-track {
-  stroke: currentColor;
-  stroke-width: 2;
-  opacity: 0.22;
-}
-/* 弧占一周的 30%，整个图标绕中心转（底下的轨道是整圆，转不转看不出来）；0% 帧就是静止的弧（减少动效 / --play-state 暂停时停在这里）。
- * 转的是包着 <svg> 的 HTML 盒子（StatusDot 的 .sb-dot-turn）：SVG 里的元素、连 <svg> 自己的 transform 动画都不能交给合成器，
- * 每帧要主线程重算样式 / 重新排版（2026-10-25 实测），HTML 盒子的由合成器转。 */
-.sb-dot-arc {
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-dasharray: 30 70;
-}
-.sb-dot-turn {
-  display: flex;
-  animation: sb-spin var(--dur-spin) var(--tick-spin) infinite;
-  animation-play-state: var(--play-state);
-}
-@keyframes sb-spin {
-  from {
-    transform: rotate(-90deg);
-  }
-  to {
-    transform: rotate(270deg);
-  }
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 /* 光晕呼吸（子代理泳道 lanes.css 在用）；0% 帧即静态终态（减少动效时暂停在这一帧：3px 光晕） */
 @keyframes sb-halo {

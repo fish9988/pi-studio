@@ -17,6 +17,33 @@ import type { ModelPickerRequest } from "./slash-args.ts";
 import { nextThinkingLevel, thinkingLabel } from "./thinking-levels.ts";
 import { speedBadges } from "./speed-limit-format.ts";
 
+/** 提炼精简模型简称：剥离前置/后置的渠道名（如 Google AI Studio / Anthropic / OpenRouter）与末尾日期后缀，渠道信息收归下拉面板内展示。 */
+function formatShortModelName(rawName: string, provider?: string | null): string {
+  let s = rawName.trim();
+  if (!s) return rawName;
+  if (provider) {
+    const escaped = provider.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    s = s
+      .replace(new RegExp(`^${escaped}\\s*[/·:|\\-]\\s*`, "i"), "")
+      .replace(new RegExp(`\\s*(?:[([][^)\\]]*${escaped}[^)\\]]*[)\\]]|[/·|\\-]\\s*${escaped})$`, "i"), "");
+  }
+  s = s
+    .replace(
+      /^(?:Google\s+AI\s+Studio|Google\s+Vertex(?:\s+AI)?|Anthropic|OpenAI|OpenRouter|GitHub\s+Copilot|SiliconFlow|DeepSeek\s+API|AWS\s+Bedrock|Azure\s+OpenAI)\s*[/·:|-]\s*/i,
+      "",
+    )
+    .replace(
+      /\s*(?:[([](?:Google[^)\]]*|Anthropic[^)\]]*|OpenAI[^)\]]*|OpenRouter[^)\]]*|Vertex[^)\]]*|Bedrock[^)\]]*|Azure[^)\]]*|Copilot[^)\]]*|SiliconFlow[^)\]]*|Bailian[^)\]]*|DashScope[^)\]]*)[)\]]|[/·|-]\s*(?:Google\s+AI\s+Studio|Google\s+Vertex(?:\s+AI)?|Anthropic|OpenAI|OpenRouter|GitHub\s+Copilot|SiliconFlow))$/i,
+      "",
+    );
+  if (s.includes("/")) {
+    const last = s.split("/").pop()?.trim();
+    if (last) s = last;
+  }
+  s = s.replace(/-20\d{6}$/, "").trim();
+  return s || rawName;
+}
+
 /** 写入成功后，新值迟迟没回到 props（omp 改成了别的值、或者事件丢了）时，多久后放弃乐观值。 */
 const optimisticTimeoutMs = 2000;
 
@@ -48,7 +75,13 @@ export function ModelChip(task: ModelChipProps) {
   // 刻度只数 effort（不算"关"）：关 = 全灭，最高档 = 全亮。
   const efforts: readonly ThinkingLevel[] = levels.filter((level) => level !== "off");
   const lit = thinkingLevel === null ? 0 : efforts.indexOf(thinkingLevel) + 1;
-  const name = task.model?.name ?? emptyLabel ?? t("composer.noModel");
+  const fullName = task.model?.name ?? emptyLabel ?? t("composer.noModel");
+  const providerLabel = task.model?.key.provider ?? null;
+  const name = task.model ? formatShortModelName(fullName, providerLabel) : fullName;
+  const fullTipBase =
+    providerLabel && !fullName.toLowerCase().includes(providerLabel.toLowerCase())
+      ? `${fullName} · ${providerLabel}`
+      : fullName;
   const badges = task.speed ? speedBadges(task.speed.fast, task.speed.slow) : [];
 
   // 真实值追上乐观值，或者没有在途的写入时外面改了值：以真实值为准。
@@ -119,67 +152,79 @@ export function ModelChip(task: ModelChipProps) {
   // 两颗按钮按下时不抢焦点：鼠标点开对话框，关掉后焦点回到原来的输入框，胶囊上不留焦点框。键盘 Tab 过来的照常有焦点框。
   const keepFocus = (event: MouseEvent) => event.preventDefault();
   return (
-    <>
-      <div className="chip-model" data-testid="model-chip-group">
-        <button
-          type="button"
-          className={showEffort ? "ui-chip chip-name has-effort" : "ui-chip chip-name"}
-          data-testid="model-chip"
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-label={t("composer.modelChip")}
-          title={fastText === null ? name : `${name} · ${fastText}`}
-          onMouseDown={keepFocus}
-          onClick={() => setOpen(true)}
+    <div className="chip-model ui-popover-anchor" data-testid="model-chip-group">
+      <button
+        type="button"
+        className={showEffort ? "ui-chip chip-name has-effort" : "ui-chip chip-name"}
+        data-testid="model-chip"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={t("composer.modelChip")}
+        title={fastText === null ? fullTipBase : `${fullTipBase} · ${fastText}`}
+        onMouseDown={keepFocus}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="chip-text">{name}</span>
+        <svg
+          className="chip-name-caret"
+          width="10"
+          height="10"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
         >
-          <span className="chip-text">{name}</span>
-          {!showEffort && fastBolt}
-          {badges.includes("slow") && (
-            <span className="chip-badge" data-testid="speed-badge-slow">
-              {t("composer.badge.slow")}
-            </span>
-          )}
-          {fallbackModel !== null && (
-            <span
-              className="chip-badge"
-              data-tone="warning"
-              data-testid="model-fallback-badge"
-              title={t("composer.badge.fallbackTip", { model: fallbackModel })}
-            >
-              {t("composer.badge.fallback")}
-            </span>
-          )}
-        </button>
-        {showEffort && (
-          <div className="ui-popover-anchor effort-pop-anchor">
-            <button
-              type="button"
-              className="ui-chip chip-effort"
-              data-testid="chip-thinking"
-              data-level={thinkingLevel}
-              data-running={task.running || undefined}
-              aria-haspopup="dialog"
-              aria-expanded={effortOpen}
-              aria-label={fastText === null ? effortText : `${effortText} · ${fastText}`}
-              title={withShortcut(fastText === null ? effortText : `${effortText} · ${fastText}`, "Alt T")}
-              onMouseDown={keepFocus}
-              onClick={() => setEffortOpen((value) => !value)}
-            >
-              {fastBolt}
-              <ThinkingPillBadge levelText={levelText} total={efforts.length} lit={lit} />
-            </button>
-            <EffortPopover
-              open={effortOpen}
-              onClose={() => setEffortOpen(false)}
-              levels={levels}
-              value={thinkingLevel}
-              onSelect={(level) => {
-                setThinking(level).catch(report);
-              }}
-            />
-          </div>
+          <path d="M3 4.5 6 7.5 9 4.5" />
+        </svg>
+        {!showEffort && fastBolt}
+        {badges.includes("slow") && (
+          <span className="chip-badge" data-testid="speed-badge-slow">
+            {t("composer.badge.slow")}
+          </span>
         )}
-      </div>
+        {fallbackModel !== null && (
+          <span
+            className="chip-badge"
+            data-tone="warning"
+            data-testid="model-fallback-badge"
+            title={t("composer.badge.fallbackTip", { model: fallbackModel })}
+          >
+            {t("composer.badge.fallback")}
+          </span>
+        )}
+      </button>
+      {showEffort && (
+        <div className="ui-popover-anchor effort-pop-anchor">
+          <button
+            type="button"
+            className="ui-chip chip-effort"
+            data-testid="chip-thinking"
+            data-level={thinkingLevel}
+            data-running={task.running || undefined}
+            aria-haspopup="dialog"
+            aria-expanded={effortOpen}
+            aria-label={fastText === null ? effortText : `${effortText} · ${fastText}`}
+            title={withShortcut(fastText === null ? effortText : `${effortText} · ${fastText}`, "Alt T")}
+            onMouseDown={keepFocus}
+            onClick={() => setEffortOpen((value) => !value)}
+          >
+            {fastBolt}
+            <ThinkingPillBadge levelText={levelText} total={efforts.length} lit={lit} />
+          </button>
+          <EffortPopover
+            open={effortOpen}
+            onClose={() => setEffortOpen(false)}
+            levels={levels}
+            value={thinkingLevel}
+            onSelect={(level) => {
+              setThinking(level).catch(report);
+            }}
+          />
+        </div>
+      )}
       <ModelPicker
         {...pickerProps}
         open={open}
@@ -191,7 +236,7 @@ export function ModelChip(task: ModelChipProps) {
           setRequest(null);
         }}
       />
-    </>
+    </div>
   );
 }
 

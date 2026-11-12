@@ -1,5 +1,15 @@
 // 布局类节点：col、row、card、section、rule、spacer（规范 Layout）。
-import { useEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { ASK_BUTTON_ROLE, ASK_GATE_ROLE } from "../../../../../shared/tsp/ask-gate.ts";
 import type { TspSpace, TspText } from "../../../../../shared/tsp/tsp.generated.ts";
 import { Check, ChevronDown, CopyIcon } from "../../../icons.tsx";
@@ -19,14 +29,21 @@ import { TspSpans } from "../spans.tsx";
 import { previewToLines } from "../props-util.ts";
 import { TspChildren, TspNode } from "../TspChildren.tsx";
 import { useFold } from "../use-fold.ts";
-import { peekTspNode, useBareTurnIndex, useIsLatestRecap, useTspNoVisibleChild } from "../tsp-store.ts";
+import {
+  peekTspDocument,
+  peekTspNode,
+  useBareTurnIndex,
+  useIsLatestRecap,
+  useTspNode,
+  useTspNoVisibleChild,
+} from "../tsp-store.ts";
 import { runOutputSpan } from "../../../../../shared/tsp/run-output.ts";
 import { useSessionExtras } from "../session-extras-store.ts";
 import { useTaskValue } from "../../../store/index.ts";
 import { formatTurnFooter } from "../turn-footer.ts";
 import { copyText } from "../actions.ts";
 import { currentLocale } from "../../../store/settings-store.ts";
-import { readUserCardText, UserMessageActions, UserMessageEditor } from "../UserMessageActions.tsx";
+import { UserMessageActions } from "../UserMessageActions.tsx";
 const GAPS: ReadonlySet<TspSpace> = new Set(["none", "xs", "sm", "md", "lg"]);
 
 function stackClasses(p: Readonly<Record<string, unknown>>): string {
@@ -124,40 +141,113 @@ function PlainCol(props: NodeProps) {
  * omp 的助手消息容器。恢复会话时 omp 不重发每轮末尾的用量行（实测 18.12.4），这里在一轮的最后一个助手消息后面
  * 补一行（数据来自会话文件，见 main/tsp/session-extras.ts）；实时的轮 omp 自己带这一行，不补；还在跑的那一轮也不补（useBareTurnIndex）。
  */
-function AssistantCopyAction({ text }: { text: string }) {
+const AssistantCopyCtx = createContext<string>("");
+
+function AssistantCopyIconBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const zh = currentLocale() === "zh-CN";
   return (
-    <div className="tsp-assistant-actions">
-      <button
-        type="button"
-        className="tsp-assistant-copy-btn"
-        data-copied={copied || undefined}
-        data-testid="tsp-assistant-copy"
-        title={zh ? "复制整条回答内容" : "Copy response"}
-        aria-label={zh ? "复制回答" : "Copy response"}
-        onClick={() => {
-          copyText(text);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        {copied ? <Check size={12} /> : <CopyIcon size={12} />}
-        <span>{copied ? (zh ? "已复制" : "Copied") : zh ? "复制" : "Copy"}</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      className="tsp-assistant-copy-btn"
+      data-copied={copied || undefined}
+      data-testid="tsp-assistant-copy"
+      title={zh ? "复制整条回答内容" : "Copy response"}
+      aria-label={zh ? "复制回答" : "Copy response"}
+      onClick={(event) => {
+        event.stopPropagation();
+        copyText(text);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check size={12} /> : <CopyIcon size={12} />}
+    </button>
   );
+}
+
+function inspectTurnContext(
+  taskId: NodeProps["ctx"]["taskId"],
+  sf: string,
+  nodeId: string,
+): { toolCount: number; hasMoreProcessAfter: boolean } {
+  const doc = peekTspDocument(taskId);
+  const surface = doc?.surfaces.get(sf);
+  const main = surface?.nodes.get("main");
+  if (!surface || !main) return { toolCount: 0, hasMoreProcessAfter: false };
+  const idx = main.c.indexOf(nodeId);
+  if (idx === -1) return { toolCount: 0, hasMoreProcessAfter: false };
+
+  let toolCount = 0;
+  for (let i = idx - 1; i >= 0; i--) {
+    const cur = surface.nodes.get(main.c[i]!);
+    if (!cur) continue;
+    if (cur.k === "card" && cur.p["role"] === "omp.user") break;
+    if (cur.k === "tool" && cur.p["role"] !== "omp.tool.ask") toolCount += 1;
+  }
+
+  let hasMoreProcessAfter = false;
+  for (let i = idx + 1; i < main.c.length; i++) {
+    const cur = surface.nodes.get(main.c[i]!);
+    if (!cur) continue;
+    if (cur.k === "card" && cur.p["role"] === "omp.user") break;
+    if (cur.k === "tool" && cur.p["role"] !== "omp.tool.ask") {
+      hasMoreProcessAfter = true;
+      break;
+    }
+    if (cur.k === "col" && cur.p["role"] === "omp.assistant") {
+      const hasThinking = cur.c.some((cid) => {
+        const r = surface.nodes.get(cid)?.p["role"];
+        return typeof r === "string" && r.startsWith("omp.thinking");
+      });
+      if (hasThinking) {
+        hasMoreProcessAfter = true;
+        break;
+      }
+    }
+  }
+  return { toolCount, hasMoreProcessAfter };
+}
+
+function synthesizeTurnRecap(markdown: string, toolCount: number): string | null {
+  // 仅在工具调用 >= 5 次且经历复杂多步操作的回合渲染单行精炼 ※ 总结，普通简短对话直接不渲染
+  if (toolCount < 5) return null;
+  const cleaned = markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\|[^\n]+\|/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .trim();
+  if (cleaned.length < 120) return null;
+
+  const rawLines = cleaned
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^(?:[#>*\-\s`]+|\d+\.\s+)+|[`*_]+$/g, "")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/__([^_]+)__/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((line) => line.length >= 10 && !/^[-=:|\s]+$/.test(line));
+  if (rawLines.length === 0) return null;
+
+  const first = rawLines[0]!;
+  return first.length > 96 ? `${first.slice(0, 95)}…` : first;
 }
 
 function AssistantCol(props: NodeProps) {
   const { taskId, sf } = props.ctx;
+  const zh = currentLocale() === "zh-CN";
   // 只取轮数和自己那一轮的脚注：别的轮的用量刷新了不重画这一列。
   const turnCount = useSessionExtras(taskId, (extras) => extras.turns.length);
   const running = useTaskValue(taskId, (task) => task?.status === "running" || task?.status === "needs_you");
   const index = useBareTurnIndex(taskId, sf, props.node.id, turnCount, running);
   const footer = useSessionExtras(taskId, (extras) => (index >= 0 ? (extras.turns[index] ?? null) : null));
   const text = useMemo(() => (footer === null ? null : formatTurnFooter(footer)), [footer]);
-  // omp.thinking 与工具读取的 media/image 节点已由 MainFlow 统一提取进上方的 ProcessGroup 单列卡片渲染，这里只画正式回答与脚注。
+  // omp.thinking 与工具读取的 media/image 节点已由 MainFlow 统一提取进 ProcessGroup 渲染，这里只画正式回答与单行安静底栏。
   const nonThoughtIds = props.node.c.filter((id) => {
     const child = peekTspNode(taskId, sf, id);
     if (!child) return false;
@@ -165,32 +255,64 @@ function AssistantCol(props: NodeProps) {
     const role = child.p["role"];
     return !(typeof role === "string" && role.startsWith("omp.thinking"));
   });
+  const hasUsageChild = nonThoughtIds.some((id) => peekTspNode(taskId, sf, id)?.p["role"] === "omp.turn.usage");
+  const { toolCount, hasMoreProcessAfter } = inspectTurnContext(taskId, sf, props.node.id);
+  const visibleChildIds = hasMoreProcessAfter
+    ? nonThoughtIds.filter((id) => peekTspNode(taskId, sf, id)?.p["role"] !== "omp.turn.usage")
+    : nonThoughtIds;
   const answerText = useMemo(() => {
     const parts: string[] = [];
-    for (const id of nonThoughtIds) {
+    for (const id of visibleChildIds) {
       const child = peekTspNode(taskId, sf, id);
       if (child?.k === "md" && child.p["role"] === undefined && typeof child.p["text"] === "string") {
         parts.push(child.p["text"]);
       }
     }
     return parts.join("\n\n").trim();
-  }, [nonThoughtIds, taskId, sf]);
-  const blank = nonThoughtIds.length === 0 && text === null;
+  }, [visibleChildIds, taskId, sf]);
+  const recapText = useMemo(
+    () => (running || hasMoreProcessAfter ? null : synthesizeTurnRecap(answerText, toolCount)),
+    [running, hasMoreProcessAfter, answerText, toolCount],
+  );
+  const showRestoredUsage = !hasMoreProcessAfter && text !== null;
+  const showBareCopyFoot = !running && !hasMoreProcessAfter && !hasUsageChild && text === null && answerText !== "";
+  const blank = visibleChildIds.length === 0 && !showRestoredUsage;
   return (
-    <div {...nodeDomProps(props, "tsp-col", { className: stackClasses(props.node.p), blank })}>
-      {nonThoughtIds.map((id) => (
-        <TspNode key={id} id={id} ctx={props.ctx} />
-      ))}
-      {text !== null && (
-        <div className="tsp-row" data-role="omp.turn.usage" data-restored="" title={text.title}>
-          <span className="tsp-icon" aria-hidden="true">
-            <TspIcon name="time" />
-          </span>
-          <div className="tsp-text">{text.text}</div>
-        </div>
-      )}
-      {!running && answerText !== "" && <AssistantCopyAction text={answerText} />}
-    </div>
+    <AssistantCopyCtx.Provider value={answerText}>
+      <div {...nodeDomProps(props, "tsp-col", { className: stackClasses(props.node.p), blank })}>
+        {visibleChildIds.map((id) => (
+          <TspNode key={id} id={id} ctx={props.ctx} />
+        ))}
+        {!running && recapText !== null && (
+          <div
+            className="tsp-row tsp-turn-summary"
+            data-role="omp.turn.recap"
+            data-testid="tsp-turn-summary"
+            title={recapText}
+          >
+            <span className="tsp-turn-summary-text">{recapText}</span>
+          </div>
+        )}
+        {showRestoredUsage && text !== null && (
+          <div className="tsp-row" data-role="omp.turn.usage" data-restored="" title={text.title}>
+            {answerText !== "" && (
+              <>
+                <AssistantCopyIconBtn text={answerText} />
+                <span className="tsp-foot-sep" aria-hidden="true">
+                  ·
+                </span>
+              </>
+            )}
+            <div className="tsp-text">{text.text}</div>
+          </div>
+        )}
+        {showBareCopyFoot && (
+          <div className="tsp-row tsp-assistant-bare-foot" title={zh ? "复制回答" : "Copy response"}>
+            <AssistantCopyIconBtn text={answerText} />
+          </div>
+        )}
+      </div>
+    </AssistantCopyCtx.Provider>
   );
 }
 
@@ -212,8 +334,30 @@ function RecapRow(props: NodeProps) {
   );
 }
 
+function UsageRow(props: NodeProps) {
+  const { taskId, sf } = props.ctx;
+  const answerText = useContext(AssistantCopyCtx);
+  const blank = useBlank(props);
+  const hasNativeCopy = props.node.c.some((cid) => peekTspNode(taskId, sf, cid)?.p["role"] === "omp.turn.copy");
+  const showCopy = !hasNativeCopy && answerText !== "";
+  return (
+    <div {...nodeDomProps(props, "tsp-row", { className: stackClasses(props.node.p), blank })}>
+      {showCopy && (
+        <>
+          <AssistantCopyIconBtn text={answerText} />
+          <span className="tsp-foot-sep" aria-hidden="true">
+            ·
+          </span>
+        </>
+      )}
+      <TspChildren {...props} />
+    </div>
+  );
+}
+
 export function Row(props: NodeProps) {
   if (props.node.p.role === "omp.recap") return <RecapRow {...props} />;
+  if (props.node.p.role === "omp.turn.usage") return <UsageRow {...props} />;
   if (props.node.p.role === ASK_BUTTON_ROLE) {
     return <AskButtonRow {...props} dom={nodeDomProps(props, "tsp-row", { className: stackClasses(props.node.p) })} />;
   }
@@ -335,12 +479,140 @@ function CollapsibleUserBody({ children }: { children: ReactNode }) {
   );
 }
 
+function collectPlainNodeText(taskId: NodeProps["ctx"]["taskId"], sf: string, id: string): string {
+  const node = peekTspNode(taskId, sf, id);
+  if (!node) return "";
+  if (node.p["role"] === "omp.error.actions" || node.p["role"] === "omp.error.action") return "";
+  if (typeof node.p["text"] === "string") return node.p["text"];
+  if (Array.isArray(node.p["spans"])) {
+    return (node.p["spans"] as { t?: unknown }[]).map((s) => (typeof s?.t === "string" ? s.t : "")).join("");
+  }
+  return node.c
+    .map((cid) => collectPlainNodeText(taskId, sf, cid))
+    .filter((s) => s !== "")
+    .join(" ");
+}
+
+function summarizeErrorText(raw: string, zh: boolean): { summary: string; hasDetail: boolean } {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return { summary: zh ? "请求异常中断" : "Request interrupted", hasDetail: false };
+  }
+  const codeMatch = /\b(401|403|404|408|413|429|500|502|503|504)\b/.exec(trimmed);
+  let extractedMsg: string | null = null;
+  const jsonMsgMatch = /"message"\s*:\s*"((?:[^"\\]|\\.)+)"/.exec(trimmed);
+  if (jsonMsgMatch?.[1]) {
+    extractedMsg = jsonMsgMatch[1].replace(/\\"/g, '"').replace(/\\n/g, " ").trim();
+  }
+  const firstCleanLine =
+    extractedMsg ??
+    trimmed
+      .replace(/^Error\b[:\s-]*/i, "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l !== "" && !l.startsWith("{") && !l.startsWith("at ")) ??
+    trimmed.replace(/\s+/g, " ");
+
+  let summary = firstCleanLine;
+  if (codeMatch && !summary.includes(codeMatch[1]!)) {
+    summary = `${codeMatch[1]}: ${summary}`;
+  }
+  const hasDetail =
+    trimmed.includes("\n") ||
+    trimmed.includes("{") ||
+    trimmed.length > 96 ||
+    summary !== trimmed.replace(/^Error\s*/i, "");
+  if (summary.length > 92) {
+    summary = `${summary.slice(0, 91)}…`;
+  }
+  return { summary, hasDetail };
+}
+
+function ErrorBarCard(props: NodeProps) {
+  const { node, ctx } = props;
+  const zh = currentLocale() === "zh-CN";
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const actionIds: string[] = [];
+  const detailIds: string[] = [];
+  const rawParts: string[] = [];
+
+  for (const cid of node.c) {
+    const child = peekTspNode(ctx.taskId, ctx.sf, cid);
+    if (!child) continue;
+    if (child.p["role"] === "omp.error.actions" || child.p["role"] === "omp.error.action") {
+      actionIds.push(cid);
+      continue;
+    }
+    const text = collectPlainNodeText(ctx.taskId, ctx.sf, cid).trim();
+    if (text.toLowerCase() === "error") continue;
+    if (text !== "") rawParts.push(text);
+    detailIds.push(cid);
+  }
+
+  const rawFull = rawParts.join("\n").trim();
+  const { summary, hasDetail } = summarizeErrorText(rawFull, zh);
+
+  return (
+    <div {...nodeDomProps(props, "tsp-card", { className: "tsp-error-bar-card" })}>
+      <div className="tsp-error-bar">
+        {/* 可点是整行摘要（不是原生 <button>）：button 的 UA 外观（ButtonFace 底 + 边框 + padding）和悬停重绘会在这张
+            半透明错误卡上变成一个深色小块，所以用 div + role="button"，外观全交给 tsp.css 的 .tsp-error-bar-main。 */}
+        <div
+          className="tsp-error-bar-main"
+          role={hasDetail ? "button" : undefined}
+          tabIndex={hasDetail ? 0 : undefined}
+          data-expandable={hasDetail || undefined}
+          data-expanded={(hasDetail && detailOpen) || undefined}
+          aria-expanded={hasDetail ? detailOpen : undefined}
+          onClick={() => {
+            if (hasDetail) setDetailOpen((v) => !v);
+          }}
+          onKeyDown={(event) => {
+            if (!hasDetail) return;
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            setDetailOpen((v) => !v);
+          }}
+        >
+          <span className="tsp-error-dot" aria-hidden="true" />
+          <span className="tsp-error-label">{zh ? "本轮运行失败" : "Turn failed"}</span>
+          <span className="tsp-error-summary" title={summary}>
+            {summary}
+          </span>
+          {hasDetail && (
+            <span className="tsp-error-chev" data-expanded={detailOpen || undefined} aria-hidden="true">
+              <ChevronDown size={12} />
+            </span>
+          )}
+        </div>
+        <div className="tsp-error-bar-actions">
+          {actionIds.map((id) => (
+            <TspNode key={id} id={id} ctx={ctx} />
+          ))}
+          <RetryButton taskId={ctx.taskId} sf={ctx.sf} id={node.id} />
+        </div>
+      </div>
+      {hasDetail && detailOpen && detailIds.length > 0 && (
+        <div className="tsp-error-detail">
+          {detailIds.map((id) => (
+            <TspNode key={id} id={id} ctx={ctx} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Card(props: NodeProps) {
+  if (props.node.p.role === ERROR_CARD_ROLE) return <ErrorBarCard {...props} />;
+  return <StandardCard {...props} />;
+}
+
+function StandardCard(props: NodeProps) {
   const { node } = props;
   const p = node.p;
   const isUser = p.role === "omp.user";
-  const [userEditText, setUserEditText] = useState<string | null>(null);
-  const [rawView, setRawView] = useState(false);
   const collapsible = p.collapsible === true;
   const [collapsed, toggle] = useFold(props, collapsible && p.collapsed === true);
   const keyFocus = useKeyboardFocus(isUser);
@@ -359,22 +631,15 @@ export function Card(props: NodeProps) {
     !hasHead && "nohead",
   ].filter((c): c is string => typeof c === "string");
   const icon = roleIcon(p.role);
-  const rawUserText = isUser && rawView ? readUserCardText(props.ctx.taskId, props.ctx.sf, node.id) : null;
-  const innerNodes =
-    rawUserText !== null ? (
-      <pre className="tsp-user-raw-view" data-testid="user-msg-raw-view">
-        {rawUserText}
-      </pre>
-    ) : (
-      <>
-        {node.c
-          .filter((id) => id !== headId)
-          .map((id) => (
-            <TspNode key={id} id={id} ctx={props.ctx} />
-          ))}
-        {p.role === ERROR_CARD_ROLE && <RetryButton taskId={props.ctx.taskId} sf={props.ctx.sf} id={node.id} />}
-      </>
-    );
+  const innerNodes = (
+    <>
+      {node.c
+        .filter((id) => id !== headId)
+        .map((id) => (
+          <TspNode key={id} id={id} ctx={props.ctx} />
+        ))}
+    </>
+  );
   const body: ReactNode = (
     <div className="tsp-card-body">{isUser ? <CollapsibleUserBody>{innerNodes}</CollapsibleUserBody> : innerNodes}</div>
   );
@@ -385,7 +650,6 @@ export function Card(props: NodeProps) {
         own: { toggle: collapsible ? toggle : undefined },
       })}
       {...keyFocus}
-      data-editing={userEditText !== null ? "" : undefined}
     >
       {hasHead && (
         <div
@@ -412,54 +676,42 @@ export function Card(props: NodeProps) {
           )}
         </div>
       )}
-      {isUser && userEditText !== null ? (
-        <UserMessageEditor
-          taskId={props.ctx.taskId}
-          sf={props.ctx.sf}
-          cardId={node.id}
-          initialText={userEditText}
-          onCancel={() => setUserEditText(null)}
-        />
-      ) : (
-        <FoldCtx.Provider value={fold}>
-          {collapsed && lines === null && collapsible ? null : lines !== null ? (
-            <Clamp lines={lines} onExpand={toggle}>
-              {body}
-            </Clamp>
-          ) : (
-            body
-          )}
-        </FoldCtx.Provider>
-      )}
-      {isUser && (
-        <UserMessageActions
-          taskId={props.ctx.taskId}
-          sf={props.ctx.sf}
-          cardId={node.id}
-          editing={userEditText !== null}
-          rawView={rawView}
-          onToggleRawView={() => setRawView((v) => !v)}
-          onStartEdit={(initial) => setUserEditText(initial)}
-          onCloseEdit={() => setUserEditText(null)}
-        />
-      )}
+      <FoldCtx.Provider value={fold}>
+        {collapsed && lines === null && collapsible ? null : lines !== null ? (
+          <Clamp lines={lines} onExpand={toggle}>
+            {body}
+          </Clamp>
+        ) : (
+          body
+        )}
+      </FoldCtx.Provider>
+      {isUser && <UserMessageActions taskId={props.ctx.taskId} sf={props.ctx.sf} cardId={node.id} />}
     </div>
   );
 }
 
-function firstThoughtLine(props: NodeProps, headId: string | null): string | null {
+function firstThoughtLine(props: NodeProps, headId: string | null, live = false): string | null {
   const role = props.node.p.role;
   if (typeof role !== "string" || !role.startsWith("omp.thinking")) return null;
-  for (const cid of props.node.c) {
+  const childIds = live ? props.node.c.toReversed() : props.node.c;
+  for (const cid of childIds) {
     if (cid === headId) continue;
     const child = peekTspNode(props.ctx.taskId, props.ctx.sf, cid);
     if (child && typeof child.p.text === "string") {
-      const line =
-        child.p.text
-          .replace(/```[\s\S]*?```/g, " ")
-          .split(/\r?\n/)
-          .map((s) => s.replace(/^[#>*\-\s`]+|[`*_]+$/g, "").trim())
-          .find((s) => s.length > 0) ?? "";
+      const candidates = child.p.text
+        .replace(/```[\s\S]*?(?:```|$)/g, " ")
+        .split(/\r?\n/)
+        .map((s) =>
+          s
+            .replace(/^(?:[#>*\-\s`]+|\d+\.\s+)+|[`*_]+$/g, "")
+            .replace(/\*\*([^*]+)\*\*/g, "$1")
+            .replace(/__([^_]+)__/g, "$1")
+            .replace(/`([^`]+)`/g, "$1")
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+            .trim(),
+        )
+        .filter((s) => s.length > 0);
+      const line = (live ? candidates.at(-1) : candidates[0]) ?? "";
       if (line !== "") return line.length > 90 ? `${line.slice(0, 89)}…` : line;
     }
   }
@@ -471,12 +723,50 @@ export function Section(props: NodeProps) {
   const p = node.p;
   const isThinking = typeof p.role === "string" && p.role.startsWith("omp.thinking");
   const headId = headChildId(node);
-  const headNode = headId !== null ? peekTspNode(props.ctx.taskId, props.ctx.sf, headId) : null;
+  const subscribedHeadNode = useTspNode(props.ctx.taskId, props.ctx.sf, isThinking && headId !== null ? headId : "");
+  const headNode = subscribedHeadNode ?? (headId !== null ? peekTspNode(props.ctx.taskId, props.ctx.sf, headId) : null);
+  const thoughtLive = isThinking && (p.role === "omp.thinking.live" || headNode?.k === "shimmer");
   // 照 reasoning-fold.ts：思考结束（head 从 shimmer 变成 text "Thought for Ns"）后默认自动收起，点行可随时展开。
   const thoughtDone = isThinking && headNode?.k === "text";
   const collapsible = p.collapsible === true;
   const [collapsed, toggle] = useFold(props, collapsible && (p.collapsed === true || thoughtDone));
-  const previewLine = collapsed ? firstThoughtLine(props, headId) : null;
+  const bodyChildId = isThinking ? (node.c.find((cid) => cid !== headId) ?? null) : null;
+  const liveBodyNode = useTspNode(
+    props.ctx.taskId,
+    props.ctx.sf,
+    isThinking && bodyChildId !== null ? bodyChildId : "",
+  );
+  const liveChildText = typeof liveBodyNode?.p.text === "string" ? liveBodyNode.p.text : "";
+  const previewLine = isThinking && collapsed ? firstThoughtLine(props, headId, thoughtLive) : null;
+  const zh = currentLocale() === "zh-CN";
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const userScrolledRef = useRef(false);
+
+  useEffect(() => {
+    userScrolledRef.current = false;
+  }, [thoughtLive, collapsed]);
+
+  useEffect(() => {
+    if (!thoughtLive || collapsed || userScrolledRef.current) return;
+    const el = bodyRef.current;
+    if (el && el.scrollHeight > el.clientHeight) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [thoughtLive, collapsed, liveChildText]);
+
+  useEffect(() => {
+    if (!thoughtLive || collapsed || typeof ResizeObserver === "undefined") return;
+    const el = bodyRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (!userScrolledRef.current && el.scrollHeight > el.clientHeight) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    for (const child of el.children) ro.observe(child);
+    return () => ro.disconnect();
+  }, [thoughtLive, collapsed, node.c]);
+
   const classes = [collapsible && "collapsible", collapsed && "collapsed"].filter(
     (c): c is string => typeof c === "string",
   );
@@ -486,6 +776,7 @@ export function Section(props: NodeProps) {
         className: classes.join(" "),
         own: { toggle: collapsible ? toggle : undefined },
       })}
+      data-live={thoughtLive ? "" : undefined}
     >
       <div
         className="tsp-section-head"
@@ -495,24 +786,52 @@ export function Section(props: NodeProps) {
         onClick={collapsible ? (event) => !event.metaKey && toggle() : undefined}
         onKeyDown={collapsible ? onHeadKey(toggle) : undefined}
       >
-        <span className="tsp-chev" data-collapsed={collapsed || undefined}>
-          <ChevronDown size={12} />
-        </span>
-        <div className="tsp-head">
-          <HeadContent props={props} headId={headId} />
-        </div>
-        {previewLine !== null && (
+        {isThinking ? (
+          collapsed ? (
+            <>
+              <span className="tsp-thought-preview">
+                {previewLine ?? (thoughtLive ? (zh ? "正在思考…" : "Thinking…") : zh ? "思考过程" : "Thought")}
+              </span>
+              <span className="tsp-thought-arrow" aria-hidden="true">
+                ›
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="tsp-thought-clean-label">
+                {thoughtLive ? (zh ? "正在思考…" : "Thinking…") : zh ? "思考" : "Thought"}
+              </span>
+              <span className="tsp-chev">
+                <ChevronDown size={12} />
+              </span>
+            </>
+          )
+        ) : (
           <>
-            <span className="tsp-thought-dot" aria-hidden="true">
-              ·
+            <span className="tsp-chev" data-collapsed={collapsed || undefined}>
+              <ChevronDown size={12} />
             </span>
-            <span className="tsp-thought-preview">{previewLine}</span>
+            <div className="tsp-head">
+              <HeadContent props={props} headId={headId} />
+            </div>
           </>
         )}
       </div>
       {!collapsed && (
-        <FoldCtx.Provider value={collapsible ? OPEN_FOLD : NO_FOLD}>
-          <div className="tsp-section-body">
+        // 展开着的 section：思考 / Commentary 的正文就是要看全文，子节点的 preview 一律让位（不再因 NO_FOLD 被夹到几行）。
+        <FoldCtx.Provider value={OPEN_FOLD}>
+          <div
+            ref={bodyRef}
+            className="tsp-section-body"
+            onScroll={
+              thoughtLive
+                ? (event) => {
+                    const el = event.currentTarget;
+                    userScrolledRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > 28;
+                  }
+                : undefined
+            }
+          >
             {node.c
               .filter((id) => id !== headId)
               .map((id) => (

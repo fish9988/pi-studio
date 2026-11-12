@@ -575,17 +575,16 @@
   color: var(--text-3);
 }
 
-/* 路径太长时省略开头（rtl + 里面的 bdi），末尾的文件夹名总看得见 */
+/* 极简目录简称轻标签（完整路径在悬停 title 中展示） */
 .empty-project-name {
   min-width: 0;
-  max-width: 24ch;
+  max-width: 18ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-xs);
+  color: var(--text-2);
 }
 
 .empty-error {
@@ -623,6 +622,7 @@
 }
 
 .empty-draft {
+  --composer-grow-w: 0px;
   position: sticky;
   bottom: 0;
   z-index: calc(var(--z-sticky) + 1);

@@ -42,7 +42,21 @@ import type { ExitProps } from "../../ui/presence.ts";
 
 const BUSY: ReadonlySet<TaskState["status"]> = new Set(["starting", "running", "needs_you"]);
 
-export function ReviewView({ taskId, open, exit }: { taskId: TaskId; open: boolean; exit: ExitProps }) {
+export function ReviewView({
+  taskId,
+  open,
+  exit,
+  embedded = false,
+  sessionCount = 0,
+  onSwitchSession,
+}: {
+  taskId: TaskId;
+  open: boolean;
+  exit?: ExitProps | undefined;
+  embedded?: boolean | undefined;
+  sessionCount?: number | undefined;
+  onSwitchSession?: (() => void) | undefined;
+}) {
   const t = useT();
   const task = useTask(taskId);
   const settings = useSettings();
@@ -76,9 +90,10 @@ export function ReviewView({ taskId, open, exit }: { taskId: TaskId; open: boole
     if (stamp !== 0) refreshGit(taskId);
   }, [taskId, stamp]);
 
-  // 进入时把焦点放进评审、底下的页面不可达（inert）；退出（开始退出动画或卸载）时焦点回到触发它的元素，已经不在了就回输入框。
+  // 全屏模式下进入时把焦点放进评审、底下的页面不可达（inert）；右侧分栏内嵌模式下绝不阻塞左侧聊天流。
   const release = useRef<() => void>(() => undefined);
   useEffect(() => {
+    if (embedded) return;
     const trigger = document.activeElement;
     const body = document.querySelector(".body");
     body?.setAttribute("inert", "");
@@ -95,12 +110,13 @@ export function ReviewView({ taskId, open, exit }: { taskId: TaskId; open: boole
       target?.focus();
     };
     return () => release.current();
-  }, []);
+  }, [embedded]);
   useEffect(() => {
-    if (!open) release.current();
-  }, [open]);
+    if (!embedded && !open) release.current();
+  }, [embedded, open]);
 
   useReviewKeys((key) => {
+    if (embedded && !root.current?.contains(document.activeElement)) return false;
     if (key === "Escape") {
       closeReview();
       return true;
@@ -212,19 +228,27 @@ export function ReviewView({ taskId, open, exit }: { taskId: TaskId; open: boole
       ref={root}
       tabIndex={-1}
       data-testid="review"
+      data-embedded={embedded ? "true" : undefined}
       role="region"
       aria-label={t("review.title")}
-      {...exit}
+      {...(exit ?? {})}
     >
       <header className="rv-head">
-        <IconButton label={t("review.close")} testId="review-close" onClick={closeReview}>
-          <Close size={14} />
-        </IconButton>
+        {!embedded && (
+          <IconButton label={t("review.close")} testId="review-close" onClick={closeReview}>
+            <Close size={14} />
+          </IconButton>
+        )}
         <h2 className="rv-title">{t("review.title")}</h2>
         {status?.kind === "ok" && status.branch.head !== null && (
           <span className="rv-branch" data-testid="review-branch">
             {status.branch.head}
           </span>
+        )}
+        {onSwitchSession && sessionCount > 0 && (
+          <button type="button" className="rv-session-pill" onClick={onSwitchSession}>
+            {`Session (${sessionCount})`}
+          </button>
         )}
         <span className="rv-spacer" />
         {/* 视图切换只对 diff 有意义：不是 git 仓库、没装 git 时不显示。 */}

@@ -93,6 +93,8 @@ export const ompHandlers: HandlerGroup<
   | "setSoundOnDone"
   | "setCopyOnSelect"
   | "setToolHeadsOnly"
+  | "setAutoCollapseTools"
+  | "setAutoCollapseDiffs"
   | "setYoloConfirmed"
   | "getDefaultModel"
   | "getStartupSnapshot"
@@ -152,6 +154,10 @@ export const ompHandlers: HandlerGroup<
   setSoundOnDone: (on) => Promise.resolve(updateSettings({ soundOnDone: parseBoolean(on, "soundOnDone") })),
   setCopyOnSelect: (on) => Promise.resolve(updateSettings({ copyOnSelect: parseBoolean(on, "copyOnSelect") })),
   setToolHeadsOnly: (on) => Promise.resolve(updateSettings({ toolHeadsOnly: parseBoolean(on, "toolHeadsOnly") })),
+  setAutoCollapseTools: (on) =>
+    Promise.resolve(updateSettings({ autoCollapseTools: parseBoolean(on, "autoCollapseTools") })),
+  setAutoCollapseDiffs: (on) =>
+    Promise.resolve(updateSettings({ autoCollapseDiffs: parseBoolean(on, "autoCollapseDiffs") })),
   setYoloConfirmed: () => Promise.resolve(updateSettings({ yoloConfirmed: true })),
   getDefaultModel: () => readDefaultModel(false),
   getStartupSnapshot: () => Promise.resolve(startupCache().snapshot()),

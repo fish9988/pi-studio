@@ -54,7 +54,7 @@ export const historyHandlers: HandlerGroup<
       sessionFile: session.file,
       cwd: session.cwd,
       projectId: project.id,
-      title: session.title,
+      title: session.title ?? session.firstPrompt,
       modifiedAt: session.modifiedAt,
     });
   },

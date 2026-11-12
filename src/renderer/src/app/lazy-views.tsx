@@ -9,6 +9,10 @@ import { useOmpStatus, usePaletteOpen } from "../store/index.ts";
 import { useReviewTaskId } from "../store/review-store.ts";
 import { lazyView } from "../ui/lazy-view.ts";
 
+const rightTerminalPane = lazyView(() =>
+  import("../features/terminal/RightTerminalPane.tsx").then((module) => module.RightTerminalPane),
+);
+
 const settingsView = lazyView(() =>
   import("../features/settings/SettingsView.tsx").then((module) => module.SettingsView),
 );
@@ -44,6 +48,7 @@ export async function preloadFrequentViews(): Promise<void> {
   await settingsView.preload();
   await settingsNav.preload();
   await preloadTerminalPanel();
+  await rightTerminalPane.preload();
 }
 
 /** 第一次为 true 之后一直是 true。 */
@@ -59,6 +64,7 @@ export const AgentsPanel = agentsPanel.View;
 export const BrowserPanel = browserPanel.View;
 export const FilePreviewPane = filePreviewPane.View;
 export const GitChangesPanel = gitChangesPanel.View;
+export const RightTerminalPane = rightTerminalPane.View;
 
 export function ReviewHost() {
   const mounted = useLatched(useReviewTaskId() !== null);

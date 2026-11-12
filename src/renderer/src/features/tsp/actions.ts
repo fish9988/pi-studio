@@ -7,7 +7,7 @@ import type { DocNode } from "../../../../shared/tsp/document.ts";
 import { currentLocale } from "../../store/settings-store.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
 import { pushToast } from "../dialogs/toast-store.ts";
-import { openFilePreview } from "../file-preview/index.ts";
+import { openFilePreview, openFilesPanel } from "../file-preview/index.ts";
 import { openSessionTree } from "../conversation/session-tree-store.ts";
 import { userCardFromEnd } from "../../../../shared/tsp/session-tree.ts";
 import type { TspContext } from "./node-props.ts";
@@ -52,29 +52,46 @@ function nodeText(node: DocNode, ctx: Pick<TspContext, "taskId" | "sf">): string
     .join(" ");
 }
 
-/** 去掉 file:// 前缀和 `:12`、`#L3` 之类的位置后缀，得到可交给文件预览的路径。 */
-function hrefToPath(href: string): string {
-  let path = href;
-  if (/^file:\/\//i.test(path)) {
-    path = decodeURIComponent(path.replace(/^file:\/\//i, ""));
-    if (/^\/[A-Za-z]:/.test(path)) path = path.slice(1);
+/** 去掉 file:// 前缀并提取 `:12`、`#L3` 行号后缀，得到可交给文件预览的路径与目标行号。 */
+export function parseHrefTarget(href: string): { path: string; line?: number | undefined } {
+  let raw = href.trim();
+  if (/^file:\/\//i.test(raw)) {
+    raw = decodeURIComponent(raw.replace(/^file:\/\//i, ""));
+    if (/^\/[A-Za-z]:/.test(raw)) raw = raw.slice(1);
   } else {
     try {
-      path = decodeURIComponent(path);
+      raw = decodeURIComponent(raw);
     } catch {
       // 不是 %XX 编码，原样用。
     }
   }
-  return path.replace(/#L\d+(?:-L?\d+)?$/, "").replace(/:\d+(?:[:-]\d+)?$/, "");
+  let line: number | undefined;
+  const hashMatch = /#L(\d+)(?:-L?\d+)?$/i.exec(raw);
+  if (hashMatch) {
+    line = Number(hashMatch[1]);
+    raw = raw.slice(0, hashMatch.index);
+  } else {
+    const colonMatch = /(?<!^[A-Za-z]):(\d+)(?:[:-]\d+)?$/.exec(raw);
+    if (colonMatch) {
+      line = Number(colonMatch[1]);
+      raw = raw.slice(0, colonMatch.index);
+    }
+  }
+  return { path: raw, line: line !== undefined && Number.isFinite(line) && line >= 1 ? line : undefined };
 }
 
-/** 打开一个链接：http(s)/mailto 交给系统浏览器，文件路径在右侧预览。 */
+/** 打开一个链接：http(s)/mailto 交给系统浏览器，目录打开文件树，文件路径在右侧分栏预览并定位到行号。 */
 export function openHref(href: string, ctx: Pick<TspContext, "taskId">): void {
   if (/^(https?|mailto):/i.test(href)) {
     window.studio.openExternal(href).catch((error: unknown) => reportErrorNow(error));
     return;
   }
-  openFilePreview(ctx.taskId, hrefToPath(href));
+  const { path, line } = parseHrefTarget(href);
+  if (/[\\/]$/.test(path)) {
+    openFilesPanel(ctx.taskId);
+    return;
+  }
+  openFilePreview(ctx.taskId, path, line);
 }
 
 export function copyText(text: string): void {

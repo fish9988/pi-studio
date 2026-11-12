@@ -31,22 +31,35 @@ export function sameAgents(a: readonly HubAgent[], b: readonly HubAgent[]): bool
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * 子代理的四个操作（插话 / 聚焦 / 结束 / 恢复）都要 omp 的 Agent Hub 通道。pi 的 subagent 工具没有这条通道：
+ * 每个子代理是扩展内部起的 `pi -p --no-session` 子进程，句柄不经过 RPC，studio 没法插话、也没法单独结束它。
+ * 所以面板只提供查看（列表、详情、对话记录、活动流），不摆点下去只会报错的按钮。
+ */
+export const agentControlsSupported = false;
+
 /** 能插话：还在跑、空闲或挂起（实测过运行中的；已完成 / 被结束 / 失败的 omp 的 Hub 不一定能聚焦，不提供）。 */
 export function canSteer(status: AgentStatus): boolean {
-  return status === "pending" || status === "running" || status === "idle" || status === "parked";
+  return (
+    agentControlsSupported && (status === "pending" || status === "running" || status === "idle" || status === "parked")
+  );
 }
 
 /** 能进入对话（omp 的 Hub 里 Enter / 点击 = 聚焦；parked / 被结束的先复活）。pending 的 omp 的 Hub 还没有这一行（实测），已完成 / 失败的也只看详情。 */
 export function canFocus(status: AgentStatus): boolean {
-  return status === "running" || status === "idle" || status === "parked" || status === "aborted";
+  return (
+    agentControlsSupported && (status === "running" || status === "idle" || status === "parked" || status === "aborted")
+  );
 }
 
 /** 能结束：还在跑。 */
-export const canKill = isAgentActive;
+export function canKill(status: AgentStatus): boolean {
+  return agentControlsSupported && isAgentActive(status);
+}
 
 /** 能恢复：被结束或挂起（omp 自己的规则："Only parked or killed agents can be revived"）。 */
 export function canRevive(status: AgentStatus): boolean {
-  return status === "aborted" || status === "parked";
+  return agentControlsSupported && (status === "aborted" || status === "parked");
 }
 
 /** 运行中的已用时间 / 结束后的总时间（毫秒）；都没有为 null。 */

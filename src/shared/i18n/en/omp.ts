@@ -4,7 +4,7 @@ import type { omp as zhCN } from "../zh-CN/omp.ts";
 export const omp = {
   finding: "Looking for omp…",
   "source.other": "managed by {name}",
-  "source.studio": "managed by omp-studio",
+  "source.studio": "managed by pi-studio",
   "source.user": "installed by you",
   downloading: "Downloading omp {version}…",
   "downloading.latest": "Looking for the latest version…",
@@ -13,26 +13,26 @@ export const omp = {
   verifyFailed: "The file failed verification and was discarded.",
   "takeover.title": "Found a script-based omp",
   "takeover.body":
-    "omp-studio can't launch script-based installs (such as npm). It can install an official copy first on your user PATH; your existing one stays.",
+    "pi-studio can't launch script-based installs (such as npm). It can install an official copy first on your user PATH; your existing one stays.",
   "takeover.exeTitle": "Found an omp you installed yourself",
   "takeover.exeBody":
-    "omp-studio can install an official copy and put it first on your user PATH. Your existing install stays as is.",
+    "pi-studio can install an official copy and put it first on your user PATH. Your existing install stays as is.",
   "takeover.otherTitle": "Found an omp managed by {name}",
   "takeover.otherBody":
-    "omp-studio can install an official copy and put it first on your user PATH. {name}'s copy stays, just no longer first.",
-  // macOS / Linux：不改 PATH（没有用户 PATH 可写），omp-studio 装的那份只给它自己用。
+    "pi-studio can install an official copy and put it first on your user PATH. {name}'s copy stays, just no longer first.",
+  // macOS / Linux：不改 PATH（没有用户 PATH 可写），pi-studio 装的那份只给它自己用。
   "takeover.bodyStudioOnly":
-    "omp-studio can't launch script-based installs (such as npm). It can install an official copy for its own use; your existing one stays.",
+    "pi-studio can't launch script-based installs (such as npm). It can install an official copy for its own use; your existing one stays.",
   "takeover.exeBodyStudioOnly":
-    "omp-studio can install an official copy for its own use. Your existing install, and the omp your terminal runs, stay as they are.",
+    "pi-studio can install an official copy for its own use. Your existing install, and the omp your terminal runs, stay as they are.",
   "takeover.otherBodyStudioOnly":
-    "omp-studio can install an official copy for its own use. {name}'s copy, and the omp your terminal runs, stay as they are.",
+    "pi-studio can install an official copy for its own use. {name}'s copy, and the omp your terminal runs, stay as they are.",
   "takeover.keepOther": "Keep using {name}'s",
   "takeover.where": "Location: {path}",
   "takeover.whereVersion": "Location: {path} · {version}",
-  "takeover.yes": "Let omp-studio manage it",
-  "takeover.confirmTitle": "Let omp-studio manage omp?",
-  "takeover.switch": "Switch to omp-studio",
+  "takeover.yes": "Let pi-studio manage it",
+  "takeover.confirmTitle": "Let pi-studio manage omp?",
+  "takeover.switch": "Switch to pi-studio",
   "takeover.no": "Cancel",
   "takeover.keep": "Keep using mine",
   "takeover.declined": "This kind of install can't be used right now.",
@@ -69,9 +69,9 @@ export const omp = {
     "Download the official build from {source} (about {size}); it's added to your user PATH and kept updated.",
   "missing.bodyNoSize": "Download the official build from {source}; it's added to your user PATH and kept updated.",
   "missing.bodyStudioOnly":
-    "Download the official build from {source} (about {size}) for omp-studio's own use; it's kept updated.",
+    "Download the official build from {source} (about {size}) for pi-studio's own use; it's kept updated.",
   "missing.bodyNoSizeStudioOnly":
-    "Download the official build from {source} for omp-studio's own use; it's kept updated.",
+    "Download the official build from {source} for pi-studio's own use; it's kept updated.",
   "missing.titleVersion": "omp {version} is required",
   install: "Download and install",
   recheck: "I've installed it, check again",

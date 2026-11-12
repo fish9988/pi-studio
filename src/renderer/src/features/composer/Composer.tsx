@@ -26,7 +26,6 @@ import { useFileMenu } from "./use-file-menu.ts";
 import { SendStop } from "./SendStop.tsx";
 import { useNewTaskDefault } from "./use-new-task-default.ts";
 import { thinkingLevelOptions } from "../../../../shared/ui/new-task-default.ts";
-import { SessionCost } from "./SessionCost.tsx";
 import { ContextMeter } from "./UsageMeter.tsx";
 import { Reveal } from "../../ui/Reveal.tsx";
 import { useHeld } from "./use-held.ts";
@@ -45,8 +44,6 @@ import { useShellValue } from "../../app/shell-store.ts";
 import { AttachButton } from "./AttachButton.tsx";
 import { ClawdMascot } from "./ClawdMascot.tsx";
 import { EnhancePromptButton } from "./EnhancePromptButton.tsx";
-import { QuickPhrasesButton } from "./QuickPhrasesButton.tsx";
-import { SessionTelemetry } from "./SessionTelemetry.tsx";
 
 export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDraft?: boolean }) {
   const t = useT();
@@ -237,18 +234,32 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
     [stop],
   );
 
-  // 首轮回答完成后自动智能命名（在设置里开启 autoSmartRename 时生效，每个任务最多自动触发一次）。
+  // 首轮回答完成后自动智能命名（在设置里开启 autoSmartRename 时生效，每个任务最多自动触发一次；若首条只是 hello/你好 等寒暄则顺延到首条实质问题完成后）。
   const autoSmartRename = useShellValue("autoSmartRename") ?? false;
-  const autoRenamedRef = useRef(false);
-  const wasRunningRef = useRef(false);
+  const autoRenamedTaskRef = useRef<TaskId | null>(null);
+  const wasRunningTaskRef = useRef<TaskId | null>(null);
   useEffect(() => {
     if (running) {
-      wasRunningRef.current = true;
+      wasRunningTaskRef.current = taskId;
       return;
     }
-    if (wasRunningRef.current && task?.status === "idle" && autoSmartRename && !autoRenamedRef.current) {
-      wasRunningRef.current = false;
-      autoRenamedRef.current = true;
+    if (
+      wasRunningTaskRef.current === taskId &&
+      task?.status === "idle" &&
+      autoSmartRename &&
+      autoRenamedTaskRef.current !== taskId
+    ) {
+      wasRunningTaskRef.current = null;
+      const msgs = userMessageTexts(peekTspDocument(taskId));
+      const hasSubstantive = msgs.some(
+        (m) =>
+          !/^(?:hello|hi|hey|yo|sup|hola|bonjour|你好[呀啊吗]?|您好|嗨|哈喽|早上好|下午好|晚上好|早安|晚安|在吗|在不在|有人吗|测试(?:一下)?|test(?:ing)?|ping|[?？!！.。…~～1]+)$/i.test(
+            m.replace(/^[#>*\-\s]+|[!！?？.。，,~～\s]+$/g, "").trim(),
+          ),
+      );
+      if (hasSubstantive) {
+        autoRenamedTaskRef.current = taskId;
+      }
       void window.studio.smartRenameTask(taskId).catch(() => {});
     }
   }, [running, task?.status, autoSmartRename, taskId]);
@@ -392,7 +403,9 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
       <div
         className="composer"
         data-composer-drop
+        data-dragging={attach.dragging || undefined}
         onDragOver={attach.onDragOver}
+        onDragLeave={attach.onDragLeave}
         onDrop={attach.onDrop}
         onMouseDown={(event) => keepFieldFocus(event, fieldRef.current)}
       >
@@ -447,6 +460,22 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
           onKeyDown={onKeyDown}
         />
         <div className="composer-tools">
+          <AttachButton
+            addFiles={attach.addFiles}
+            acceptsImages={shownModel?.acceptsImages}
+            disabled={tooOld === true || worktreeGone}
+          />
+          <PathLabel path={task.cwd} testId="composer-folder" />
+          <EnhancePromptButton
+            draftKey={taskId}
+            text={draft.text}
+            taskId={taskId}
+            disabled={tooOld === true || worktreeGone}
+            onFocusField={() => fieldRef.current?.focus()}
+          />
+          <ShellTag taskId={taskId} />
+          <span className="composer-spacer" />
+          {tooOld && <span className="composer-note">{t("composer.versionTooOld")}</span>}
           <ModelChip
             model={shownModel}
             thinkingLevel={shownThinking}
@@ -463,35 +492,7 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
               ? { emptyLabel: t("composer.modelLoading") }
               : {})}
           />
-          {/* 和草稿工具行同一个位置：任务在哪个文件夹里跑（有 worktree 时是 worktree 根），发出第一句话后不消失 */}
-          <PathLabel path={task.cwd} testId="composer-folder" />
-          <ShellTag taskId={taskId} />
-          <span className="composer-spacer" />
-          {tooOld && <span className="composer-note">{t("composer.versionTooOld")}</span>}
-          <SessionTelemetry usage={task.sessionUsage} />
-          <AttachButton
-            addFiles={attach.addFiles}
-            acceptsImages={shownModel?.acceptsImages}
-            disabled={tooOld === true || worktreeGone}
-          />
-          <QuickPhrasesButton
-            draftKey={taskId}
-            disabled={tooOld === true || worktreeGone}
-            onFocusField={() => fieldRef.current?.focus()}
-          />
-          <EnhancePromptButton
-            draftKey={taskId}
-            text={draft.text}
-            taskId={taskId}
-            disabled={tooOld === true || worktreeGone}
-            onFocusField={() => fieldRef.current?.focus()}
-          />
           <ContextMeter task={task} />
-          <SessionCost
-            usage={task.sessionUsage}
-            provider={task.model?.key.provider ?? null}
-            credentialPins={task.credentialPins}
-          />
           <SendStop
             running={running}
             stopping={stopping}

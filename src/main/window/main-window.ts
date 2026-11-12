@@ -5,6 +5,7 @@ import path from "node:path";
 import { defaultFontSize, type TitleBarFade } from "../../shared/ipc.ts";
 import { resolveTheme, themes, type ThemePreference, type ThemeSpec } from "../../shared/themes.ts";
 import { appOrigin } from "./app-protocol.ts";
+import { log } from "../log/log.ts";
 import { loadWin32 } from "../platform/win32/ffi.ts";
 import { getSettings, offSettingsChanged, onSettingsChanged } from "../settings/settings-store.ts";
 import { blockZoom } from "./security.ts";
@@ -90,9 +91,10 @@ function mixColors(from: OverlayColors, to: OverlayColors, progress: number): Ov
 /** 网页 <html data-theme> 现在的值（渲染进程报告；没有 data-theme = system）。窗口创建时取设置里的，页面第一次套用的也是它。 */
 let pageTheme: ThemePreference = "system";
 
-/** 网页正在显示的主题：跟随系统时和网页的 prefers-color-scheme 一样，按 nativeTheme 的深浅取 light / dark。 */
+/** 网页正在显示的主题：结合独立的 colorMode 与系统深浅取最终色板。 */
 function pageThemeSpec(): ThemeSpec {
-  return themes[resolveTheme(pageTheme, nativeTheme.shouldUseDarkColors)];
+  const colorMode = getSettings().colorMode ?? "system";
+  return themes[resolveTheme(pageTheme, nativeTheme.shouldUseDarkColors, colorMode)];
 }
 
 /** dim = 遮罩的不透明度（0 没有遮罩，1 全显）：右侧顶栏色（--bg-app）、符号色上叠 dim 倍的 --bg-scrim。 */
@@ -347,11 +349,23 @@ export async function concealWindow(window: BrowserWindow): Promise<void> {
   window.setOpacity(1);
 }
 
-/** 渲染进程第一帧（设置已读到、主题已套上）画完了（windowReady）：启动的窗口这时淡入。之前已被带到前台（第二个实例等）的不再动。 */
+let awaitingSettingsFirstFrame: BrowserWindow | null = null;
+
+/** 渲染进程第一帧（设置已读到、主题已套上）画完了（windowReady）：启动的窗口与独立设置子窗口这时淡入，彻底消除弹出时的黑框闪烁。 */
 export function revealOnFirstFrame(): void {
   const window = awaitingFirstFrame;
-  if (window === null || window.isDestroyed()) return;
-  revealWindow(window);
+  if (window !== null && !window.isDestroyed()) {
+    revealWindow(window);
+  }
+  const settingsWin = awaitingSettingsFirstFrame;
+  if (settingsWin !== null && !settingsWin.isDestroyed()) {
+    awaitingSettingsFirstFrame = null;
+    if (glassOn()) {
+      settingsWin.setBackgroundMaterial("acrylic");
+      settingsWin.setBackgroundColor(windowBackground());
+    }
+    revealWindow(settingsWin);
+  }
 }
 
 // 退出时先淡出隐藏窗口，和关 omp 进程等其余收尾并行；没有可见窗口时立即完成。
@@ -470,11 +484,40 @@ export function createMainWindow(): BrowserWindow {
   // 渲染进程报告第一帧画完（windowReady -> revealOnFirstFrame）再淡入。等到那时才 show() 的话，显示后还要约 300ms 才有画面，
   // 淡入的是一块空底色（2026-10-26 实测）。最大化也留到这时：maximize() 会立刻显示窗口。
   awaitingFirstFrame = window;
+  let firstFrameSafetyTimer: NodeJS.Timeout | undefined;
   window.once("ready-to-show", () => {
     if (awaitingFirstFrame !== window) return;
     window.setOpacity(0);
     if (restored.maximized && !e2eBackground) window.maximize();
     showWindow(window);
+    // 防白屏/全透明死锁兜底：若渲染进程因样式/字体异常未在 2.2s 内上报 windowReady，强制淡入显示窗口。
+    firstFrameSafetyTimer = setTimeout(() => {
+      if (!window.isDestroyed() && awaitingFirstFrame === window) {
+        revealOnFirstFrame();
+      }
+    }, 2200);
+  });
+  window.once("closed", () => clearTimeout(firstFrameSafetyTimer));
+
+  // 渲染进程崩溃或加载失败自动自愈（防白屏：限流最多自动恢复 2 次，避免死循环）
+  let crashReloads = 0;
+  let lastCrashAt = 0;
+  window.webContents.on("render-process-gone", (_event, details) => {
+    log.error("main window renderer gone", { reason: details.reason, exitCode: details.exitCode });
+    if (window.isDestroyed() || details.reason === "clean-exit") return;
+    const now = Date.now();
+    if (now - lastCrashAt > 15_000) crashReloads = 0;
+    lastCrashAt = now;
+    if (crashReloads < 2) {
+      crashReloads += 1;
+      window.setOpacity(1);
+      window.webContents.reload();
+    }
+  });
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3) return;
+    log.error("main window did-fail-load", { errorCode, errorDescription, validatedURL });
+    if (!window.isDestroyed()) window.setOpacity(1);
   });
   // 跟随系统时，系统深浅一变网页的 prefers-color-scheme 立刻跟着变（不淡入），窗口底色和三键也立刻换。
   // 设置里换主题不在这里：等渲染进程换完 data-theme 报告（setTitleBarTheme）。
@@ -543,7 +586,11 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     return existing;
   }
 
-  const initialColors = overlayColors(pageThemeSpec(), 0);
+  const currentSettings = getSettings();
+  const initialThemeSpec =
+    themes[resolveTheme(currentSettings.theme, nativeTheme.shouldUseDarkColors, currentSettings.colorMode ?? "system")];
+  const initialColors = overlayColors(initialThemeSpec, 0);
+  const solidInitialBg = initialThemeSpec.app;
   const main = getMainWindow();
   const mainBounds = main?.getBounds();
   const win = new BrowserWindow({
@@ -565,13 +612,12 @@ export function openSettingsWindow(section?: string): BrowserWindow {
       ? { trafficLightPosition }
       : {
           titleBarOverlay: {
-            color: overlayBackground(initialColors.color),
+            color: formatHex(initialColors.color),
             symbolColor: formatHex(initialColors.symbolColor),
             height: titleBarHeight,
           },
         }),
-    backgroundColor: windowBackground(),
-    ...(glassOn() ? { backgroundMaterial: "acrylic" as const } : {}),
+    backgroundColor: solidInitialBg,
     webPreferences: {
       preload: path.join(import.meta.dirname, "..", "preload", "index.cjs"),
       contextIsolation: true,
@@ -595,9 +641,21 @@ export function openSettingsWindow(section?: string): BrowserWindow {
     return { action: "deny" };
   });
 
+  awaitingSettingsFirstFrame = win;
+  let settingsSafetyTimer: NodeJS.Timeout | undefined;
   win.once("ready-to-show", () => {
-    if (win.isDestroyed()) return;
+    if (win.isDestroyed() || awaitingSettingsFirstFrame !== win) return;
+    win.setOpacity(0);
     showWindow(win);
+    settingsSafetyTimer = setTimeout(() => {
+      if (!win.isDestroyed() && awaitingSettingsFirstFrame === win) {
+        revealOnFirstFrame();
+      }
+    }, 900);
+  });
+  win.once("closed", () => {
+    clearTimeout(settingsSafetyTimer);
+    if (awaitingSettingsFirstFrame === win) awaitingSettingsFirstFrame = null;
   });
 
   const onNativeTheme = () => {

@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import { findOmpOnPath } from "../../src/main/omp/discover.ts";
 import { parseTestOmpOverride } from "../../src/main/omp/launch-args.ts";
-import type { ThemeName } from "../../src/shared/themes.ts";
+import { resolveTheme, type ColorMode, type ThemePreference } from "../../src/shared/themes.ts";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 
@@ -411,9 +411,8 @@ export async function setLocale(page: Page, locale: "zh-CN" | "en"): Promise<voi
  * 切换主题（登记表里的任何主题 id，如 `whale-dark`），等界面真的换好再返回。换主题是整窗交叉淡入（App.tsx 的 view transition）：
  * html 上的 data-theme 已经变了，淡入放完之前量到的还是过渡中的画面。
  */
-export async function setTheme(page: Page, theme: ThemeName): Promise<void> {
-  await page.evaluate((next) => globalThis.studio.setTheme(next), theme);
-  await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+export async function setColorMode(page: Page, mode: ColorMode): Promise<void> {
+  await page.evaluate((next) => globalThis.studio.setColorMode(next), mode);
   await page.evaluate(async () => {
     const g = globalThis as unknown as {
       requestAnimationFrame(callback: () => void): number;
@@ -421,7 +420,45 @@ export async function setTheme(page: Page, theme: ThemeName): Promise<void> {
         getAnimations(): { effect: { pseudoElement?: string | null } | null; finished: Promise<unknown> }[];
       };
     };
-    // 过渡的伪元素和动画在更新回调之后的下一帧才建起来：先等两帧，再等它们放完。
+    const frames = Promise.withResolvers<void>();
+    g.requestAnimationFrame(() => g.requestAnimationFrame(() => frames.resolve()));
+    await frames.promise;
+    await Promise.all(
+      g.document
+        .getAnimations()
+        .filter((animation) => animation.effect?.pseudoElement?.startsWith("::view-transition") === true)
+        .map((animation) => animation.finished),
+    );
+  });
+}
+
+export async function setTheme(page: Page, theme: ThemePreference): Promise<void> {
+  await page.evaluate((next) => globalThis.studio.setTheme(next), theme);
+  const expectedAttr = await page.evaluate(async (pref) => {
+    const s = await globalThis.studio.getSettings();
+    const g = globalThis as unknown as {
+      matchMedia(q: string): { matches: boolean };
+    };
+    const sysDark = g.matchMedia("(prefers-color-scheme: dark)").matches;
+    return {
+      colorMode: s.colorMode ?? "system",
+      sysDark,
+      pref,
+    };
+  }, theme);
+  const resolved = resolveTheme(expectedAttr.pref, expectedAttr.sysDark, expectedAttr.colorMode);
+  if ((theme === "default" || theme === "system") && expectedAttr.colorMode === "system") {
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme");
+  } else {
+    await expect(page.locator("html")).toHaveAttribute("data-theme", resolved);
+  }
+  await page.evaluate(async () => {
+    const g = globalThis as unknown as {
+      requestAnimationFrame(callback: () => void): number;
+      document: {
+        getAnimations(): { effect: { pseudoElement?: string | null } | null; finished: Promise<unknown> }[];
+      };
+    };
     const frames = Promise.withResolvers<void>();
     g.requestAnimationFrame(() => g.requestAnimationFrame(() => frames.resolve()));
     await frames.promise;
@@ -435,7 +472,7 @@ export async function setTheme(page: Page, theme: ThemeName): Promise<void> {
 }
 
 /** 切换语言和主题，等界面真的换好再返回（见 `setLocale`、`setTheme`）。 */
-export async function setLocaleTheme(page: Page, locale: "zh-CN" | "en", theme: "light" | "dark"): Promise<void> {
+export async function setLocaleTheme(page: Page, locale: "zh-CN" | "en", theme: ThemePreference): Promise<void> {
   await setLocale(page, locale);
   await setTheme(page, theme);
 }

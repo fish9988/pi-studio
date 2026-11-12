@@ -63,67 +63,95 @@ function isFileHref(href: string): boolean {
 }
 
 interface FileChipMeta {
-  cleanPath: string;
+  targetHref: string;
+  displayText: string;
+  fullTitle: string;
   badge: string;
-  kind: "js" | "ts" | "brace" | "md" | "html" | "py" | "img" | "code";
+  kind: "js" | "ts" | "brace" | "css" | "sh" | "md" | "html" | "py" | "img" | "dir" | "code";
+}
+
+function abbreviateChipPath(cleanPath: string, lineSuffix: string, isDir = false): string {
+  const isAbs = /^[a-zA-Z]:[\\/]/.test(cleanPath) || cleanPath.startsWith("/");
+  const segments = cleanPath.split(/[\\/]+/).filter((seg) => seg !== "");
+  if ((isAbs && segments.length >= 3) || segments.length >= 4 || (cleanPath.length > 44 && segments.length >= 3)) {
+    const tail = segments.slice(-2).join("/");
+    return `.../${tail}${isDir ? "/" : ""}${lineSuffix}`;
+  }
+  return `${cleanPath}${lineSuffix}`;
 }
 
 /**
- * 识别行内代码里的文件引用（如 `style.css`、`src/main.js`、`README.md`、`core.mjs:5-8`），
- * 渲染为带语言图标的可点击文件胶囊（对齐反重力 / Cursor 风格，点击直接在右侧预览栏打开）。
+ * 识别行内代码里的文件或目录引用（如 `style.css`、`src/main.js`、`C:\repo\src\MainFlow.tsx:42`），
+ * 渲染为带精致文件类型徽标的无框中性胶囊，超长路径智能缩写为 `.../父目录/文件名:行号`，点击直接在右侧分栏预览打开并定位行号。
  */
 function parseInlineFileChip(raw: string): FileChipMeta | null {
   const trimmed = raw.trim();
   if (
     trimmed.length < 3 ||
-    trimmed.length > 140 ||
+    trimmed.length > 260 ||
     /\s/.test(trimmed) ||
-    trimmed.startsWith("/") ||
-    /^[a-zA-Z]:[\\/]/.test(trimmed) ||
     /^(?:https?:|mailto:|file:|omp:|xd:|local:|proc:|agent:)/i.test(trimmed) ||
     trimmed.includes("..")
   ) {
     return null;
   }
-  const withoutLine = trimmed.replace(/:\d+(?:-\d+)?$/, "").replace(/#L\d+.*$/i, "");
-  const match = /^(?:[\w.-]+[\\/])*([\w.-]+\.([a-zA-Z0-9]+))$/.exec(withoutLine);
+  const lineMatch = /((?<!^[a-zA-Z]):\d+(?:-\d+)?|#L\d+(?:-L?\d+)?)$/i.exec(trimmed);
+  const lineSuffix = lineMatch?.[1] ?? "";
+  const withoutLine = lineSuffix !== "" ? trimmed.slice(0, -lineSuffix.length) : trimmed;
+
+  // 目录路径（末尾带 `/` 或 `\` 且至少包含两段有效路径，如 `C:\repo\src\` 或 `src/features/`）
+  if (/[\\/]$/.test(withoutLine)) {
+    const dirSegments = withoutLine.split(/[\\/]+/).filter(Boolean);
+    if (dirSegments.length >= 2 && dirSegments.every((seg) => /^[\w.@~:\u4e00-\u9fff-]+$/.test(seg))) {
+      return {
+        targetHref: withoutLine,
+        displayText: abbreviateChipPath(withoutLine.replace(/[\\/]+$/, ""), "", true),
+        fullTitle: trimmed,
+        badge: "DIR",
+        kind: "dir",
+      };
+    }
+    return null;
+  }
+
+  const match = /^(?:(?:[a-zA-Z]:[\\/]|\/)?(?:[^\s/\\]+[\\/])*)([\w.-]+\.([a-zA-Z0-9]+))$/.exec(withoutLine);
   if (!match) return null;
   const ext = (match[2] ?? "").toLowerCase();
+  const displayText = abbreviateChipPath(withoutLine, lineSuffix);
+  const base = { targetHref: trimmed, displayText, fullTitle: trimmed };
+
   if (ext === "js" || ext === "mjs" || ext === "cjs" || ext === "jsx") {
-    return { cleanPath: withoutLine, badge: "JS", kind: "js" };
+    return { ...base, badge: "JS", kind: "js" };
   }
   if (ext === "ts" || ext === "mts" || ext === "cts" || ext === "tsx") {
-    return { cleanPath: withoutLine, badge: "TS", kind: "ts" };
+    return { ...base, badge: "TS", kind: "ts" };
   }
-  if (ext === "css" || ext === "scss" || ext === "less" || ext === "json" || ext === "jsonc") {
-    return { cleanPath: withoutLine, badge: "{}", kind: "brace" };
+  if (ext === "css" || ext === "scss" || ext === "less") {
+    return { ...base, badge: "CSS", kind: "css" };
+  }
+  if (ext === "json" || ext === "jsonc") {
+    return { ...base, badge: "JSON", kind: "brace" };
+  }
+  if (ext === "yml" || ext === "yaml" || ext === "toml") {
+    return { ...base, badge: "{}", kind: "brace" };
+  }
+  if (ext === "ps1" || ext === "sh" || ext === "bash" || ext === "zsh" || ext === "bat" || ext === "cmd") {
+    return { ...base, badge: ">_", kind: "sh" };
   }
   if (ext === "md" || ext === "markdown" || ext === "mdx") {
-    return { cleanPath: withoutLine, badge: "M↓", kind: "md" };
+    return { ...base, badge: "MD", kind: "md" };
   }
   if (ext === "html" || ext === "htm" || ext === "vue" || ext === "svelte" || ext === "xml") {
-    return { cleanPath: withoutLine, badge: "</>", kind: "html" };
+    return { ...base, badge: "</>", kind: "html" };
   }
   if (ext === "py") {
-    return { cleanPath: withoutLine, badge: "PY", kind: "py" };
+    return { ...base, badge: "PY", kind: "py" };
   }
   if (ext === "png" || ext === "jpg" || ext === "jpeg" || ext === "webp" || ext === "gif" || ext === "svg") {
-    return { cleanPath: withoutLine, badge: "IMG", kind: "img" };
+    return { ...base, badge: "IMG", kind: "img" };
   }
-  if (
-    ext === "rs" ||
-    ext === "go" ||
-    ext === "java" ||
-    ext === "c" ||
-    ext === "cpp" ||
-    ext === "h" ||
-    ext === "sh" ||
-    ext === "yml" ||
-    ext === "yaml" ||
-    ext === "toml" ||
-    ext === "sql"
-  ) {
-    return { cleanPath: withoutLine, badge: ext.toUpperCase(), kind: "code" };
+  if (ext === "rs" || ext === "go" || ext === "java" || ext === "c" || ext === "cpp" || ext === "h" || ext === "sql") {
+    return { ...base, badge: ext.toUpperCase(), kind: "code" };
   }
   return null;
 }
@@ -158,15 +186,15 @@ function renderInline(node: TreeNode, key: number, ctx: RenderContext): ReactNod
             key,
             className: "md-code-inline md-file-chip",
             "data-file-kind": chip.kind,
-            title: chip.cleanPath,
+            "data-file-badge": chip.badge,
+            title: chip.fullTitle,
             onClick: (event: MouseEvent) => {
               event.preventDefault();
               event.stopPropagation();
-              open(chip.cleanPath);
+              open(chip.targetHref);
             },
           },
-          h("span", { className: "md-file-chip-badge", "data-kind": chip.kind, "aria-hidden": "true" }, chip.badge),
-          token.content,
+          chip.displayText,
         );
       }
       return h("code", { key, className: "md-code-inline" }, token.content);
@@ -187,6 +215,29 @@ function renderInline(node: TreeNode, key: number, ctx: RenderContext): ReactNod
         event.preventDefault();
         open(href);
       };
+      const onlyChild = node.children.length === 1 ? node.children[0] : undefined;
+      const childText =
+        onlyChild !== undefined && (onlyChild.token.type === "text" || onlyChild.token.type === "code_inline")
+          ? onlyChild.token.content
+          : "";
+      const linkChip =
+        !isOpenableHref(href) && isFileHref(href) && childText !== "" ? parseInlineFileChip(childText) : null;
+      if (linkChip !== null) {
+        return h(
+          "a",
+          {
+            key,
+            href,
+            title: href,
+            className: "md-link md-file-link",
+            "data-file-kind": linkChip.kind,
+            "data-file-badge": linkChip.badge,
+            onClick,
+            rel: "noreferrer noopener",
+          },
+          h("span", { className: "md-file-link-pill" }, linkChip.displayText),
+        );
+      }
       return h("a", { key, href, title: href, className: "md-link", onClick, rel: "noreferrer noopener" }, children);
     }
     case "image": {

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { Project, ProjectId, TaskId, TaskState, TspBatch } from "../src/shared/ipc.ts";
 import { applyMessage, createDocument, type TspDocMessage } from "../src/shared/tsp/document.ts";
 import { trailingErrorCardId } from "../src/shared/tsp/error-turn.ts";
+import { listAgents } from "../src/shared/tsp/agent-hub.ts";
 import { lastAnswerText } from "../src/shared/tsp/last-answer.ts";
 import { deriveTaskStatus } from "../src/shared/tsp/task-status.ts";
 import { userMessages } from "../src/shared/tsp/user-messages.ts";
@@ -223,6 +224,8 @@ describe("PiTspBridge — session JSONL hydration & shared TSP selectors", () =>
     expect(observedTitle).toBe("Hydrated Feature Work");
     expect(bridge.hydrationMeta.leafId).toBe("a2");
     expect(bridge.document.blobs.size).toBe(1);
+    const [blobId] = [...bridge.document.blobs.keys()];
+    expect(blobId).toMatch(/^[0-9a-f]{64}$/);
 
     const users = userMessages(bridge.document);
     expect(users).toHaveLength(1);
@@ -233,6 +236,7 @@ describe("PiTspBridge — session JSONL hydration & shared TSP selectors", () =>
 
     const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
     const allNodes = [...surface.nodes.values()];
+    expect(allNodes.some((n) => n.p["role"] === "omp.user.tools")).toBe(false);
 
     const editTool = allNodes.find((n) => n.k === "tool" && n.p["name"] === "edit");
     expect(editTool).toBeDefined();
@@ -760,5 +764,575 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
     expect(toolNodes[0]!.p["target"]).toBe("npm run check");
     expect(toolNodes[0]!.p["targetKind"]).toBe("command");
     expect(asstNodes).toHaveLength(0);
+  });
+
+  it("handles /add-dir, /dirs, and /remove-dir in PiTaskRunner with parseDirsOutput-compatible format", async () => {
+    const dir = await makeTempDir();
+    const extraDir = await makeTempDir();
+    let record: TaskRecord = {
+      id: "task_dirs" as TaskId,
+      projectId: "proj_dirs" as ProjectId,
+      title: "Dirs Test",
+      archived: false,
+      sessionFile: null,
+      worktreePath: null,
+      worktreeBranch: null,
+      worktreeBase: null,
+      cwd: dir,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      model: null,
+      thinkingLevel: null,
+    };
+    const runner = new PiTaskRunner(
+      record,
+      { id: "proj_dirs" as ProjectId, name: "DirsProj", path: dir },
+      {
+        buildPiLaunch: () => Promise.resolve(FAKE_LAUNCH),
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    try {
+      const addOut = await runner.runSessionCommand(`/add-dir ${extraDir}`);
+      runner.applyWorkspaceDirsOutput(addOut);
+      expect(runner.workspaceDirs).toEqual([extraDir]);
+
+      const listOut = await runner.runSessionCommand("/dirs");
+      runner.applyWorkspaceDirsOutput(listOut);
+      expect(runner.workspaceDirs).toEqual([extraDir]);
+
+      const rmOut = await runner.runSessionCommand(`/remove-dir ${extraDir}`);
+      runner.applyWorkspaceDirsOutput(rmOut);
+      expect(runner.workspaceDirs).toEqual([]);
+    } finally {
+      await runner.dispose();
+    }
+  });
+});
+
+describe("PiTspBridge — subagent 工具的 details → 右侧 Subagent 面板", () => {
+  const usage = { input: 100, output: 20, cacheRead: 0, cacheWrite: 0, cost: 0.02, contextTokens: 1200, turns: 3 };
+
+  /** 一条 Pi 的 SingleResult（只填面板和详情用得到的字段）。 */
+  function singleResult(agent: string, task: string, status: string): Record<string, unknown> {
+    return {
+      agent,
+      agentSource: "user",
+      task,
+      status,
+      exitCode: 0,
+      messages: [
+        { role: "assistant", content: [{ type: "toolCall", id: "t1", name: "grep", arguments: { pattern: "x" } }] },
+        { role: "assistant", content: [{ type: "text", text: `${agent} 的结论` }] },
+      ],
+      stderr: "",
+      usage,
+      model: "anthropic/claude-test",
+    };
+  }
+
+  it("renders one agent node per completed result so listAgents() lists them", () => {
+    const bridge = new PiTspBridge("Subagent Parallel");
+    const args = {
+      tasks: [
+        { agent: "scout", task: "find the file" },
+        { agent: "reviewer", task: "review the diff" },
+      ],
+    };
+    const details = {
+      mode: "parallel",
+      isError: false,
+      results: [
+        singleResult("scout", "find the file", "completed"),
+        singleResult("reviewer", "review the diff", "completed"),
+      ],
+    };
+
+    bridge.handleRpcEvent({ type: "tool_execution_start", toolCallId: "tc_sub", toolName: "subagent", args });
+    bridge.handleRpcEvent({
+      type: "tool_execution_end",
+      toolCallId: "tc_sub",
+      toolName: "subagent",
+      result: { content: [{ type: "text", text: "scout 的结论\nreviewer 的结论" }], details },
+      isError: false,
+      durationMs: 5000,
+    });
+
+    const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
+    const agentNodes = [...surface.nodes.values()].filter((node) => node.k === "agent");
+    expect(agentNodes).toHaveLength(2);
+
+    const agents = listAgents(bridge.document);
+    expect(agents.map((agent) => agent.name)).toEqual(["scout", "reviewer"]);
+    expect(agents.every((agent) => agent.status === "done")).toBe(true);
+    expect(agents[0]?.task).toBe("find the file");
+    expect(agents[0]?.model).toBe("anthropic/claude-test");
+    expect(agents[0]?.agent).toBe("user");
+    expect(agents[0]?.stats.tools).toBe(1);
+    expect(agents[0]?.stats.requests).toBe(3);
+    expect(agents[0]?.stats.tokens).toBe(1200);
+    expect(agents[0]?.stats.cost).toBe(0.02);
+
+    // 详情缓存：messages 原样给出，output 取最后一条 assistant 文本。
+    const record = bridge.getSubagentRecord("reviewer");
+    expect(record?.messages).toHaveLength(2);
+    expect(record?.output).toBe("reviewer 的结论");
+    expect(record?.model).toBe("anthropic/claude-test");
+    expect(bridge.getSubagentRecord("nope")).toBeNull();
+  });
+
+  it("shows running rows from args while streaming and settles them from partial details", () => {
+    const bridge = new PiTspBridge("Subagent Streaming");
+    const args = {
+      tasks: [
+        { agent: "scout", task: "a" },
+        { agent: "reviewer", task: "b" },
+      ],
+    };
+    bridge.handleRpcEvent({ type: "tool_execution_start", toolCallId: "tc_up", toolName: "subagent", args });
+
+    let agents = listAgents(bridge.document);
+    expect(agents.map((agent) => agent.name)).toEqual(["scout", "reviewer"]);
+    expect(agents.every((agent) => agent.status === "running")).toBe(true);
+
+    bridge.handleRpcEvent({
+      type: "tool_execution_update",
+      toolCallId: "tc_up",
+      toolName: "subagent",
+      args,
+      partialResult: {
+        content: [{ type: "text", text: "scout 在跑" }],
+        details: { mode: "parallel", isError: false, results: [singleResult("scout", "a", "running")] },
+      },
+    });
+
+    agents = listAgents(bridge.document);
+    // 流式阶段：scout 拿到 details 里的用量，还没开始的那条不发假用量（null = 未知）。
+    expect(agents.find((agent) => agent.name === "scout")?.status).toBe("running");
+    expect(agents.find((agent) => agent.name === "scout")?.stats.requests).toBe(3);
+    expect(agents.find((agent) => agent.name === "reviewer")?.stats.requests).toBeNull();
+    expect(agents.find((agent) => agent.name === "reviewer")?.stats.tokens).toBeNull();
+    // 同一行只更新不重建（id 稳定，多次 update 也不会重复）。
+    const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
+    expect([...surface.nodes.values()].filter((node) => node.k === "agent")).toHaveLength(2);
+  });
+
+  it("keeps chain mode badges, step and per-agent error text", () => {
+    const bridge = new PiTspBridge("Subagent Chain");
+    const args = {
+      chain: [
+        { agent: "scout", task: "find" },
+        { agent: "planner", task: "plan" },
+      ],
+    };
+    const failed = { ...singleResult("planner", "plan", "failed"), errorMessage: "model overloaded" };
+    bridge.handleRpcEvent({
+      type: "tool_execution_end",
+      toolCallId: "tc_chain",
+      toolName: "subagent",
+      result: {
+        content: [{ type: "text", text: "chain 失败" }],
+        details: {
+          mode: "chain",
+          isError: true,
+          results: [singleResult("scout", "find", "completed"), { ...failed, step: 2 }],
+        },
+      },
+      isError: true,
+    });
+    void args;
+
+    const agents = listAgents(bridge.document);
+    expect(agents.map((agent) => agent.name)).toEqual(["scout", "planner"]);
+    expect(agents[0]?.status).toBe("done");
+    expect(agents[1]?.status).toBe("failed");
+
+    const planner = [...bridge.document.surfaces.get(PI_SURFACE_ID)!.nodes.values()].find(
+      (node) => node.k === "agent" && node.p["name"] === "planner",
+    )!;
+    expect(JSON.stringify(planner.p["badges"])).toContain("chain");
+    expect(JSON.stringify(planner.p["badges"])).toContain("step 2");
+    const errorChild = planner.c?.map((id) => bridge.document.surfaces.get(PI_SURFACE_ID)!.nodes.get(id));
+    expect(errorChild?.some((node) => node?.p["text"] === "model overloaded")).toBe(true);
+  });
+
+  it("falls back to args when the tool result carries no details", () => {
+    const bridge = new PiTspBridge("Subagent No Details");
+    bridge.handleRpcEvent({
+      type: "tool_execution_start",
+      toolCallId: "tc_plain",
+      toolName: "subagent",
+      args: { agent: "scout", task: "look around" },
+    });
+    let agents = listAgents(bridge.document);
+    expect(agents.map((agent) => agent.name)).toEqual(["scout"]);
+    expect(agents[0]?.status).toBe("running");
+
+    bridge.handleRpcEvent({
+      type: "tool_execution_end",
+      toolCallId: "tc_plain",
+      toolName: "subagent",
+      result: { content: [{ type: "text", text: "no structured details" }] },
+      isError: false,
+      durationMs: 10,
+    });
+    agents = listAgents(bridge.document);
+    expect(agents).toHaveLength(1);
+    // 卡结束后不能还挂着「运行中」/「等待」。
+    expect(agents[0]?.status).toBe("done");
+  });
+});
+
+describe("PiTspBridge — 工具参数流式生成时列表就有路径与进行中状态", () => {
+  const surfaceOf = (bridge: PiTspBridge) => bridge.document.surfaces.get(PI_SURFACE_ID)!;
+
+  const onlyToolNode = (bridge: PiTspBridge) => {
+    const tools = [...surfaceOf(bridge).nodes.values()].filter((node) => node.k === "tool");
+    expect(tools).toHaveLength(1);
+    return tools[0]!;
+  };
+
+  it("fills the path in place from toolcall_delta and keeps the node id stable to the end", () => {
+    const bridge = new PiTspBridge("Tool Delta");
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: { type: "toolcall_start", contentIndex: 1, id: "tc_write_1", toolName: "write" },
+    });
+    const started = onlyToolNode(bridge);
+    // 参数还没到：只有工具名，但计时已经开始（age 0，渲染层自己走字）。
+    expect(started.p["target"]).toBeUndefined();
+    expect(started.p["status"]).toBe("pending");
+    expect(started.p["age"]).toBe(0);
+
+    // 线上 delta 只是参数 JSON 文本的碎片，路径在前几个碎片里就已经完整。
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: { type: "toolcall_delta", contentIndex: 1, delta: '{"path":"src/a.ts","content":"第一行' },
+    });
+
+    const updated = onlyToolNode(bridge);
+    expect(updated.id).toBe(started.id);
+    expect(updated.p["target"]).toBe("src/a.ts");
+    expect(updated.p["targetKind"]).toBe("path");
+    expect(updated.p["status"]).toBe("pending");
+    expect(updated.p["age"]).toBe(0);
+    expect(JSON.stringify(surfaceOf(bridge).nodes.get("dock.hud.working.label")?.p["spans"])).toContain("src/a.ts");
+
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_end",
+        contentIndex: 1,
+        toolCall: {
+          type: "toolCall",
+          id: "tc_write_1",
+          name: "write",
+          arguments: { path: "src/a.ts", content: "第一行\n第二行" },
+        },
+      },
+    });
+    const ended = onlyToolNode(bridge);
+    expect(ended.id).toBe(started.id);
+    expect(ended.p["target"]).toBe("src/a.ts");
+    expect(ended.p["status"]).toBe("pending");
+
+    bridge.handleRpcEvent({
+      type: "tool_execution_start",
+      toolCallId: "tc_write_1",
+      toolName: "write",
+      args: { path: "src/a.ts", content: "第一行\n第二行" },
+    });
+    const running = onlyToolNode(bridge);
+    expect(running.id).toBe(started.id);
+    expect(running.p["status"]).toBe("running");
+    expect(running.p["target"]).toBe("src/a.ts");
+    expect(running.p["age"]).toBe(0);
+
+    bridge.handleRpcEvent({
+      type: "tool_execution_end",
+      toolCallId: "tc_write_1",
+      toolName: "write",
+      result: { content: [{ type: "text", text: "ok" }] },
+      isError: false,
+    });
+    const done = onlyToolNode(bridge);
+    expect(done.id).toBe(started.id);
+    expect(done.p["status"]).toBe("done");
+    expect(done.p["target"]).toBe("src/a.ts");
+    // 完成时只留总耗时，不再留着定时器。
+    expect(typeof done.p["took"]).toBe("number");
+    expect(done.p["age"]).toBeUndefined();
+  });
+
+  it("ignores half-written argument JSON without throwing or creating bad ops", () => {
+    const bridge = new PiTspBridge("Tool Bad Json");
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, id: "tc_bad", toolName: "write" },
+    });
+    const before = onlyToolNode(bridge);
+
+    // 半截 JSON（字符串没闭合） + partial 里是一段没写完的 JSON 文本：都抳不出参数，也不能抛异常。
+    const partial = {
+      role: "assistant" as const,
+      content: [
+        {
+          type: "toolCall" as const,
+          id: "tc_bad",
+          name: "write",
+          arguments: '{"path":"src/b' as unknown as Record<string, unknown>,
+        },
+      ],
+    };
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: { type: "toolcall_delta", contentIndex: 0, delta: '{"path":"src/b', partial },
+    });
+
+    const after = onlyToolNode(bridge);
+    expect(after.id).toBe(before.id);
+    expect(after.p["target"]).toBeUndefined();
+    expect(after.p["status"]).toBe("pending");
+  });
+
+  it("lazily creates the tool card when toolcall_delta arrives before toolcall_start", () => {
+    const bridge = new PiTspBridge("Tool Delta First");
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "toolcall_delta",
+        contentIndex: 0,
+        delta: '{"path":"src/late.ts"}',
+        partial: {
+          role: "assistant",
+          content: [{ type: "toolCall", id: "tc_late", name: "read", arguments: {} }],
+        },
+      },
+    });
+
+    const node = onlyToolNode(bridge);
+    expect(node.p["key"]).toBe("tc_late");
+    expect(node.p["name"]).toBe("read");
+    expect(node.p["target"]).toBe("src/late.ts");
+  });
+});
+
+describe("PiTspBridge — 漏进正文通道的思维/旁白折叠成过程段", () => {
+  const textBlocksOf = (bridge: PiTspBridge): { role: unknown; text: string }[] => {
+    const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
+    const out: { role: unknown; text: string }[] = [];
+    for (const node of surface.nodes.values()) {
+      if (node.k !== "md") continue;
+      const text = node.p["text"];
+      if (typeof text === "string") out.push({ role: node.p["role"], text });
+    }
+    return out;
+  };
+
+  it("hydrates a commentary-phase text block as a folded process section, not as body text", () => {
+    const bridge = new PiTspBridge("Leak Hydration");
+    const jsonl = [
+      JSON.stringify({ type: "session", version: 3, id: "s1", timestamp: "2026-01-01T00:00:00.000Z", cwd: "C:\\tmp" }),
+      JSON.stringify({
+        type: "message",
+        id: "u1",
+        parentId: null,
+        timestamp: "2026-01-01T00:00:01.000Z",
+        message: { role: "user", content: "改代码", timestamp: 1767225601000 },
+      }),
+      JSON.stringify({
+        type: "message",
+        id: "a1",
+        parentId: "u1",
+        timestamp: "2026-01-01T00:00:02.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "现在把桥接文件里的判断加上，然后再跑测试。",
+              textSignature: JSON.stringify({ v: 1, id: "msg_1", phase: "commentary" }),
+            },
+            { type: "toolCall", id: "tc_1", name: "read", arguments: { path: "a.ts" } },
+          ],
+          stopReason: "toolUse",
+          timestamp: 1767225602000,
+        },
+      }),
+      JSON.stringify({
+        type: "toolResult",
+        id: "tr1",
+        parentId: "a1",
+        timestamp: "2026-01-01T00:00:03.000Z",
+        message: {
+          role: "toolResult",
+          toolCallId: "tc_1",
+          toolName: "read",
+          content: [{ type: "text", text: "file body" }],
+          isError: false,
+          timestamp: 1767225603000,
+        },
+      }),
+    ].join("\n");
+
+    bridge.hydrateFromSessionJsonl(jsonl);
+    const blocks = textBlocksOf(bridge);
+    expect(blocks.some((b) => b.role === "omp.thinking.body")).toBe(true);
+    // 正文区不该出现这段旁白。
+    expect(blocks.filter((b) => b.role === undefined).map((b) => b.text)).toEqual(["改代码"]);
+    expect(lastAnswerText(bridge.document)).toBeNull();
+  });
+
+  it("splits a leaked thinking-tagged text block into folded thinking plus the real answer", () => {
+    const bridge = new PiTspBridge("Tagged Leak");
+    const jsonl = [
+      JSON.stringify({ type: "session", version: 3, id: "s2", timestamp: "2026-01-01T00:00:00.000Z", cwd: "C:\\tmp" }),
+      JSON.stringify({
+        type: "message",
+        id: "a1",
+        parentId: null,
+        timestamp: "2026-01-01T00:00:01.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "<thinking>思考一下怎么改</thinking>\n\n改好了，三处都修了。" }],
+          stopReason: "stop",
+          timestamp: 1767225601000,
+        },
+      }),
+    ].join("\n");
+
+    bridge.hydrateFromSessionJsonl(jsonl);
+    const blocks = textBlocksOf(bridge);
+    expect(blocks.find((b) => b.role === "omp.thinking.body")?.text).toBe("思考一下怎么改");
+    expect(blocks.find((b) => b.role === undefined)?.text).toBe("改好了，三处都修了。");
+    expect(lastAnswerText(bridge.document)).toBe("改好了，三处都修了。");
+  });
+
+  it("folds a live text block whose final content is commentary phase", () => {
+    const bridge = new PiTspBridge("Live Leak");
+    const signature = JSON.stringify({ v: 1, id: "msg_9", phase: "commentary" });
+    bridge.handleRpcEvent({ type: "message_update", assistantMessageEvent: { type: "text_start", contentIndex: 0 } });
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "让我先看一下文件" },
+    });
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "text_end",
+        contentIndex: 0,
+        content: "让我先看一下文件",
+        partial: {
+          role: "assistant",
+          content: [{ type: "text", text: "让我先看一下文件", textSignature: signature }],
+        },
+      },
+    });
+
+    const blocks = textBlocksOf(bridge);
+    expect(blocks.find((b) => b.role === "omp.thinking.body")?.text).toBe("让我先看一下文件");
+    expect(blocks.filter((b) => b.role === undefined)).toEqual([]);
+  });
+
+  it("keeps final-answer text as body text", () => {
+    const bridge = new PiTspBridge("Real Answer");
+    const signature = JSON.stringify({ v: 1, id: "msg_10", phase: "final_answer" });
+    bridge.handleRpcEvent({ type: "message_update", assistantMessageEvent: { type: "text_start", contentIndex: 0 } });
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "text_end",
+        contentIndex: 0,
+        content: "9.8 更大。",
+        partial: {
+          role: "assistant",
+          content: [{ type: "text", text: "9.8 更大。", textSignature: signature }],
+        },
+      },
+    });
+
+    const blocks = textBlocksOf(bridge);
+    expect(blocks.filter((b) => b.role === undefined).map((b) => b.text)).toEqual(["9.8 更大。"]);
+    expect(blocks.some((b) => b.role === "omp.thinking.body")).toBe(false);
+  });
+
+  it("keeps a single folded paragraph for commentary text and leaves it before the tool card", () => {
+    const bridge = new PiTspBridge("Live Leak Order");
+    const signature = JSON.stringify({ v: 1, id: "msg_11", phase: "commentary" });
+    const textBlock = { type: "text" as const, text: "让我先读一下文件，然后改。", textSignature: signature };
+    bridge.handleRpcEvent({ type: "message_update", assistantMessageEvent: { type: "text_start", contentIndex: 0 } });
+    bridge.handleRpcEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "text_end",
+        contentIndex: 0,
+        content: textBlock.text,
+        partial: { role: "assistant", content: [textBlock] },
+      },
+    });
+    bridge.handleRpcEvent({
+      type: "tool_execution_start",
+      toolCallId: "tc_after",
+      toolName: "read",
+      args: { path: "a.ts" },
+    });
+    bridge.handleRpcEvent({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [textBlock, { type: "toolCall", id: "tc_after", name: "read", arguments: { path: "a.ts" } }],
+        stopReason: "toolUse",
+      },
+    });
+
+    const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
+    const thinkingBodies = [...surface.nodes.values()].filter(
+      (node) => node.k === "md" && node.p["role"] === "omp.thinking.body",
+    );
+    expect(thinkingBodies).toHaveLength(1);
+    expect(surface.nodes.has("tc_after")).toBe(false);
+    const toolNodes = [...surface.nodes.values()].filter((node) => node.k === "tool");
+    expect(toolNodes).toHaveLength(1);
+    // 过程段排在工具卡片之前（先折叠旁白，再是工具）。
+    const order = (surface.nodes.get("main")?.c ?? []).map((id) => surface.nodes.get(id)?.k);
+    expect(order.indexOf("col")).toBeLessThan(order.indexOf("tool"));
+    expect(textBlocksOf(bridge).filter((b) => b.role === undefined)).toEqual([]);
+  });
+
+  it("keeps body text that only talks about tags as body text", () => {
+    const bridge = new PiTspBridge("Tag Talk");
+    const jsonl = [
+      JSON.stringify({ type: "session", version: 3, id: "s3", timestamp: "2026-01-01T00:00:00.000Z", cwd: "C:\\tmp" }),
+      JSON.stringify({
+        type: "message",
+        id: "a1",
+        parentId: null,
+        timestamp: "2026-01-01T00:00:01.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "text", text: "这段讲 </thinking> 标签的行为，另一段讲思考" },
+            { type: "text", text: "用 <tag> 包起来，Array<string> 是类型，Map<K, V> 也是" },
+          ],
+          stopReason: "stop",
+          timestamp: 1767225601000,
+        },
+      }),
+    ].join("\n");
+
+    bridge.hydrateFromSessionJsonl(jsonl);
+    const blocks = textBlocksOf(bridge);
+    // 两段都是正文：不能被折成过程段，也不能被从中间切开。
+    expect(blocks.some((b) => b.role === "omp.thinking.body")).toBe(false);
+    expect(lastAnswerText(bridge.document)).toBe(
+      "这段讲 </thinking> 标签的行为，另一段讲思考\n\n用 <tag> 包起来，Array<string> 是类型，Map<K, V> 也是",
+    );
   });
 });

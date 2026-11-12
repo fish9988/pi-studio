@@ -2,7 +2,7 @@
 // 列表数据不在这里：直接从 TSP 文档推导（shared/tsp/agent-hub.ts 的 listAgents，tsp-store 的 useTspDerived）。
 import type { TaskId } from "../../../../shared/ipc.ts";
 import { createStore, useStoreValue } from "../../store/create-store.ts";
-import { closeFilePreview } from "../file-preview/preview-store.ts";
+import { closeDshToolKind, isDshToolActive, openDshToolTab } from "../workbench/dsh-workbench-store.ts";
 
 interface AgentsPanelState {
   taskId: TaskId;
@@ -24,16 +24,15 @@ function rememberFocus(): void {
 /** 打开（或切到）这个任务的子代理面板，可顺带选中一个子代理。文件面板在同一栏，先关掉。 */
 export function openAgentsPanel(taskId: TaskId, name?: string): void {
   const current = store.get();
-  closeFilePreview();
   rememberFocus();
   const selected = name ?? (current?.taskId === taskId ? current.selected : null);
-  if (current?.taskId === taskId && current.selected === selected) return;
   store.set({ taskId, selected });
+  openDshToolTab(taskId, "agents");
 }
 
 /** 顶栏 / 命令面板：这个任务的面板开着就关，否则打开。 */
 export function toggleAgentsPanel(taskId: TaskId): void {
-  if (store.get()?.taskId === taskId) closeAgentsPanel();
+  if (isDshToolActive(taskId, "agents")) closeAgentsPanel();
   else openAgentsPanel(taskId);
 }
 
@@ -45,8 +44,11 @@ export function selectAgent(name: string): void {
 
 /** `restoreFocus` 为假：文件面板正在打开并拿了焦点，不能把焦点抢回去。 */
 export function closeAgentsPanel(restoreFocus = true): void {
-  if (store.get() === null) return;
-  store.set(null);
+  const current = store.get();
+  if (current !== null) {
+    store.set(null);
+    closeDshToolKind(current.taskId, "agents");
+  }
   const target = returnFocus;
   returnFocus = null;
   if (restoreFocus && target?.isConnected) target.focus();

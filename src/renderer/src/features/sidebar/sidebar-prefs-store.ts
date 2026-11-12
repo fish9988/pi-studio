@@ -8,6 +8,35 @@ import { useSelectedTaskId, useTasksState } from "../../store/index.ts";
 
 const PINNED_STORAGE_KEY = "omp-studio:pinned-ids";
 const UNREAD_STORAGE_KEY = "omp-studio:unread-tasks";
+const HIDDEN_FOLDERS_STORAGE_KEY = "omp-studio:hidden-folders";
+const FOLDER_ALIASES_STORAGE_KEY = "omp-studio:folder-aliases";
+
+function readStoredMap(key: string): Readonly<Record<string, string>> {
+  try {
+    const raw = globalThis.localStorage?.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string" && v.trim() !== "") out[k] = v.trim();
+      }
+      return out;
+    }
+  } catch {
+    // 忽略读取异常
+  }
+  return {};
+}
+
+function writeStoredMap(key: string, map: Readonly<Record<string, string>>): void {
+  try {
+    if (Object.keys(map).length === 0) globalThis.localStorage?.removeItem(key);
+    else globalThis.localStorage?.setItem(key, JSON.stringify(map));
+  } catch {
+    // 忽略配额异常
+  }
+}
 
 function readStoredSet(key: string): ReadonlySet<string> {
   try {
@@ -35,11 +64,15 @@ function writeStoredSet(key: string, set: ReadonlySet<string>): void {
 interface SidebarPrefsState {
   pinnedIds: ReadonlySet<string>;
   unreadTaskIds: ReadonlySet<string>;
+  hiddenFolderKeys: ReadonlySet<string>;
+  folderAliases: Readonly<Record<string, string>>;
 }
 
 const store = createStore<SidebarPrefsState>({
   pinnedIds: readStoredSet(PINNED_STORAGE_KEY),
   unreadTaskIds: readStoredSet(UNREAD_STORAGE_KEY),
+  hiddenFolderKeys: readStoredSet(HIDDEN_FOLDERS_STORAGE_KEY),
+  folderAliases: readStoredMap(FOLDER_ALIASES_STORAGE_KEY),
 });
 
 export function usePinnedIds(): ReadonlySet<string> {
@@ -48,6 +81,53 @@ export function usePinnedIds(): ReadonlySet<string> {
 
 export function useUnreadTaskIds(): ReadonlySet<string> {
   return useStoreValue(store, (state) => state.unreadTaskIds);
+}
+
+export function useHiddenFolderKeys(): ReadonlySet<string> {
+  return useStoreValue(store, (state) => state.hiddenFolderKeys);
+}
+
+export function useFolderAliases(): Readonly<Record<string, string>> {
+  return useStoreValue(store, (state) => state.folderAliases);
+}
+
+export function folderAliasKey(cwd: string): string {
+  return cwd.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+export function setFolderAlias(cwd: string, alias: string | null): void {
+  const key = folderAliasKey(cwd);
+  if (!key) return;
+  const current = store.get().folderAliases;
+  const trimmed = alias?.trim() ?? "";
+  const next = { ...current };
+  if (trimmed === "") {
+    delete next[key];
+  } else {
+    next[key] = trimmed;
+  }
+  writeStoredMap(FOLDER_ALIASES_STORAGE_KEY, next);
+  store.set({ ...store.get(), folderAliases: next });
+}
+
+export function hideFolderKey(folderKey: string): void {
+  if (!folderKey) return;
+  const current = store.get().hiddenFolderKeys;
+  if (current.has(folderKey)) return;
+  const next = new Set(current);
+  next.add(folderKey);
+  writeStoredSet(HIDDEN_FOLDERS_STORAGE_KEY, next);
+  store.set({ ...store.get(), hiddenFolderKeys: next });
+}
+
+export function unhideFolderKey(folderKey: string): void {
+  if (!folderKey) return;
+  const current = store.get().hiddenFolderKeys;
+  if (!current.has(folderKey)) return;
+  const next = new Set(current);
+  next.delete(folderKey);
+  writeStoredSet(HIDDEN_FOLDERS_STORAGE_KEY, next);
+  store.set({ ...store.get(), hiddenFolderKeys: next });
 }
 
 export function isItemPinned(id: string): boolean {

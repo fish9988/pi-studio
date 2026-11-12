@@ -20,6 +20,7 @@ import { useLocale, useT } from "../../i18n/use-t.ts";
 import { Check, ChevronRight, Plus, Search, Star } from "../../icons.tsx";
 import { Button, IconButton, TextField } from "../../ui/controls.tsx";
 import { Dialog } from "../../ui/Dialog.tsx";
+import { Popover } from "../../ui/Popover.tsx";
 import { Skeleton } from "../../ui/Skeleton.tsx";
 import { Reveal } from "../../ui/Reveal.tsx";
 import { reportError } from "../../ui/errors.ts";
@@ -93,6 +94,94 @@ function matchesScopedPattern(pattern: string, fullId: string, modelId: string):
   return false;
 }
 
+function ProviderBrandGlyph({ provider, modelId }: { provider: string; modelId: string }) {
+  const lower = `${provider}/${modelId}`.toLowerCase();
+  if (lower.includes("deepseek")) {
+    return (
+      <span className="dsh-model-brand" data-brand="deepseek" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M2.5 8.8c0-3.2 2.5-5.6 5.8-5.6 2.4 0 4.4 1.3 5.2 3.3-.8-.3-1.7-.2-2.4.3-.7-.8-1.7-1.3-2.8-1.3-2.1 0-3.8 1.6-3.8 3.6 0 1.4.8 2.6 2 3.2-2.3-.2-4-1.7-4-3.5Z"
+            fill="currentColor"
+          />
+          <circle cx="10.8" cy="7.5" r="1.1" fill="currentColor" />
+        </svg>
+      </span>
+    );
+  }
+  if (lower.includes("claude") || lower.includes("anthropic")) {
+    return (
+      <span className="dsh-model-brand" data-brand="claude" aria-hidden="true">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        >
+          <path d="M8 2.2v11.6M2.2 8h11.6M3.9 3.9l8.2 8.2M12.1 3.9l-8.2 8.2" />
+        </svg>
+      </span>
+    );
+  }
+  if (lower.includes("gemini") || lower.includes("google")) {
+    return (
+      <span className="dsh-model-brand" data-brand="gemini" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M8 1.6C8.5 5.1 10.9 7.5 14.4 8 10.9 8.5 8.5 10.9 8 14.4 7.5 10.9 5.1 8.5 1.6 8 5.1 7.5 7.5 5.1 8 1.6Z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+    );
+  }
+  if (
+    lower.includes("gpt") ||
+    lower.includes("openai") ||
+    lower.includes("o1") ||
+    lower.includes("o3") ||
+    lower.includes("o4")
+  ) {
+    return (
+      <span className="dsh-model-brand" data-brand="openai" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+          <circle cx="8" cy="8" r="5.2" />
+          <circle cx="8" cy="8" r="2" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className="dsh-model-brand" data-brand="default" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <rect x="2.5" y="2.5" width="11" height="11" rx="3" />
+        <circle cx="8" cy="8" r="2" fill="currentColor" />
+      </svg>
+    </span>
+  );
+}
+
+function describeModelSubtitle(option: ModelOption, zh: boolean): string {
+  const lower = `${option.key.provider}/${option.key.modelId} ${option.name}`.toLowerCase();
+  const ctx = modelContextCell(option);
+  const ctxSuffix = ctx ? ` · ${ctx}` : "";
+  if (lower.includes("opus") || lower.includes("pro") || lower.includes("r1") || lower.includes("reasoner")) {
+    return (zh ? "深度推理旗舰模型，适合复杂架构与分析" : "Flagship reasoning model for complex tasks") + ctxSuffix;
+  }
+  if (lower.includes("haiku") || lower.includes("flash") || lower.includes("mini") || lower.includes("lite")) {
+    return (zh ? "轻量高速模型，适合快速问答与辅助任务" : "Fast lightweight model for quick tasks") + ctxSuffix;
+  }
+  if (option.reasoning) {
+    return (
+      (zh ? "旗舰模型，支持深度思考，适合日常编码与使用" : "Flagship reasoning model for daily coding") + ctxSuffix
+    );
+  }
+  return (zh ? "通用高效模型，适合日常对话与代码生成" : "Versatile model for daily chat & coding") + ctxSuffix;
+}
+
 function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
   const { model, thinkingLevel, running, onClose, open } = props;
   const t = useT();
@@ -117,6 +206,9 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
   }, []);
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const [viewMode, setViewMode] = useState<"popover" | "dialog">(
+    props.request?.scope === "roles" ? "dialog" : "popover",
+  );
   const [models, setModels] = useState<ModelOption[] | null>(null);
   const [insights, setInsights] = useState<ModelInsights | null>(null);
   const [enabledPatterns, setEnabledPatterns] = useState<string[]>([]);
@@ -446,6 +538,133 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
       <span className="mp-scope-count">{count}</span>
     </button>
   );
+
+  const popoverItems = useMemo<ModelItem[]>(() => {
+    if (models === null) return [];
+    if (searching) {
+      return rows.flat.map((option) => ({ kind: "model", id: modelItemId(option.key), option }));
+    }
+    const base = scopedModels.length > 0 ? scopedModels : models;
+    const grouped = groupModels(base, "", pinned ?? [], null);
+    const ordered = [...grouped.pinned];
+    for (const opt of grouped.rest) {
+      if (!ordered.some((p) => sameModel(p.key, opt.key))) ordered.push(opt);
+    }
+    return ordered.map((option) => ({ kind: "model", id: modelItemId(option.key), option }));
+  }, [models, searching, rows.flat, scopedModels, pinned]);
+
+  const popoverSelected = popoverItems.find((item) => item.id === (selection ?? currentId)) ?? popoverItems[0] ?? null;
+
+  const onPopoverSearchKey = (event: KeyboardEvent) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (popoverItems.length === 0) return;
+      const idx = popoverSelected ? popoverItems.indexOf(popoverSelected) : -1;
+      const next =
+        popoverItems[Math.min(Math.max(idx + (event.key === "ArrowDown" ? 1 : -1), 0), popoverItems.length - 1)];
+      if (next) setSelection(next.id);
+    } else if (event.key === "Enter" && !(event.nativeEvent.isComposing || event.keyCode === 229)) {
+      event.preventDefault();
+      apply(popoverSelected);
+    }
+  };
+
+  if (viewMode === "popover") {
+    const providerBuckets = new Map<string, ModelItem[]>();
+    for (const item of popoverItems) {
+      const prov = item.option.key.provider;
+      providerBuckets.set(prov, [...(providerBuckets.get(prov) ?? []), item]);
+    }
+    const bucketEntries = [...providerBuckets.entries()];
+
+    return (
+      <Popover open={open} onClose={onClose} width={336} align="end" label={t("model.title")}>
+        <div className="dsh-model-popover" data-testid="model-picker">
+          <div className="dsh-mp-search-wrap">
+            <Search size={13} />
+            <input
+              ref={searchRef}
+              type="search"
+              className="dsh-mp-search"
+              data-testid="model-search"
+              data-autofocus=""
+              role="combobox"
+              aria-haspopup="listbox"
+              aria-expanded="true"
+              aria-controls={listId}
+              aria-label={t("model.search")}
+              placeholder={zh ? "搜索模型…" : "Search models…"}
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSelection(null);
+              }}
+              onKeyDown={onPopoverSearchKey}
+            />
+          </div>
+          <div id={listId} className="dsh-mp-list" role="listbox" aria-label={t("model.list")}>
+            {models === null && (
+              <div className="dsh-mp-loading">
+                <Skeleton variant="row" count={4} height="44px" label={t("model.list")} testId="model-skeleton" />
+              </div>
+            )}
+            {models !== null && popoverItems.length === 0 && (
+              <p className="dsh-mp-empty" data-testid="model-empty">
+                {searching ? t("model.noMatch") : t("model.empty")}
+              </p>
+            )}
+            {bucketEntries.map(([prov, groupList], groupIdx) => (
+              <div key={prov} className="dsh-mp-group" role="group" aria-label={prov}>
+                {groupIdx > 0 && <div className="dsh-mp-divider" aria-hidden="true" />}
+                {bucketEntries.length >= 1 && <div className="dsh-mp-group-title">{prov}</div>}
+                {groupList.map((item) => {
+                  const isCurrent = activeModel !== null && sameModel(activeModel.key, item.option.key);
+                  const isSelected = item.id === popoverSelected?.id;
+                  const displayName = item.option.name || item.option.key.modelId;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      className="dsh-mp-item"
+                      data-testid="model-option"
+                      data-current={isCurrent || undefined}
+                      title={`${displayName} (${item.option.key.provider}/${item.option.key.modelId})`}
+                      onMouseEnter={() => setSelection(item.id)}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => apply(item)}
+                    >
+                      <ProviderBrandGlyph provider={item.option.key.provider} modelId={item.option.key.modelId} />
+                      <span className="dsh-mp-item-main">
+                        <span className="dsh-mp-item-name">{displayName}</span>
+                        <span className="dsh-mp-item-desc">{describeModelSubtitle(item.option, zh)}</span>
+                      </span>
+                      <span className="dsh-mp-item-check" aria-hidden="true">
+                        {isCurrent && <Check size={15} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="dsh-mp-footer">
+            <button
+              type="button"
+              className="dsh-mp-more-btn"
+              data-testid="model-popover-more"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setViewMode("dialog")}
+            >
+              <span>{zh ? "更多模型" : "More models"}</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </Popover>
+    );
+  }
 
   return (
     <Dialog

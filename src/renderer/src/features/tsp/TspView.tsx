@@ -8,9 +8,11 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { TaskId } from "../../../../shared/ipc.ts";
 import { useT } from "../../i18n/use-t.ts";
+import { ArrowDown } from "../../icons.tsx";
 import { reportErrorNow } from "../../ui/errors.ts";
 import { OverlayScrollbar } from "../../ui/OverlayScrollbar.tsx";
-import { useStickToBottom } from "../conversation/use-stick-to-bottom.ts";
+import { noteProgrammaticTop } from "../conversation/scroll-intent.ts";
+import { useStickToBottom, type StickToBottom } from "../conversation/use-stick-to-bottom.ts";
 import { ConversationLine } from "./ConversationLine.tsx";
 import type { TspContext } from "./node-props.ts";
 import { TspHosts } from "./TspHosts.tsx";
@@ -89,8 +91,34 @@ function useColumns(
 
 // ───────── reveal ─────────
 
+/** 目标块该滚到哪个 scrollTop：按双方矩形自己算。
+ *  不用 scrollIntoView：它会连带滚内层滚动容器（思考正文、过程组、代码块自己也有滚动条），
+ *  也不经过吸附引擎的记账，下一次流式增量就会按旧锚点把视口拽回去。 */
+function revealScrollTop(el: HTMLElement, target: Element, where: "start" | "end" | "nearest"): number {
+  const box = el.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
+  const delta =
+    where === "start"
+      ? rect.top - box.top
+      : where === "end"
+        ? rect.bottom - box.bottom
+        : rect.top < box.top
+          ? rect.top - box.top
+          : rect.bottom > box.bottom
+            ? rect.bottom - box.bottom
+            : 0;
+  // 夹紧交给浏览器（赋值时自己会夹）。
+  return el.scrollTop + delta;
+}
+
 /** 程序要求把某个节点滚进视野（reveal 操作）：滚过去以后不清，靠 seq 判断是不是新的。 */
-function useReveal(taskId: TaskId, sf: string, root: RefObject<HTMLElement | null>): void {
+function useReveal(
+  taskId: TaskId,
+  sf: string,
+  scroller: RefObject<HTMLElement | null>,
+  surface: RefObject<HTMLElement | null>,
+  stick: StickToBottom | null,
+): void {
   const view = useTspSurface(taskId, sf);
   const seen = useRef(view?.reveal?.seq ?? 0);
   const reveal = view?.reveal ?? null;
@@ -98,13 +126,22 @@ function useReveal(taskId: TaskId, sf: string, root: RefObject<HTMLElement | nul
     if (!reveal || reveal.seq <= seen.current) return;
     seen.current = reveal.seq;
     const frame = requestAnimationFrame(() => {
-      const target = root.current?.querySelector(`[data-id="${CSS.escape(reveal.id)}"]`);
-      target?.scrollIntoView({
-        block: reveal.where === "start" ? "start" : reveal.where === "end" ? "end" : "nearest",
-      });
+      const el = scroller.current;
+      if (el === null) return;
+      const selector = `[data-id="${CSS.escape(reveal.id)}"]`;
+      const target = el.querySelector(selector);
+      if (target === null) {
+        // 不在对话列里（dock / layer 里的节点）：没有可记账的 scrollTop，退回浏览器原生的滚动。
+        surface.current?.querySelector(selector)?.scrollIntoView({ block: reveal.where });
+        return;
+      }
+      el.scrollTop = revealScrollTop(el, target, reveal.where);
+      noteProgrammaticTop(el, el.scrollTop);
+      // 让吸附引擎按新位置重取阅读锚点：这次是程序滚动（不是用户上滑），但视口确实换了地方。
+      stick?.noteProgrammaticScroll();
     });
     return () => cancelAnimationFrame(frame);
-  }, [reveal, root]);
+  }, [reveal, scroller, surface, stick]);
 }
 
 // ───────── surface ─────────
@@ -132,6 +169,8 @@ interface SurfaceParts {
   scroller: RefObject<HTMLDivElement | null>;
   column: RefObject<HTMLDivElement | null>;
   surface: RefObject<HTMLDivElement | null>;
+  /** 吸附引擎（只有 inline surface 有）：reveal 滚动之后要向它记账。 */
+  stick?: StickToBottom | null | undefined;
   jump?: ReactNode;
   /** 盖在对话区右侧的对话线（只有 inline 有）。 */
   line?: ReactNode;
@@ -163,13 +202,26 @@ function Dock({ taskId, sf, ctx }: { taskId: TaskId; sf: string; ctx: TspContext
   );
 }
 
-function SurfaceBody({ taskId, sf, ctx, scroller, column, surface, jump, line, header, tail, mode }: SurfaceParts) {
+function SurfaceBody({
+  taskId,
+  sf,
+  ctx,
+  scroller,
+  column,
+  surface,
+  stick,
+  jump,
+  line,
+  header,
+  tail,
+  mode,
+}: SurfaceParts) {
   const t = useT();
   const main = useTspNode(taskId, sf, "main");
   // 子代理面板在后台驱动 omp 的 Agent Hub（插话 / 结束 / 恢复）：期间过程区压暗（聚焦模式里它暂时显示那个子代理的记录）。
   const driving = useTspDrive(taskId)?.kind === "hub";
   const role = typeof main?.p.role === "string" ? main.p.role : undefined;
-  useReveal(taskId, sf, surface);
+  useReveal(taskId, sf, scroller, surface, stick ?? null);
   return (
     <TspCtx.Provider value={ctx}>
       <div
@@ -240,7 +292,8 @@ function InlineSurface({
   // 一轮结束的时刻（lastTurn 每个事件都是新对象，取它的数字）。
   const lastTurnAt = useTaskValue(taskId, (task) => task?.lastTurn?.endedAt ?? null);
   const hasUser = useTspHasUserMessage(taskId, surfaceId);
-  const { showJump, scrollToBottom } = useStickToBottom(taskId, scroller, column);
+  const stick = useStickToBottom(taskId, scroller, column);
+  const { showJump, scrollToBottom, noteProgrammaticScroll } = stick;
   useColumns(taskId, column, surface);
   // 恢复会话时 omp 不重发的用量脚注和回顾：挂载时取一次，一轮结束或新增一轮时再取。
   const turnCount = useTspTurnCount(taskId, surfaceId);
@@ -258,13 +311,21 @@ function InlineSurface({
       column={column}
       surface={surface}
       mode="inline"
+      stick={stick}
       header={<StudioHeader compact />}
       tail={pendingText !== undefined && !hasUser ? <PendingUser text={pendingText} /> : null}
-      line={<ConversationLine taskId={taskId} scroller={scroller} />}
+      line={<ConversationLine taskId={taskId} scroller={scroller} onProgrammaticScroll={noteProgrammaticScroll} />}
       jump={
         showJump && (
-          <button type="button" className="tsp-jump" onClick={scrollToBottom} data-testid="jump-latest">
-            {t("scroll.latest")}
+          <button
+            type="button"
+            className="tsp-jump"
+            onClick={scrollToBottom}
+            data-testid="jump-latest"
+            aria-label={t("scroll.latest")}
+            title={t("scroll.latest")}
+          >
+            <ArrowDown size={15} />
           </button>
         )
       }

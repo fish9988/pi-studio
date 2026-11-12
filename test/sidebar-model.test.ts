@@ -302,11 +302,20 @@ describe("buildFolders / buildTimeline", () => {
     expect(taskTitle({ title: " \ue000 任务 " })).toBe("任务");
   });
 
-  it("纯聊天临时目录（.t3/scratch/*、chat-workspace）自动归入默认文件夹，不拆出按会话命名的伪文件夹；自动化连接测试临时目录默认隐藏", () => {
+  it("纯聊天临时目录（.t3/scratch/*、chat-workspace）哪怕已被登记为 Project，其任务和历史会话也自动归入默认文件夹，不拆出伪项目文件夹", () => {
     const folders = buildFolders(
       input({
-        projects: [project("p1", "C:\\work\\app", "app")],
+        projects: [
+          project("p1", "C:\\work\\app", "app"),
+          project(
+            "p-scratch",
+            "C:\\Users\\someone\\.t3\\scratch\\2026-11-11-https-aistudio-g",
+            "2026-11-11-https-aistudio-g",
+          ),
+          project("p-chatws", "C:\\Users\\someone\\.pi\\agent\\chat-workspace", "chat-workspace"),
+        ],
         defaultCwd: "C:\\Users\\someone\\pi-studio\\chats",
+        tasks: [task("t-scratch", "p-scratch", { updatedAt: 110 })],
         sessions: [
           past("s1", "C:\\Users\\someone\\.t3\\scratch\\2026-11-11-https-aistudio-g", 100),
           past("s2", "C:\\Users\\someone\\.pi\\agent\\chat-workspace", 90),
@@ -315,7 +324,7 @@ describe("buildFolders / buildTimeline", () => {
       }),
     );
     expect(folders.map((f) => [f.label, ids(f.items)])).toEqual([
-      ["chats", ["session:s1", "session:s2"]],
+      ["chats", ["task:t-scratch", "session:s1", "session:s2"]],
       ["app", []],
     ]);
   });

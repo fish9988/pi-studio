@@ -169,6 +169,28 @@ describe("findUserEntry", () => {
     });
     expect(findUserEntry(parseSessionEntries(text), "aa")?.text).toBe(`${long}\ntail`);
   });
+
+  it("带有效图片附件的用户消息：撤回目标一并还原 images，使 [Image #N, WxH] 不退化为失效纯文本", () => {
+    const raw = JSON.stringify({
+      type: "message",
+      id: "img-msg",
+      parentId: null,
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: "[Image #1, 391x88] 看看这张图" },
+          { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" },
+        ],
+      },
+    });
+    const target = findUserEntry(parseSessionEntries(raw), "img-msg");
+    expect(target).toEqual({
+      parentId: null,
+      text: "[Image #1, 391x88] 看看这张图",
+      images: [{ mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" }],
+      lastEntryId: "img-msg",
+    });
+  });
 });
 
 describe("omp 18.12.5 的 /tree 录制（fixtures/tsp/session-tree.jsonl）", () => {

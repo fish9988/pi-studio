@@ -40,7 +40,8 @@ function folderKey(cwd: string): string {
   return cwd.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
-function isScratchChatCwd(normalizedKey: string): boolean {
+export function isScratchChatCwd(cwdOrKey: string): boolean {
+  const normalizedKey = folderKey(cwdOrKey);
   return (
     normalizedKey.includes("/.t3/scratch/") ||
     normalizedKey.endsWith("/.pi/agent/chat-workspace") ||
@@ -121,9 +122,12 @@ export function buildTimeline(input: SidebarInput): SidebarItem[] {
     });
   }
   for (const session of input.sessions) {
+    const rawKey = folderKey(session.cwd);
+    if (needle === "" && isEphemeralTestTempCwd(rawKey)) continue;
     if (session.taskId !== null || !matches(needle, sessionTitle(session))) continue;
     const pinned = session.pinned || (input.pinnedIds?.has(session.id) ?? false);
-    const projectLabel = folderName(session.cwd);
+    const projectLabel =
+      isScratchChatCwd(rawKey) && input.defaultCwd != null ? folderName(input.defaultCwd) : folderName(session.cwd);
     items.push({
       kind: "session",
       key: `session:${session.id}`,
@@ -147,9 +151,28 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
   const folders = new Map<string, SidebarFolder>();
   const projectKey = new Map<ProjectId, string>();
   for (const project of input.projects) {
-    const key = folderKey(project.path);
+    const rawKey = folderKey(project.path);
+    const redirectProject = pinnedDefaultKey !== null && isScratchChatCwd(rawKey);
+    const key = redirectProject ? pinnedDefaultKey : rawKey;
     projectKey.set(project.id, key);
-    if (!folders.has(key)) folders.set(key, { key, cwd: project.path, label: project.name, project, items: [] });
+    if (!redirectProject) {
+      const existing = folders.get(key);
+      if (!existing) {
+        folders.set(key, { key, cwd: project.path, label: project.name, project, items: [] });
+      } else if (existing.project === null) {
+        existing.cwd = project.path;
+        existing.label = project.name;
+        existing.project = project;
+      }
+    } else if (!folders.has(key) && input.defaultCwd != null) {
+      folders.set(key, {
+        key,
+        cwd: input.defaultCwd,
+        label: folderName(input.defaultCwd),
+        project: null,
+        items: [],
+      });
+    }
   }
   for (const item of buildTimeline(input)) {
     if (item.kind === "task") {
@@ -160,7 +183,7 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
     if (needle === "" && !folders.has(rawKey) && isEphemeralTestTempCwd(rawKey)) {
       continue;
     }
-    const redirectToDefault = pinnedDefaultKey !== null && !folders.has(rawKey) && isScratchChatCwd(rawKey);
+    const redirectToDefault = pinnedDefaultKey !== null && isScratchChatCwd(rawKey);
     const key = redirectToDefault ? pinnedDefaultKey : rawKey;
     const folder = folders.get(key);
     if (folder) folder.items.push(item);

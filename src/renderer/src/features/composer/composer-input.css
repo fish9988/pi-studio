@@ -197,27 +197,27 @@
   field-sizing: content;
 }
 .composer-chip {
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent-soft);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 .composer-chip[data-kind="file"] {
-  background: var(--bg-hover);
-  box-shadow: 0 0 0 1px var(--border-subtle);
+  background: color-mix(in srgb, var(--link) 10%, var(--bg-sunken));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--link) 18%, var(--border-subtle));
 }
 .composer-chip[data-kind="paste"] {
   background: var(--bg-sunken);
   box-shadow: 0 0 0 1px var(--border-subtle);
 }
 
-/* ───── 顶边拖拽条：盖在输入框上边线上，悬停 / 聚焦时露出一根短横线 ───── */
+/* ───── 顶边拖拽条：平时完全隐形，仅鼠标悬停在输入框顶部边缘时微露细横线提示 ───── */
 .composer-grip {
   position: absolute;
-  top: calc((var(--space-1-5) + 1px + var(--space-1)) * -1);
-  right: var(--space-6);
-  left: var(--space-6);
+  top: calc((var(--space-1) + 2px) * -1);
+  right: var(--space-8);
+  left: var(--space-8);
   z-index: var(--z-sticky);
-  height: var(--space-2);
+  height: 7px;
   cursor: ns-resize;
   touch-action: none;
 }
@@ -226,18 +226,25 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: var(--space-8);
-  height: var(--space-0-5);
+  width: 28px;
+  height: 2px;
   border-radius: var(--radius-pill);
   background: var(--border-strong);
   opacity: 0;
   transform: translate(-50%, -50%);
-  transition: opacity var(--dur-fast) var(--ease-out);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    width var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
 }
 .composer-grip:hover::after,
-.composer-grip:focus-visible::after,
+.composer-grip:focus-visible::after {
+  opacity: 0.55;
+}
 .composer-grip:active::after {
-  opacity: 1;
+  opacity: 0.9;
+  width: 36px;
+  background: var(--text-3);
 }
 .composer-grip:focus-visible {
   outline: none;

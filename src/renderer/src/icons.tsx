@@ -76,6 +76,11 @@ export const ArrowUp = (props: IconProps) => (
     <path d="M8 13V3.5M4 7.5l4-4 4 4" />
   </Icon>
 );
+export const ArrowDown = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M8 3v9.5M4 8.5l4 4 4-4" />
+  </Icon>
+);
 export const Shield = (props: IconProps) => (
   <Icon {...props}>
     <path d="M8 2 3.5 3.8v3.6c0 3 2 5 4.5 6.1 2.5-1.1 4.5-3.1 4.5-6.1V3.8L8 2Z" />
@@ -322,5 +327,12 @@ export const ChangesPane = (props: IconProps) => (
   <Icon {...props}>
     <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
     <path d="M7.5 2.5v11M9.5 6.5h3M11 5v3M9.5 10.5h3" />
+  </Icon>
+);
+/** DSH 开始/导航指南针图标 */
+export const Compass = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="m6.4 9.6 1-2.8 2.8-1-1 2.8-2.8 1Z" />
   </Icon>
 );

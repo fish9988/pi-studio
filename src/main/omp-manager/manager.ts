@@ -77,7 +77,7 @@ export class OmpManager {
     else if (status.state === "error" || status.state === "unusable")
       this.#settleWaiters(
         new Error(
-          status.state === "error" ? status.message : "omp on PATH is a script launcher that omp-studio cannot start",
+          status.state === "error" ? status.message : "omp on PATH is a script launcher that pi-studio cannot start",
         ),
       );
   }
@@ -110,7 +110,7 @@ export class OmpManager {
     this.startOnce();
     const current = this.#status;
     if (current.state === "error") throw new Error(current.message);
-    if (current.state === "unusable") throw new Error("omp on PATH is a script launcher that omp-studio cannot start");
+    if (current.state === "unusable") throw new Error("omp on PATH is a script launcher that pi-studio cannot start");
     if (current.state !== "ready") {
       const waiter = Promise.withResolvers<void>();
       this.#waiters.push(waiter);

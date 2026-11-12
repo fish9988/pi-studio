@@ -182,6 +182,10 @@ export class ProjectFileIndex {
     return files;
   }
 
+  invalidate(cwd: string): void {
+    this.#cache.delete(cwd);
+  }
+
   async search(cwd: string, query: string): Promise<string[]> {
     return matchProjectFiles(await this.list(cwd), query);
   }

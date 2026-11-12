@@ -11,7 +11,7 @@ import {
   type CSSProperties,
 } from "react";
 import { backdropFilePattern, type TaskId } from "../../../shared/ipc.ts";
-import { resolveTheme, themes } from "../../../shared/themes.ts";
+import { familyOfTheme, resolveTheme, themes } from "../../../shared/themes.ts";
 import { getVisibleTaskIds } from "../features/sidebar/visible-order-store.ts";
 import { Composer } from "../features/composer/index.ts";
 import { BtwPanel } from "../features/btw/index.ts";
@@ -19,29 +19,11 @@ import { SessionTreePanel } from "../features/conversation/index.ts";
 import { releaseTspDocument, TspView } from "../features/tsp/index.ts";
 import { NoticeLayer } from "../features/dialogs/index.ts";
 import { DropOverlay, EmptyState, startDraft } from "../features/empty/index.ts";
-import { toggleFilesPanel, usePreviewPanel } from "../features/file-preview/index.ts";
-import { closeAgentsPanel, useAgentsPanel } from "../features/agents/index.ts";
-import { closeBrowserPanel, openBrowserPanel, toggleBrowserPanel, useBrowserPanel } from "../features/browser/index.ts";
-import { closeChangesPanel, useChangesPanel } from "../features/workbench/index.ts";
-import {
-  TerminalPanel,
-  toggleTerminalFocus,
-  useDraftTerminalCleanup,
-  useDraftTerminalKey,
-  useTerminalOpen,
-} from "../features/terminal/index.ts";
-import {
-  AgentsPanel,
-  BrowserPanel,
-  CommandPalette,
-  FilePreviewPane,
-  GitChangesPanel,
-  GitDialogHost,
-  OmpSetupView,
-  preloadFrequentViews,
-  ReviewHost,
-  SessionInfoHost,
-} from "./lazy-views.tsx";
+import { toggleFilesPanel } from "../features/file-preview/index.ts";
+import { openBrowserPanel, toggleBrowserPanel } from "../features/browser/index.ts";
+import { RightWorkbench } from "../features/workbench/RightWorkbench.tsx";
+import { toggleTerminalFocus, useDraftTerminalCleanup, useDraftTerminalKey } from "../features/terminal/index.ts";
+import { CommandPalette, GitDialogHost, OmpSetupView, preloadFrequentViews, SessionInfoHost } from "./lazy-views.tsx";
 import { isStandaloneSettingsWindow, SettingsWindow, StandaloneSettingsWindowRoot } from "./SettingsWindow.tsx";
 import { onStudioCommand } from "../features/palette/studio-command.ts";
 import { jumpToWaitingTask, Sidebar, useUnreadTaskSync } from "../features/sidebar/index.ts";
@@ -72,6 +54,7 @@ import { useShortcuts } from "./use-shortcuts.ts";
 import { useCopyOnSelect } from "./use-copy-on-select.ts";
 import { restartSession } from "./restart-session.ts";
 import { TooltipLayer } from "../ui/Tooltip.tsx";
+import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { EditMenu } from "./EditMenu.tsx";
 
 /** spec §3.3：窄于 1000px 侧栏改成覆盖式抽屉。 */
@@ -136,26 +119,6 @@ export function App() {
   const paletteOpen = usePaletteOpen();
   const draftKey = useDraftTerminalKey();
   const terminalKey = taskId ?? draftKey;
-  const terminalOpen = useTerminalOpen(terminalKey);
-  const panel = usePreviewPanel();
-  const agentsPanel = useAgentsPanel();
-  const browserPanel = useBrowserPanel();
-  const changesPanel = useChangesPanel();
-  // 文件、变更、子代理、浏览器四个面板共用右栏，同时只开一个。
-  useEffect(() => {
-    if (panel === null) return;
-    closeChangesPanel(false);
-    closeAgentsPanel(false);
-    closeBrowserPanel(false);
-  }, [panel]);
-  useEffect(() => {
-    if (agentsPanel === null) return;
-    closeChangesPanel(false);
-    closeBrowserPanel(false);
-  }, [agentsPanel]);
-  useEffect(() => {
-    if (browserPanel !== null) closeChangesPanel(false);
-  }, [browserPanel]);
   // omp 连上了当前任务的浏览器（AI 开始用它）：打开面板，不抢焦点。
   useEffect(
     () =>
@@ -179,47 +142,61 @@ export function App() {
   const openAbout = about.open;
   const aboutKey = about.slot?.key ?? null;
 
-  const theme = settings?.theme ?? null;
-  const shownTheme = useRef<typeof theme>(null);
+  const themePref = settings?.theme ?? null;
+  const colorMode = settings?.colorMode ?? "system";
+  const resolvedTheme = themePref === null ? null : resolveTheme(themePref, systemDark, colorMode);
+  const activeFamily = themePref === null ? null : familyOfTheme(themePref);
+  const shownTheme = useRef<typeof resolvedTheme>(null);
   useEffect(() => {
-    if (theme === null) return;
+    if (themePref === null || resolvedTheme === null || activeFamily === null) return;
     const root = document.documentElement;
+    const isDefaultSystem =
+      activeFamily === "default" && colorMode === "system" && (themePref === "default" || themePref === "system");
+    const reportedPref = isDefaultSystem ? "system" : resolvedTheme;
     const apply = () => {
-      if (theme === "system") delete root.dataset["theme"];
-      else root.dataset["theme"] = theme;
+      root.dataset["themeFamily"] = activeFamily;
+      if (isDefaultSystem) delete root.dataset["theme"];
+      else root.dataset["theme"] = resolvedTheme;
     };
     const previous = shownTheme.current;
-    shownTheme.current = theme;
+    shownTheme.current = resolvedTheme;
     // 系统三键不是网页画的：网页换完 data-theme 告诉主进程，三键跟着换（main-window.ts 的 setTitleBarTheme）。
-    const report = (crossfade: boolean) => void window.studio.setTitleBarTheme(theme, crossfade);
-    // 用户切换主题时整窗交叉淡入（View Transitions，时长见 app.css），淡入开始时三键用同样的时长和曲线一起淡入；
-    // 启动时第一次套用不动画。淡入被跳过（窗口隐藏着、紧接着又换了主题）时 ready 失败，页面在 apply 后直接换，三键也直接换。
-    if (previous === null || previous === theme) {
+    const report = (crossfade: boolean) => {
+      window.studio.setTitleBarTheme(reportedPref, crossfade).catch(() => {
+        const legacyFallback = themes[resolvedTheme].dark ? "pi" : "openai";
+        void window.studio.setTitleBarTheme(legacyFallback as typeof reportedPref, crossfade).catch(() => {});
+      });
+    };
+    if (previous === null || previous === resolvedTheme) {
       apply();
       report(false);
       return;
     }
-    const transition = document.startViewTransition(apply);
-    void transition.ready.then(
-      async () => {
-        // ready 时伪元素刚建好，淡入下一帧才开始（实测 ready 比动画的开始时刻早约 25ms，先报告三键就领先网页一截）。
-        // 这一帧里淡入被跳过（窗口隐藏、又起了一次 View Transition）时动画取消、它的 ready 失败：页面已是新主题，三键直接换。
-        const fade = document
-          .getAnimations()
-          .find(
-            (animation) => (animation.effect as KeyframeEffect | null)?.pseudoElement === "::view-transition-new(root)",
-          );
-        const started =
-          fade === undefined ||
-          (await fade.ready.then(
-            () => true,
-            () => false,
-          ));
-        report(started);
-      },
-      () => void transition.updateCallbackDone.then(() => report(false)),
-    );
-  }, [theme]);
+    try {
+      const transition = document.startViewTransition(apply);
+      void transition.ready.then(
+        async () => {
+          const fade = document
+            .getAnimations()
+            .find(
+              (animation) =>
+                (animation.effect as KeyframeEffect | null)?.pseudoElement === "::view-transition-new(root)",
+            );
+          const started =
+            fade === undefined ||
+            (await fade.ready.then(
+              () => true,
+              () => false,
+            ));
+          report(started);
+        },
+        () => void transition.updateCallbackDone.then(() => report(false)),
+      );
+    } catch {
+      apply();
+      report(false);
+    }
+  }, [themePref, colorMode, resolvedTheme, activeFamily]);
   // 设置读到（或读失败）、主题套上，并且页面第一次有内容的一帧已经真的显示出来（first-contentful-paint，按上屏时间记），
   // 才告诉主进程淡入窗口。只等 React 提交不够：窗口刚显示时绘制面还没准备好，提交后要再过约 250ms 内容才上屏，
   // 先淡入的会是一块空底色（2026-10-26 截屏实测；FCP 的时刻和截屏里内容出现的时刻一致）。
@@ -268,7 +245,7 @@ export function App() {
   // 当前主题没有插图、自选图片的文件名不合规时都不画（不挂 data-backdrop）。
   const customBackdrop = settings?.customBackdrop ?? null;
   const backdrop =
-    settings?.backdrop === "theme" && themes[resolveTheme(settings.theme, systemDark)].art
+    settings?.backdrop === "theme" && resolvedTheme !== null && (themes[resolvedTheme]?.art ?? false)
       ? "theme"
       : settings?.backdrop === "custom" && customBackdrop !== null && backdropFilePattern.test(customBackdrop)
         ? "custom"
@@ -526,44 +503,37 @@ export function App() {
           }
         >
           {!narrow && sidebarShown && <SidebarResizer width={sidebarWidth} column={sidebarColumn} />}
-          {!narrow && view === "conversation" && <ChatWidthResizer width={chatWidth} panel={mainPanel} />}
+          {!narrow && <ChatWidthResizer width={chatWidth} panel={mainPanel} />}
           {/* 会话过程区与输入框始终保持挂载与可见，打开设置时以并行窗口方式在旁展示，方便一边看会话一边调设置。 */}
           {kept.map((id) => (
             <Activity key={`tsp:${id}`} mode={id === taskId ? "visible" : "hidden"}>
-              <TspView taskId={id} parked={false} />
+              <ErrorBoundary resetKey={id}>
+                <TspView taskId={id} parked={false} />
+              </ErrorBoundary>
             </Activity>
           ))}
           {taskId === null ? (
-            <>
-              <EmptyState />
-              <TerminalPanel key={`terminal:${draftKey}`} terminalKey={draftKey} open={terminalOpen} />
-            </>
+            <EmptyState />
           ) : (
             <>
               <SessionTreePanel key={`tree:${taskId}`} taskId={taskId} />
               <BtwPanel key={`btw:${taskId}`} taskId={taskId} />
               <Composer key={`composer:${taskId}`} taskId={taskId} fromDraft={fromDraft} />
-              <TerminalPanel key={`terminal:${taskId}`} terminalKey={taskId} open={terminalOpen} />
             </>
           )}
         </main>
-        {view === "settings" && <SettingsWindow compactNav={narrow} />}
-        {/* 右栏四个工作台面板互斥，key 均带前缀，切换时绝不会出现同一帧双栏并排。 */}
-        {view === "conversation" &&
-          (panel?.key === terminalKey ? (
-            <FilePreviewPane key={`files:${panel.key}`} panelKey={panel.key} page={panel.page} path={panel.path} />
-          ) : taskId !== null && agentsPanel?.taskId === taskId ? (
-            <AgentsPanel key={`agents:${taskId}`} taskId={taskId} selected={agentsPanel.selected} />
-          ) : taskId !== null && browserPanel === taskId ? (
-            <BrowserPanel key={`browser:${taskId}`} taskId={taskId} />
-          ) : taskId !== null && changesPanel === taskId ? (
-            <GitChangesPanel key={`changes:${taskId}`} taskId={taskId} />
-          ) : null)}
+        <ErrorBoundary resetKey={terminalKey}>
+          <RightWorkbench panelKey={terminalKey} taskId={taskId} />
+        </ErrorBoundary>
+        {view === "settings" && (
+          <ErrorBoundary resetKey="settings">
+            <SettingsWindow compactNav={narrow} />
+          </ErrorBoundary>
+        )}
       </div>
       {aboutKey !== null && <AboutDialog key={aboutKey} onExited={() => about.closed(aboutKey)} />}
       <DropOverlay />
       <EditMenu />
-      <ReviewHost />
       <GitDialogHost />
       <SessionInfoHost />
       <NoticeLayer />

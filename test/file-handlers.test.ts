@@ -105,4 +105,24 @@ describe("默认文件夹的根目录", () => {
     await expect(fileHandlers.listDirectory(target, work)).rejects.toThrow();
     await expect(fileHandlers.listProjectFiles(target, "..\\外面")).rejects.toThrow();
   });
+
+  it("支持新建文件/文件夹、重命名、删除以及 SVG 源码+画布双数据返回", async () => {
+    await fileHandlers.createFileEntry(target, "assets", "dir");
+    await fileHandlers.createFileEntry(target, "assets/icon.svg", "file");
+    await writeFile(path.join(chats, "assets", "icon.svg"), '<svg viewBox="0 0 10 10"><circle r="4"/></svg>', "utf8");
+
+    const preview = await fileHandlers.readPreviewFile(target, "assets/icon.svg");
+    expect(preview.kind).toBe("image");
+    if (preview.kind === "image") {
+      expect(preview.dataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+      expect(preview.text).toContain("<circle");
+    }
+
+    const renamedRel = await fileHandlers.renameFileEntry(target, "assets/icon.svg", "logo.svg");
+    expect(renamedRel).toBe("assets/logo.svg");
+    expect((await fileHandlers.listDirectory(target, "assets")).entries.map((e) => e.name)).toEqual(["logo.svg"]);
+
+    await fileHandlers.deleteFileEntry(target, "assets/logo.svg");
+    expect((await fileHandlers.listDirectory(target, "assets")).entries).toEqual([]);
+  });
 });

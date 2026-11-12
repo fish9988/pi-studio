@@ -126,6 +126,8 @@ test("顶栏按钮打开文件面板：目录在前文件在后、不列 .git，
     const toggle = page.getByTestId("topbar-files");
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await toggle.click();
+    await expect(page.getByTestId("dsh-start-launcher")).toBeVisible();
+    await page.getByTestId("dsh-start-files").click();
     await expect(pane).toBeVisible();
     await expect(pane).toHaveAttribute("data-page", "files");
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
@@ -167,6 +169,7 @@ test("顶栏按钮打开文件面板：目录在前文件在后、不列 .git，
     await page.keyboard.press("Escape");
     await expect(pane).toHaveCount(0);
     await toggle.click();
+    await page.getByTestId("dsh-start-files").click();
     await expect(row(page, "src/alpha.ts")).toBeVisible();
     await toggle.click();
     await expect(pane).toHaveCount(0);
@@ -248,6 +251,7 @@ test("一层上千项：只渲染眼前的行，滚到底能看到最后一项�
   try {
     const { page } = launched;
     await page.getByTestId("topbar-files").click();
+    await page.getByTestId("dsh-start-files").click();
     await row(page, "big").click();
     await expect(row(page, "big/file-0.txt")).toBeVisible();
     const rendered = await page.locator("[data-testid=file-tree-row]").count();
@@ -287,6 +291,7 @@ test("默认文件夹里的新任务草稿也有文件面板：目录还没建�
     const toggle = page.getByTestId("topbar-files");
     await expect(toggle).toBeVisible();
     await toggle.click();
+    await page.getByTestId("dsh-start-files").click();
     const pane = page.getByTestId("file-preview");
     await expect(pane).toBeVisible();
     await expect(page.getByTestId("file-tree")).toBeFocused();
@@ -333,6 +338,7 @@ test("工作区目录：添加文件夹（空格和中文）→ 额外根出现�
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
     }, extra);
     await page.getByTestId("topbar-files").click();
+    await page.getByTestId("dsh-start-files").click();
     await expect(page.getByTestId("file-preview")).toBeVisible();
     // 还没有额外目录：只有"添加文件夹…"，没有根切换。
     await expect(page.getByTestId("workspace-add-dir")).toBeVisible();

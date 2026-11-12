@@ -35,9 +35,9 @@ describe("托盘提示的任务计数", () => {
   });
 
   it("没有任务在忙时提示只有应用名；否则带计数，中英各自的文案", () => {
-    expect(trayTooltip("zh-CN", { running: 0, waiting: 0 })).toBe("omp-studio");
-    expect(trayTooltip("zh-CN", { running: 2, waiting: 1 })).toBe("omp-studio · 2 个运行中，1 个等你确认");
-    expect(trayTooltip("en", { running: 2, waiting: 1 })).toBe("omp-studio · 2 running, 1 waiting for you");
+    expect(trayTooltip("zh-CN", { running: 0, waiting: 0 })).toBe("pi-studio");
+    expect(trayTooltip("zh-CN", { running: 2, waiting: 1 })).toBe("pi-studio · 2 个运行中，1 个等你确认");
+    expect(trayTooltip("en", { running: 2, waiting: 1 })).toBe("pi-studio · 2 running, 1 waiting for you");
   });
 });
 
@@ -45,7 +45,7 @@ describe("托盘右键菜单模板", () => {
   it("没有任务在忙：打开 / 摘要（灰）/ 退出；点击分别触发对应动作", () => {
     const { calls, handlers } = actions();
     const menu = trayMenuTemplate("zh-CN", [task("a", "idle")], handlers);
-    expect(menu.map((item) => item.label ?? "-")).toEqual(["打开 omp-studio", "-", "没有任务在运行", "-", "退出"]);
+    expect(menu.map((item) => item.label ?? "-")).toEqual(["打开 pi-studio", "-", "没有任务在运行", "-", "退出"]);
     expect(menu[2]?.enabled).toBe(false);
     menu[0]?.click?.();
     menu[4]?.click?.();

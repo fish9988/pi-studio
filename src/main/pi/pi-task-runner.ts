@@ -2,6 +2,7 @@
 // Drop-in compatible with `TspRunner` (`src/main/tasks/tsp-runner.ts`) for `TaskPool`.
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
 import { appendFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -21,6 +22,7 @@ import type {
   ModelKey,
   ModelOption,
   Project,
+  PromptImage,
   PromptInput,
   RestoredDraft,
   RestoredQueue,
@@ -56,7 +58,7 @@ import { titleFromPrompt } from "../tasks/convert.ts";
 import { initialMachineState, transition, type MachineInput, type MachineState } from "../tasks/task-machine.ts";
 import type { TaskRecord } from "../tasks/task-registry.ts";
 import { TooManyTasksError, type NewTaskDefaults, type TspRunnerHost } from "../tasks/tsp-runner.ts";
-import { WorkspaceDirs } from "../tasks/workspace-dirs.ts";
+import { resolveTouchedWorkspaceDir, WorkspaceDirs } from "../tasks/workspace-dirs.ts";
 import { holdSessionFile, readSessionFile, type SessionFileState } from "../tsp/session-files.ts";
 import {
   buildTreeFromEntries,
@@ -75,6 +77,9 @@ import {
   readPiSystemDoc,
 } from "../pi-config/index.ts";
 import { discoverPi, formatError as errorMessage, type PiLaunch } from "./discover.ts";
+import { analyzeSessionBranchTokens, estTextTokens } from "./pi-context-estimate.ts";
+import { revertSessionFileChangesFromFile } from "./revert-session-files.ts";
+import { rewindSessionFileBefore } from "./pi-session-rewind.ts";
 import {
   PiRpcClient,
   type PiAgentMessage,
@@ -146,6 +151,8 @@ export class PiTaskRunner {
   #thinkingLevel: ThinkingLevel | null;
   #thinkingLevels: ThinkingLevel[] = ["off"];
   #contextUsage: ContextUsage | null = null;
+  #postCompactionTokens: number | null = null;
+  #compactionState: "running" | "ready" | null = null;
   #sessionUsage: TaskState["sessionUsage"] = null;
   #autoCompactionEnabled = true;
   #catalog: ModelOption[] = [];
@@ -220,6 +227,14 @@ export class PiTaskRunner {
 
     this.#bridge.onTitleChange((title) => {
       this.#adoptTitle(title);
+    });
+
+    this.#bridge.onTouchedPath((targetPath) => {
+      if (this.#disposed) return;
+      const wsDir = resolveTouchedWorkspaceDir(targetPath, this.cwd);
+      if (wsDir !== null && this.#workspace.addDir(wsDir, this.cwd)) {
+        this.#publish();
+      }
     });
 
     // Hydrate immediately from `record.sessionFile` on construction so stopped tasks render history right away!
@@ -316,7 +331,7 @@ export class PiTaskRunner {
       loaderText: null,
       prNumber: null,
       contextCompaction: this.#autoCompactionEnabled
-        ? { autoAtPercent: 85, summaryStartsAtPercent: null, summary: null }
+        ? { autoAtPercent: 60, summaryStartsAtPercent: null, summary: this.#compactionState }
         : null,
       composerMode: null,
       extStatuses: this.#extStatuses,
@@ -442,7 +457,8 @@ export class PiTaskRunner {
         provider: this.#record.model?.provider,
         model: this.#record.model?.modelId,
         thinkingLevel: effectiveThinking,
-        sessionName: this.#record.title !== "" ? this.#record.title : undefined,
+        sessionName:
+          this.#record.title !== "" && !/^[A-Za-z]:?$/.test(this.#record.title.trim()) ? this.#record.title : undefined,
       });
 
       client.onEvent((event) => {
@@ -471,6 +487,7 @@ export class PiTaskRunner {
           );
           if (exists) {
             await this.#bridge.hydrateFromSessionFile(state.sessionFile);
+            await this.#readSessionFile();
           } else if (state.messageCount > 0) {
             const { messages } = await client.getMessages();
             this.#bridge.hydrateFromMessages(messages);
@@ -549,15 +566,28 @@ export class PiTaskRunner {
   }
 
   async rename(title: string): Promise<void> {
+    this.#provisionalTitle = null;
+    this.#adoptedTitle = null;
     this.#record = await this.#host.persist(this.id, { title });
     this.#publish();
     const client = this.#client;
     if (client !== null && client.alive) {
       try {
         await client.setSessionName(title);
+        return;
       } catch (error) {
         log.warn(`task ${this.id} set_session_name failed`, { message: errorMessage(error) });
       }
+    }
+    const sessionFile = this.#sessionFile ?? this.#record.sessionFile;
+    if (sessionFile !== null && sessionFile !== undefined && sessionFile !== "") {
+      const entryLine = `${JSON.stringify({
+        type: "session_info",
+        id: randomUUID().slice(0, 8),
+        timestamp: new Date().toISOString(),
+        name: title,
+      })}\n`;
+      await appendFile(sessionFile, entryLine, "utf8").catch(() => {});
     }
   }
 
@@ -682,9 +712,12 @@ export class PiTaskRunner {
     } else if (res.kind === "interrupt") {
       void this.stop();
     } else if (res.kind === "rewind" && res.entryId !== undefined) {
-      void this.rewindTo(res.entryId).then(({ text }) => {
-        if (text !== "") {
-          this.#host.onComposerPrefill?.(this.id, { text });
+      void this.rewindTo(res.entryId).then(({ text, images }) => {
+        if (text !== "" || (images !== undefined && images.length > 0)) {
+          this.#host.onComposerPrefill?.(this.id, {
+            text,
+            ...(images !== undefined && images.length > 0 ? { images } : {}),
+          });
         }
       });
     }
@@ -755,16 +788,30 @@ export class PiTaskRunner {
     }
   }
 
+  #fallbackContextWindow(): number {
+    const explicit =
+      this.#contextUsage?.contextWindow ?? this.#model?.contextWindow ?? this.#newTaskDefault.model?.contextWindow ?? 0;
+    if (explicit > 0) return explicit;
+    const modelId = (
+      this.#model?.key.modelId ??
+      this.#record.model?.modelId ??
+      this.#newTaskDefault.model?.key.modelId ??
+      ""
+    ).toLowerCase();
+    if (modelId.includes("gemini")) return 1_000_000;
+    return 200_000;
+  }
+
   async readContext(): Promise<ContextReport | null> {
     if (this.#client !== null && this.#client.alive) {
       await this.#syncStats(this.#client);
     }
-    const ctx = this.#contextUsage;
-    if (ctx === null || ctx.contextWindow <= 0) {
+    const windowSize = this.#fallbackContextWindow();
+    if (windowSize <= 0) {
       return null;
     }
 
-    const estTokens = (text: string): number => (text.length > 0 ? Math.max(1, Math.ceil(text.length / 3.6)) : 0);
+    const estTokens = estTextTokens;
     const agentDir = resolveAgentDir();
 
     // 1. 系统提示词、指令文档 (AGENTS.md / SYSTEM.md)、Skills 与工具定义估算
@@ -801,73 +848,101 @@ export class PiTaskRunner {
       // ignore config read errors
     }
 
-    // 2. 会话消息与工具调用拆解
+    // 2. 会话消息与工具调用拆解（兼容 dsh-compact / /compact 压缩摘要及未启动 RPC 的历史会话）
     let userTokens = 0;
     let assistantTokens = 0;
     let thinkingTokens = 0;
     let toolCallTokens = 0;
     let toolOutputTokens = 0;
+    let compactionTokens = 0;
 
-    let messages: PiAgentMessage[] = [];
+    const baseOverhead = sysTokens + skillsTokens + builtInToolsTokens + customToolsTokens;
+    let branchAnalysisTokens = 0;
+
     if (this.#client !== null && this.#client.alive) {
+      let messages: PiAgentMessage[] = [];
       try {
         const res = await this.#client.getMessages();
         messages = res.messages;
       } catch {
         messages = [];
       }
-    }
 
-    for (const msg of messages) {
-      if (msg.role === "user") {
-        if (typeof msg.content === "string") {
-          userTokens += estTokens(msg.content);
-        } else if (Array.isArray(msg.content)) {
+      for (const msg of messages) {
+        if (msg.role === "user") {
+          if (typeof msg.content === "string") {
+            userTokens += estTokens(msg.content);
+          } else if (Array.isArray(msg.content)) {
+            for (const part of msg.content) {
+              if (part.type === "text") userTokens += estTokens(part.text);
+              else if (part.type === "image") userTokens += 850;
+            }
+          }
+        } else if (msg.role === "assistant" && Array.isArray(msg.content)) {
           for (const part of msg.content) {
-            if (part.type === "text") userTokens += estTokens(part.text);
-            else if (part.type === "image") userTokens += 850;
+            if (part.type === "text") assistantTokens += estTokens(part.text);
+            else if (part.type === "thinking") thinkingTokens += estTokens(part.thinking);
+            else if (part.type === "toolCall") {
+              toolCallTokens += 16 + estTokens(part.name) + estTokens(JSON.stringify(part.arguments ?? {}));
+            }
+          }
+        } else if (msg.role === "toolResult" && Array.isArray(msg.content)) {
+          for (const part of msg.content) {
+            if (part.type === "text") toolOutputTokens += estTokens(part.text);
+            else if (part.type === "image") toolOutputTokens += 850;
+          }
+        } else if (msg.role === "bashExecution") {
+          if (!msg.excludeFromContext) {
+            toolOutputTokens += estTokens(msg.command) + estTokens(msg.output);
+          }
+        } else if (msg.role === "compactionSummary" || msg.role === "branchSummary") {
+          compactionTokens += estTokens(msg.summary ?? "");
+        } else if (msg.role === "custom") {
+          if (typeof msg.content === "string") {
+            userTokens += estTokens(msg.content);
+          } else if (Array.isArray(msg.content)) {
+            for (const part of msg.content) {
+              if (part.type === "text") userTokens += estTokens(part.text);
+            }
           }
         }
-      } else if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        for (const part of msg.content) {
-          if (part.type === "text") assistantTokens += estTokens(part.text);
-          else if (part.type === "thinking") thinkingTokens += estTokens(part.thinking);
-          else if (part.type === "toolCall") {
-            toolCallTokens += 16 + estTokens(part.name) + estTokens(JSON.stringify(part.arguments ?? {}));
-          }
+      }
+      if (compactionTokens === 0) {
+        const branch = await analyzeSessionBranchTokens(this.#currentSessionFile(), baseOverhead);
+        if (branch !== null && branch.compactionTokens > 0) {
+          compactionTokens = branch.compactionTokens;
+          branchAnalysisTokens = branch.estimatedTotalTokens;
         }
-      } else if (msg.role === "toolResult" && Array.isArray(msg.content)) {
-        for (const part of msg.content) {
-          if (part.type === "text") toolOutputTokens += estTokens(part.text);
-          else if (part.type === "image") toolOutputTokens += 850;
-        }
-      } else if (msg.role === "bashExecution") {
-        if (!msg.excludeFromContext) {
-          toolOutputTokens += estTokens(msg.command) + estTokens(msg.output);
-        }
+      }
+    } else {
+      const branch = await analyzeSessionBranchTokens(this.#currentSessionFile(), baseOverhead);
+      if (branch !== null) {
+        userTokens = branch.userTokens;
+        assistantTokens = branch.assistantTokens;
+        thinkingTokens = branch.thinkingTokens;
+        toolCallTokens = branch.toolCallTokens;
+        toolOutputTokens = branch.toolOutputTokens;
+        compactionTokens = branch.compactionTokens;
+        branchAnalysisTokens = branch.estimatedTotalTokens;
       }
     }
 
     const rawUsed =
-      sysTokens +
-      skillsTokens +
-      builtInToolsTokens +
-      customToolsTokens +
+      baseOverhead +
+      compactionTokens +
       userTokens +
       assistantTokens +
       thinkingTokens +
       toolCallTokens +
       toolOutputTokens;
 
-    const reportedUsed = Math.max(0, ctx.tokens);
+    const reportedUsed = Math.max(0, this.#contextUsage?.tokens ?? branchAnalysisTokens);
     const used = reportedUsed > 0 ? reportedUsed : rawUsed;
     const scale = reportedUsed > 0 && rawUsed > 0 ? reportedUsed / rawUsed : 1;
     const scaled = (v: number) => Math.round(v * scale);
 
-    const reserve = this.#autoCompactionEnabled
-      ? Math.min(Math.max(0, ctx.contextWindow - used), configuredReserve)
-      : 0;
-    const free = Math.max(0, ctx.contextWindow - used - reserve);
+    const reserve = this.#autoCompactionEnabled ? Math.min(Math.max(0, windowSize - used), configuredReserve) : 0;
+    const free = Math.max(0, windowSize - used - reserve);
 
     return {
       rows: [
@@ -876,6 +951,9 @@ export class PiTaskRunner {
         { key: "builtInTools", label: "内置工具定义", tokens: scaled(builtInToolsTokens) },
         ...(customToolsTokens > 0
           ? [{ key: "customTools", label: "MCP 与扩展工具", tokens: scaled(customToolsTokens) }]
+          : []),
+        ...(compactionTokens > 0
+          ? [{ key: "compactionSummary", label: "压缩摘要", tokens: scaled(compactionTokens) }]
           : []),
         { key: "userMessages", label: "用户消息", tokens: scaled(userTokens) },
         { key: "assistantMessages", label: "助手回复", tokens: scaled(assistantTokens) },
@@ -888,7 +966,7 @@ export class PiTaskRunner {
         ...(reserve > 0 ? [{ key: "buffer", label: "Auto-compaction buffer", tokens: reserve }] : []),
       ],
       used,
-      window: ctx.contextWindow,
+      window: windowSize,
     };
   }
 
@@ -984,14 +1062,39 @@ export class PiTaskRunner {
     entryId: string,
     known?: RewindTarget,
     _summarize = false,
-  ): Promise<{ text: string; summarized: boolean }> {
+    revertFiles = false,
+  ): Promise<{ text: string; images?: PromptImage[]; summarized: boolean }> {
     this.#assertTurnFinished();
     await this.start();
     const client = this.#requireClient();
 
-    const forkRes = await client.fork(entryId);
-    if (forkRes.cancelled) {
-      throw new Error("rewind/fork was cancelled by an extension");
+    const beforeFile = this.#currentSessionFile();
+    const targetBefore =
+      known ??
+      (beforeFile !== null
+        ? await readSessionEntries(beforeFile)
+            .then((entries) => findUserEntry(entries, entryId))
+            .catch(() => null)
+        : null);
+
+    if (revertFiles && beforeFile !== null) {
+      const leafOverride = this.#leafOverride !== null ? this.#leafOverride.leafId : undefined;
+      await revertSessionFileChangesFromFile(beforeFile, entryId, this.cwd, leafOverride).catch((err: unknown) => {
+        log.warn("revertSessionFileChangesFromFile failed", err);
+      });
+    }
+
+    if (beforeFile === null) {
+      throw new Error("this task has no session file yet");
+    }
+
+    // 就地回退（不是分叉）：把会话文件截到这条用户消息之前，再让 pi 重新读同一个文件。
+    // pi 的 `fork` 会复制出一份新会话文件，那就是“多出一个一模一样的会话”，不是回退。
+    await rewindSessionFileBefore(beforeFile, entryId);
+    this.#leafOverride = null;
+    const switched = await client.switchSession(beforeFile);
+    if (switched.cancelled) {
+      throw new Error("rewind was cancelled by an extension");
     }
 
     const state = await client.getState();
@@ -1000,23 +1103,16 @@ export class PiTaskRunner {
 
     const newFile = this.#currentSessionFile();
     if (newFile !== null) {
-      const exists = await stat(newFile).then(
-        () => true,
-        () => false,
-      );
-      if (exists) {
-        await this.#bridge.hydrateFromSessionFile(newFile);
-      } else {
-        const { messages } = await client.getMessages();
-        this.#bridge.hydrateFromMessages(messages);
-      }
+      await this.#bridge.hydrateFromSessionFile(newFile);
     } else {
       const { messages } = await client.getMessages();
       this.#bridge.hydrateFromMessages(messages);
     }
 
+    const restoredImages = targetBefore?.images;
     return {
-      text: forkRes.text ?? known?.text ?? "",
+      text: targetBefore?.text ?? "",
+      ...(restoredImages !== undefined && restoredImages.length > 0 ? { images: restoredImages } : {}),
       summarized: false,
     };
   }
@@ -1253,13 +1349,68 @@ export class PiTaskRunner {
   // ───────── OMP-Only Compatibility Stubs ─────────
 
   async runSessionCommand(text: string, _success?: (toast: string) => boolean): Promise<string> {
+    const trimmed = text.trim();
+    if (/^\/(?:dirs|add-dir|remove-dir)(?:\s|$)/i.test(trimmed)) {
+      return this.#handleWorkspaceSlashCommand(trimmed);
+    }
     await this.sendPrompt({ text, whenBusy: "steer" });
     return "";
   }
 
   async runQuietCommand(text: string): Promise<string> {
+    const trimmed = text.trim();
+    if (/^\/(?:dirs|add-dir|remove-dir)(?:\s|$)/i.test(trimmed)) {
+      return this.#handleWorkspaceSlashCommand(trimmed);
+    }
     await this.sendPrompt({ text, whenBusy: "steer" });
     return "";
+  }
+
+  #handleWorkspaceSlashCommand(trimmed: string): string {
+    const addMatch = /^\/add-dir\s+([\s\S]+)$/i.exec(trimmed);
+    const removeMatch = /^\/remove-dir\s+([\s\S]+)$/i.exec(trimmed);
+    const current = [...this.#workspace.dirs];
+    let notice = "";
+    if (addMatch) {
+      const arg = (addMatch[1] ?? "").trim().replace(/^["']|["']$/g, "");
+      if (arg === "") {
+        notice = "Usage: /add-dir <path>\n";
+      } else {
+        const resolved = path.resolve(this.cwd, arg);
+        const isDir = existsSync(resolved) && statSync(resolved).isDirectory();
+        if (!isDir) {
+          return `Directory does not exist: ${arg}`;
+        }
+        if (
+          resolved.toLowerCase() === path.resolve(this.cwd).toLowerCase() ||
+          current.some((d) => path.resolve(d).toLowerCase() === resolved.toLowerCase())
+        ) {
+          return `Already in the workspace: ${resolved}`;
+        }
+        current.push(resolved);
+        notice = `Added ${resolved}.\n`;
+      }
+    } else if (removeMatch) {
+      const arg = (removeMatch[1] ?? "").trim().replace(/^["']|["']$/g, "");
+      if (arg === "") {
+        return "Usage: /remove-dir <path>";
+      }
+      const resolvedArg = path.resolve(this.cwd, arg).toLowerCase();
+      const idx = current.findIndex(
+        (d) => d.toLowerCase() === arg.toLowerCase() || path.resolve(d).toLowerCase() === resolvedArg,
+      );
+      if (idx === -1) {
+        return `Not a workspace directory: ${arg}`;
+      }
+      const [removed] = current.splice(idx, 1);
+      notice = `Removed ${removed}.\n`;
+    } else if (/^\/add-dir$/i.test(trimmed)) {
+      notice = "Usage: /add-dir <path>\n";
+    } else if (/^\/remove-dir$/i.test(trimmed)) {
+      return "Usage: /remove-dir <path>";
+    }
+    const lines = ["Workspace directories:", `  ${this.cwd} (working directory)`, ...current.map((dir) => `  ${dir}`)];
+    return `${notice}${lines.join("\n")}`;
   }
 
   handoff(): Promise<void> {
@@ -1293,12 +1444,25 @@ export class PiTaskRunner {
     return Promise.reject(new Error("/slow mode is not supported by pi"));
   }
 
-  subagentRecord(_name: string): Promise<TspSubagentRecord> {
+  subagentRecord(name: string): Promise<TspSubagentRecord> {
+    // Pi 的子代理用 `--no-session` 跑，不落盘；只有 subagent 工具的 toolResult.details 里有它们的完整对话，
+    // 桥接层在流式 / 结束时把它记下来，这里按名字取。
+    const record = this.#bridge.getSubagentRecord(name);
+    if (record === null) {
+      return Promise.resolve({
+        messages: null,
+        truncated: false,
+        output: null,
+        unavailable: "no_session",
+        error: null,
+        fallbackModel: null,
+      });
+    }
     return Promise.resolve({
-      messages: null,
+      messages: (record.messages ?? null) as unknown as TspSubagentRecord["messages"],
       truncated: false,
-      output: null,
-      unavailable: "no_session",
+      output: record.output,
+      unavailable: null,
       error: null,
       fallbackModel: null,
     });
@@ -1330,6 +1494,9 @@ export class PiTaskRunner {
         this.#lastStopAborted = true;
       } else if (event.message.stopReason === "stop" || event.message.stopReason === "toolUse") {
         this.#lastRunError = null;
+        if (event.message.usage !== undefined) {
+          this.#postCompactionTokens = null;
+        }
       }
     } else if (event.type === "auto_retry_end" && !event.success && typeof event.finalError === "string") {
       this.#lastRunError = event.finalError;
@@ -1344,6 +1511,32 @@ export class PiTaskRunner {
         this.#extStatuses = [event.statusText.trim()];
       } else {
         this.#extStatuses = [];
+      }
+      this.#publish();
+    }
+
+    if (event.type === "compaction_start") {
+      this.#compactionState = "running";
+      this.#publish();
+    } else if (event.type === "compaction_end") {
+      if (!event.aborted && event.result !== undefined && event.result !== null) {
+        const projectedMsgTokens =
+          typeof event.result.estimatedTokensAfter === "number" && event.result.estimatedTokensAfter > 0
+            ? event.result.estimatedTokensAfter
+            : estTextTokens(event.result.summary ?? "");
+        const estimatedTotal = 2700 + projectedMsgTokens;
+        this.#postCompactionTokens = estimatedTotal;
+        this.#compactionState = "ready";
+        const win = this.#fallbackContextWindow();
+        if (win > 0) {
+          this.#contextUsage = {
+            tokens: estimatedTotal,
+            contextWindow: win,
+            percent: Math.min(100, (estimatedTotal / win) * 100),
+          };
+        }
+      } else {
+        this.#compactionState = null;
       }
       this.#publish();
     }
@@ -1487,11 +1680,39 @@ export class PiTaskRunner {
         this.#sessionFile = stats.sessionFile;
       }
 
-      if (stats.contextUsage !== undefined) {
+      const contextWindow =
+        stats.contextUsage !== undefined && stats.contextUsage.contextWindow > 0
+          ? stats.contextUsage.contextWindow
+          : this.#fallbackContextWindow();
+
+      if (
+        stats.contextUsage !== undefined &&
+        stats.contextUsage.tokens !== null &&
+        stats.contextUsage.tokens > 0 &&
+        contextWindow > 0
+      ) {
+        this.#postCompactionTokens = null;
         this.#contextUsage = {
-          tokens: stats.contextUsage.tokens ?? 0,
-          contextWindow: stats.contextUsage.contextWindow,
-          percent: stats.contextUsage.percent ?? 0,
+          tokens: stats.contextUsage.tokens,
+          contextWindow,
+          percent: stats.contextUsage.percent ?? (stats.contextUsage.tokens / contextWindow) * 100,
+        };
+      } else if (contextWindow > 0) {
+        let fallbackTokens = this.#postCompactionTokens;
+        if (fallbackTokens === null) {
+          const branch = await analyzeSessionBranchTokens(this.#currentSessionFile());
+          if (branch !== null) {
+            fallbackTokens = branch.estimatedTotalTokens;
+            if (branch.hasCompaction && this.#compactionState === null) {
+              this.#compactionState = "ready";
+            }
+          }
+        }
+        const safeTokens = Math.max(0, fallbackTokens ?? 0);
+        this.#contextUsage = {
+          tokens: safeTokens,
+          contextWindow,
+          percent: Math.min(100, (safeTokens / contextWindow) * 100),
         };
       }
 
@@ -1519,7 +1740,6 @@ export class PiTaskRunner {
   ): void {
     if (client === null || this.#client !== client) return;
     this.#client = null;
-    this.#workspace.reset();
     this.#extStatuses = [];
     this.#stopRequested = false;
 
@@ -1676,19 +1896,37 @@ export class PiTaskRunner {
           this.#publish();
         }
       }
+      if (this.#client === null || !this.#client.alive) {
+        const branch = await analyzeSessionBranchTokens(file);
+        if (branch !== null && !this.#disposed && file === this.#currentSessionFile()) {
+          if (branch.hasCompaction && this.#compactionState === null) {
+            this.#compactionState = "ready";
+          }
+          const win = this.#fallbackContextWindow();
+          if (win > 0) {
+            this.#contextUsage = {
+              tokens: branch.estimatedTotalTokens,
+              contextWindow: win,
+              percent: Math.min(100, (branch.estimatedTotalTokens / win) * 100),
+            };
+            this.#publish();
+          }
+        }
+      }
     }
     return state;
   }
 
   #adoptTitle(raw: string): void {
-    const cleaned = stripIconGlyphs(raw).trim();
-    if (cleaned === "" || cleaned === "pi") return;
+    const cleaned = titleFromPrompt(stripIconGlyphs(raw)).trim();
+    if (cleaned === "" || cleaned === "pi" || /^[A-Za-z]:?$/.test(cleaned)) return;
     const current = this.#record.title;
     if (cleaned === current) {
       this.#adoptedTitle = cleaned;
       return;
     }
-    if (current !== "" && current !== this.#provisionalTitle && current !== this.#adoptedTitle) {
+    const isCorruptedCurrent = /^[A-Za-z]:?$/.test(current.trim());
+    if (!isCorruptedCurrent && current !== "" && current !== this.#provisionalTitle && current !== this.#adoptedTitle) {
       return;
     }
     this.#adoptedTitle = cleaned;

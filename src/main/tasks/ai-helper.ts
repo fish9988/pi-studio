@@ -1,63 +1,159 @@
 // AI 辅助服务：智能会话重命名（smartRenameTask）与输入框提示词优化（enhancePrompt）。
-// 复用 omp 的 `-p --no-session --no-tools --no-lsp --no-pty` 无状态单次推理模式，直接共享用户已配置的全部模型与订阅凭据；
-// 模型与思考强度由外壳设置（ShellState.helperModel / helperThinking）控制。
+// 复用 pi 的 `-p --no-session --no-tools --no-extensions --no-mcp --no-skills --no-prompt-templates --no-themes --no-context-files` 无状态单次推理模式，
+// 直接共享用户已配置的全部模型与订阅凭据；模型与思考强度由外壳设置（ShellState.helperModel / helperThinking）控制。
+import { readFile } from "node:fs/promises";
 import { app } from "electron";
 import { stripAnsi } from "../../shared/ansi.ts";
 import type { HelperThinking, TaskId } from "../../shared/ipc.ts";
 import { restoreDocument } from "../../shared/tsp/document.ts";
 import { lastAnswerText } from "../../shared/tsp/last-answer.ts";
 import { userMessages } from "../../shared/tsp/user-messages.ts";
+import { isRecord } from "../../shared/type-guards.ts";
 import { runCommand } from "../git/exec.ts";
 import { readyPiLaunch } from "../pi/runtime-singleton.ts";
 import { resolveLocale } from "../settings/settings-store.ts";
+import { feedSessionText, type SessionFileEntry } from "../tsp/session-file-reader.ts";
 import { getShellState } from "../window/window-state.ts";
 import { chatsDir } from "./chats-dir.ts";
 import { getTaskPool } from "./runtime.ts";
 
-const HELPER_TIMEOUT_MS = 45_000;
+const HELPER_TIMEOUT_MS = 30_000;
 
-function stripPromptNoise(raw: string): string {
+const GREETING_PATTERN =
+  /^(?:hello|hi|hey|yo|sup|hola|bonjour|你好[呀啊吗]?|您好|嗨|哈喽|早上好|下午好|晚上好|早安|晚安|在吗|在不在|有人吗|测试(?:一下)?|test(?:ing)?|ping|[?？!！.。…~～1]+)$/i;
+
+export function stripPromptNoise(raw: string): string {
   return raw
     .replace(/<supermemory>[\s\S]*?<\/supermemory>/gi, " ")
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/\[Image\s*#?\d*[^\]]*\]/gi, " ")
+    .replace(/\[(?:Image|Paste|File)\s*#?\d*[^\]]*\]/gi, " ")
     .replace(/https?:\/\/[^\s)>\]]+/gi, " ")
     .replace(/[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|]+[\\/])*([^\s\\/:*?"<>|]+)/g, "$1 ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function cleanGeneratedTitle(raw: string): string {
-  const line =
-    stripAnsi(raw)
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .find((s) => s.length > 0) ?? "";
+export function isTrivialGreeting(raw: string): boolean {
+  const cleaned = stripPromptNoise(raw)
+    .replace(/^[#>*\-\s]+|[!！?？.。，,~～\s]+$/g, "")
+    .trim();
+  if (cleaned.length === 0) return true;
+  return GREETING_PATTERN.test(cleaned);
+}
+
+export function cleanGeneratedTitle(raw: string): string {
+  const lines = stripAnsi(raw)
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith("```"));
+  const line = lines[lines.length - 1] ?? lines[0] ?? "";
   const cleaned = line
-    .replace(/^(?:标题|Title)\s*[:：]\s*/i, "")
+    .replace(/^(?:标题|会话标题|Title|Session Title)\s*[:：]\s*/i, "")
     .replace(/^[#*"'`「『【（(]+|[*"'`」』】）)。.！!？?]+$/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 32);
-  return cleaned.length >= 2 && !/^[A-Za-z]$/.test(cleaned) ? cleaned : "";
+  return cleaned.length >= 2 && !/^[A-Za-z]$/.test(cleaned) && !isTrivialGreeting(cleaned) ? cleaned : "";
 }
 
-export function fallbackSmartTitle(promptText: string, answerText: string, latestUserText = ""): string {
-  const source =
-    [promptText, latestUserText, answerText]
-      .map(stripPromptNoise)
-      .find((s) => s.length >= 2 && !/^[A-Za-z]$/.test(s)) ?? "";
-  const cleaned = source
+function cleanTitleClause(raw: string): string {
+  return raw
     .replace(/^[#>*\-\d.\s]+/, "")
-    .replace(/^(?:请帮我|帮我|请问|我想|我希望|麻烦|能不能|如何|怎么|please\s+|help\s+me\s+|can\s+you\s+)/i, "")
+    .replace(
+      /^(?:请帮我|帮我|请问|我想|我希望|麻烦|能不能|如何|怎么|好的[，,。！!]?\s*|已为您|我已经|当然(?:可以)?[，,。！!]?\s*|下面(?:是|为您)|please\s+|help\s+me\s+|can\s+you\s+|i\s+have\s+|i've\s+)/i,
+      "",
+    )
+    .replace(/^(?:\d+[.、]\s*)+/, "")
     .replace(/\s+/g, " ")
     .trim();
-  const best =
-    cleaned
+}
+
+export function fallbackSmartTitle(
+  promptText: string,
+  answerText: string,
+  latestUserText = "",
+  currentTitle = "",
+): string {
+  const curNorm = currentTitle.trim();
+  const rawCandidates = [promptText, latestUserText, answerText]
+    .map(stripPromptNoise)
+    .filter((s) => s.length >= 2 && !/^[A-Za-z]$/.test(s));
+  const nonGreeting = rawCandidates.filter((s) => !isTrivialGreeting(s));
+  const candidates = nonGreeting.length > 0 ? nonGreeting : rawCandidates;
+
+  const allClauses: string[] = [];
+  for (const candidate of candidates) {
+    const cleaned = cleanTitleClause(candidate);
+    const parts = cleaned
       .split(/[，。！？；!?;|\r\n]+/)
-      .map((s) => s.trim())
-      .find((s) => s.length >= 2 && !/^[A-Za-z]$/.test(s)) ?? cleaned;
-  return Array.from(best).slice(0, 24).join("").trim() || "会话主题总结";
+      .map((s) => cleanTitleClause(s))
+      .filter((s) => s.length >= 2 && !/^[A-Za-z]$/.test(s) && !isTrivialGreeting(s));
+    if (parts.length > 0) {
+      allClauses.push(...parts);
+    } else if (cleaned.length >= 2 && !/^[A-Za-z]$/.test(cleaned)) {
+      allClauses.push(cleaned);
+    }
+  }
+
+  const slice20 = (s: string) => Array.from(s).slice(0, 20).join("").trim();
+  const distinct = allClauses.find((s) => slice20(s) !== curNorm && s !== curNorm);
+  const best = distinct ?? allClauses[0] ?? cleanTitleClause(candidates[0] ?? "");
+  return slice20(best) || "会话主题总结";
+}
+
+async function readSessionTranscriptFallback(sessionFile: string | null): Promise<{
+  users: string[];
+  assistants: string[];
+  lastModel: string | null;
+}> {
+  if (sessionFile === null || sessionFile === "") return { users: [], assistants: [], lastModel: null };
+  try {
+    const raw = await readFile(sessionFile, "utf8");
+    const entries: SessionFileEntry[] = [];
+    feedSessionText(raw, [{ entry: (e) => entries.push(e), reset: () => (entries.length = 0) }]);
+    const users: string[] = [];
+    const assistants: string[] = [];
+    let lastModel: string | null = null;
+    for (const entry of entries) {
+      if (
+        entry["type"] === "model_change" &&
+        typeof entry["provider"] === "string" &&
+        typeof entry["modelId"] === "string"
+      ) {
+        lastModel = `${entry["provider"]}/${entry["modelId"]}`;
+        continue;
+      }
+      if (entry["type"] !== "message" || !isRecord(entry["message"])) continue;
+      const msg = entry["message"];
+      const role = msg["role"];
+      if (role === "assistant" && typeof msg["provider"] === "string" && typeof msg["model"] === "string") {
+        lastModel = `${msg["provider"]}/${msg["model"]}`;
+      }
+      const content = msg["content"];
+      const extract = (): string => {
+        if (typeof content === "string") return content.trim();
+        if (!Array.isArray(content)) return "";
+        const parts: string[] = [];
+        for (const block of content) {
+          if (isRecord(block) && block["type"] === "text" && typeof block["text"] === "string") {
+            parts.push(block["text"]);
+          }
+        }
+        return parts.join("\n").trim();
+      };
+      if (role === "user") {
+        const t = extract();
+        if (t !== "") users.push(t);
+      } else if (role === "assistant") {
+        const t = extract();
+        if (t !== "") assistants.push(t);
+      }
+    }
+    return { users, assistants, lastModel };
+  } catch {
+    return { users: [], assistants: [], lastModel: null };
+  }
 }
 
 function fallbackEnhancePrompt(raw: string, zh: boolean): string {
@@ -83,45 +179,66 @@ async function runHelperLlm(options: {
     const helperModel = shell.helperModel ?? "smol";
     const helperThinking: HelperThinking = shell.helperThinking ?? "off";
 
-    const args: string[] = [
-      ...launch.prefixArgs,
-      "-p",
-      "--no-session",
-      "--no-tools",
-      `--thinking=${helperThinking}`,
-      `--system-prompt=${options.systemPrompt}`,
-    ];
+    const invokeOnce = async (spec: string | null, thinking: HelperThinking): Promise<string | null> => {
+      const args: string[] = [
+        ...launch.prefixArgs,
+        "-p",
+        "--no-session",
+        "--no-tools",
+        "--no-extensions",
+        "--no-mcp",
+        "--no-skills",
+        "--no-prompt-templates",
+        "--no-themes",
+        "--no-context-files",
+        "--thinking",
+        thinking,
+        "--system-prompt",
+        options.systemPrompt,
+      ];
+
+      if (spec && spec.includes("/")) {
+        const slash = spec.indexOf("/");
+        const provider = spec.slice(0, slash);
+        const modelId = spec.slice(slash + 1);
+        if (provider && modelId) {
+          args.push("--provider", provider, "--model", modelId);
+        }
+      }
+
+      args.push("--", options.userPrompt);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), HELPER_TIMEOUT_MS);
+      try {
+        const result = await runCommand(launch.command, args, {
+          cwd: options.cwd,
+          env: { ...process.env, ...launch.env },
+          signal: controller.signal,
+        });
+        if (result.code !== 0) return null;
+        const out = stripAnsi(result.stdout.toString("utf8")).trim();
+        return out.length > 0 ? out : null;
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     const chosenSpec =
       helperModel !== "default" && helperModel !== "current" && helperModel !== "smol" && helperModel.includes("/")
         ? helperModel
         : (options.taskModel ?? null);
 
-    if (chosenSpec && chosenSpec.includes("/")) {
-      const slash = chosenSpec.indexOf("/");
-      const provider = chosenSpec.slice(0, slash);
-      const modelId = chosenSpec.slice(slash + 1);
-      if (provider && modelId) {
-        args.push("--provider", provider, "--model", modelId);
-      }
-    }
+    const primary = await invokeOnce(chosenSpec, helperThinking);
+    if (primary !== null) return primary;
 
-    args.push("--", options.userPrompt);
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), HELPER_TIMEOUT_MS);
-    try {
-      const result = await runCommand(launch.command, args, {
-        cwd: options.cwd,
-        env: { ...process.env, ...launch.env },
-        signal: controller.signal,
-      });
-      if (result.code !== 0) return null;
-      const out = stripAnsi(result.stdout.toString("utf8")).trim();
-      return out.length > 0 ? out : null;
-    } finally {
-      clearTimeout(timer);
+    const fallbackSpec = options.taskModel ?? null;
+    if (fallbackSpec !== chosenSpec || helperThinking !== "off") {
+      return await invokeOnce(fallbackSpec, "off");
     }
+    return null;
   } catch {
     return null;
   }
@@ -129,23 +246,50 @@ async function runHelperLlm(options: {
 
 export async function smartRenameTask(taskId: TaskId): Promise<string> {
   const pool = await getTaskPool();
+  const currentTitle = pool.taskTitle(taskId);
   const snapshot = pool.getTspSnapshot(taskId);
   const doc = restoreDocument(snapshot.document);
-  const users = userMessages(doc);
-  const answer = lastAnswerText(doc) ?? "";
-  const firstUser = users[0]?.text ?? pool.taskTitle(taskId);
-  const latestUser = users.length > 1 ? (users[users.length - 1]?.text ?? "") : "";
+  let users = userMessages(doc).map((u) => u.text);
+  let answer = lastAnswerText(doc) ?? "";
   const taskState = pool.listTasks().find((t) => t.id === taskId);
-  const taskModel = taskState?.model ? `${taskState.model.key.provider}/${taskState.model.key.modelId}` : null;
+  let taskModel = taskState?.model ? `${taskState.model.key.provider}/${taskState.model.key.modelId}` : null;
+
+  if (answer === "" || taskModel === null || users.every((u) => isTrivialGreeting(u))) {
+    let sessionFile: string | null = null;
+    try {
+      sessionFile = pool.sessionFileOf(taskId);
+    } catch {
+      sessionFile = null;
+    }
+    const disk = await readSessionTranscriptFallback(sessionFile);
+    if (users.every((u) => isTrivialGreeting(u)) && disk.users.length > 0) {
+      users = disk.users;
+    }
+    if (answer === "" && disk.assistants.length > 0) {
+      answer = disk.assistants[disk.assistants.length - 1] ?? "";
+    }
+    if (taskModel === null && disk.lastModel !== null) {
+      taskModel = disk.lastModel;
+    }
+  }
+
+  const substantiveUsers = users.filter((u) => !isTrivialGreeting(u));
+  const firstUser = substantiveUsers[0] ?? users[0] ?? currentTitle;
+  const latestUser =
+    substantiveUsers.length > 1
+      ? (substantiveUsers[substantiveUsers.length - 1] ?? "")
+      : users.length > 1
+        ? (users[users.length - 1] ?? "")
+        : "";
   const zh = resolveLocale() === "zh-CN";
 
   const systemPrompt = zh
-    ? "你是一个会话标题生成器。请根据用户的提问与对话摘要，提炼出一个简短、精准的中文标题（6到16个字）。只输出标题文字本身，不要加引号、句号或任何解释。"
-    : "You generate concise session titles. Given the conversation summary, output a short, specific title (3 to 7 words). Output ONLY the title text without quotes or punctuation.";
+    ? "你是一个会话标题生成器。请根据用户的提问与对话摘要，提炼出一个简短、精准的中文标题（6到16个字）。忽略开头的寒暄（如hello/你好），聚焦核心技术或业务问题。只输出标题文字本身，不要加引号、句号或任何解释。"
+    : "You generate concise session titles. Given the conversation summary, ignore initial greetings and output a short, specific title (3 to 7 words). Output ONLY the title text without quotes or punctuation.";
 
   const userPrompt = [
-    `First message: ${stripPromptNoise(firstUser).slice(0, 400)}`,
-    latestUser ? `Latest message: ${stripPromptNoise(latestUser).slice(0, 300)}` : "",
+    `First substantive message: ${stripPromptNoise(firstUser).slice(0, 400)}`,
+    latestUser && latestUser !== firstUser ? `Latest message: ${stripPromptNoise(latestUser).slice(0, 300)}` : "",
     answer ? `Assistant reply excerpt: ${stripPromptNoise(answer).slice(0, 400)}` : "",
   ]
     .filter(Boolean)
@@ -159,7 +303,9 @@ export async function smartRenameTask(taskId: TaskId): Promise<string> {
   }
 
   const generated = await runHelperLlm({ systemPrompt, userPrompt, cwd, taskModel });
-  const title = (generated ? cleanGeneratedTitle(generated) : "") || fallbackSmartTitle(firstUser, answer, latestUser);
+  const title =
+    (generated ? cleanGeneratedTitle(generated) : "") ||
+    fallbackSmartTitle(firstUser, answer, latestUser, currentTitle);
   await pool.renameTask(taskId, title);
   return title;
 }

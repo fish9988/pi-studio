@@ -1390,3 +1390,85 @@
 .ui-data-in {
   animation: fade-in var(--dur-fast) var(--ease-out);
 }
+
+/* ───────── 分层防白屏渲染错误边界（ErrorBoundary.tsx） ───────── */
+.ui-crash-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  padding: var(--space-6);
+  background: var(--bg-app);
+  color: var(--text);
+}
+.ui-crash-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(460px, 100%);
+  padding: var(--space-5);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-2);
+}
+.ui-crash-title {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-strong);
+  color: var(--text);
+}
+.ui-crash-desc {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-2);
+  word-break: break-word;
+}
+.ui-crash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.ui-crash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.ui-crash-btn:hover {
+  background: var(--bg-hover);
+}
+.ui-crash-btn-primary {
+  color: var(--text-on-accent);
+  background: var(--accent);
+  border-color: transparent;
+}
+.ui-crash-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.ui-crash-inline-text {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+  word-break: break-word;
+}
