@@ -9,6 +9,8 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-13
+
 ### Added
 
 - Added a "Classic" process-row layout (the default — exactly what you saw before) and made "Flat" and "Column" genuinely different: Flat removes the left indent and puts a hairline between steps, Column wraps the whole step list in a bordered box.
