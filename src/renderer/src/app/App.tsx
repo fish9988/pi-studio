@@ -273,6 +273,40 @@ export function App() {
       : settings?.backdrop === "custom" && customBackdrop !== null && backdropFilePattern.test(customBackdrop)
         ? "custom"
         : undefined;
+  // 区域参数（覆盖范围、各层遮罩浓度、软遮罩）挂在根节点上：app.css 按 data-backdrop-scope / --bd-* 决定铺到哪一块。
+  const backdropScope = useShellValue("backdropScope") ?? "chat";
+  const backdropChatVeil = useShellValue("backdropChatVeil") ?? 82;
+  const backdropSidebarVeil = useShellValue("backdropSidebarVeil") ?? 84;
+  const backdropSurfaceOpacity = useShellValue("backdropSurfaceOpacity") ?? 88;
+  const backdropSoftMask = useShellValue("backdropSoftMask") ?? true;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (backdrop === undefined) {
+      // 不画背景图时三个属性都不挂：面板上的 data-backdrop（app.css、e2e 都靠它）也是同样的规矩。
+      delete root.dataset["backdrop"];
+      delete root.dataset["backdropScope"];
+      delete root.dataset["backdropSoftMask"];
+      return;
+    }
+    root.dataset["backdrop"] = backdrop;
+    root.dataset["backdropScope"] = backdropScope;
+    if (backdropSoftMask) root.dataset["backdropSoftMask"] = "true";
+    else delete root.dataset["backdropSoftMask"];
+  }, [backdrop, backdropScope, backdropSoftMask]);
+  // 各层浓淡：作用在图与纱上（app.css「主区背景图」），主区遮罩浓度就是预设浓度滑杆的那个值，单改一层不动其他地方。
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const art =
+      backdrop === "theme"
+        ? "var(--theme-art)"
+        : backdrop === "custom"
+          ? `url("app://studio/@backdrop/${customBackdrop}")`
+          : "none";
+    root.style.setProperty("--bd-art", art);
+    root.style.setProperty("--bd-chat-veil", `${backdropChatVeil}%`);
+    root.style.setProperty("--bd-sidebar-veil", `${backdropSidebarVeil}%`);
+    root.style.setProperty("--bd-surface-alpha", `${backdropSurfaceOpacity}%`);
+  }, [backdrop, customBackdrop, backdropChatVeil, backdropSidebarVeil, backdropSurfaceOpacity]);
 
   const sidebarShown = narrow ? drawerOpen : !sidebarCollapsed;
   const drawerScrim = usePresence(narrow && drawerOpen, "fade");

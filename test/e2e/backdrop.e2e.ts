@@ -46,14 +46,32 @@ async function launch(): Promise<LaunchedApp> {
   return launched;
 }
 
-/** 背景图画在面板的 ::before 上（单独的合成层，app.css「主区背景图」）。 */
+/** 背景图画在 ::before 上（单独的合成层，app.css「主区背景图」）。 */
 function panelBackground(page: Page): Promise<string> {
-  return page.getByTestId("main-panel").evaluate((element) => {
+  return pseudoStyle(page, '[data-testid="main-panel"]', "backgroundImage");
+}
+
+/** 某个节点的 ::before 上的一条样式（.body / #app 是另外两层图，.panel 自己那层可能被关掉）。 */
+function pseudoStyle(page: Page, selector: string, property: "backgroundImage" | "display"): Promise<string> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((element, name) => {
+      const g = globalThis as unknown as {
+        getComputedStyle(e: unknown, pseudo: string): Record<"backgroundImage" | "display", string>;
+      };
+      return g.getComputedStyle(element, "::before")[name];
+    }, property);
+}
+
+/** 根节点上的 CSS 变量（App.tsx 把背景图与各层浓度写在这里）。 */
+function rootVar(page: Page, name: string): Promise<string> {
+  return page.locator("html").evaluate((element, property) => {
     const g = globalThis as unknown as {
-      getComputedStyle(e: unknown, pseudo: string): { backgroundImage: string };
+      getComputedStyle(e: unknown): { getPropertyValue(n: string): string };
     };
-    return g.getComputedStyle(element, "::before").backgroundImage;
-  });
+    return g.getComputedStyle(element).getPropertyValue(property).trim();
+  }, name);
 }
 
 /** 在页面里 fetch：返回状态码和字节数。 */
@@ -93,6 +111,58 @@ test("主题插图：有插图的主题画在主区面板上，浅色主题不�
     await expect(panel).not.toHaveAttribute("data-backdrop");
     await expect(panel).not.toHaveAttribute("data-backdrop-strength");
     expect(await panelBackground(page)).toBe("none");
+  } finally {
+    await launched.close();
+  }
+});
+
+test("区域覆盖范围：只聊天区 / 聊天 + 侧栏 / 全窗铺底各画在哪一层，滑杆跟着出现", async () => {
+  const launched = await launch();
+  try {
+    const { page } = launched;
+    const root = page.locator("html");
+    await setTheme(page, "mica");
+    await expect(page.getByTestId("main-panel")).toHaveAttribute("data-backdrop", "theme");
+    // 默认只铺聊天区：图在面板自己的 ::before 上。
+    await expect(root).toHaveAttribute("data-backdrop-scope", "chat");
+    const art = /url\("([^"]*mica[^"]*\.svg)"\)/.exec(await panelBackground(page))?.[1] ?? "";
+    expect(art, "background-image 里没有 mica 的插图").not.toBe("");
+    const artUrl = `url("${art}")`;
+
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");
+    await expect(page.getByTestId("settings")).toBeVisible();
+    await page.getByTestId("settings-nav-general").click();
+    const sidebarVeil = page.getByTestId("setting-backdrop-sidebar-veil");
+    await expect(sidebarVeil).toHaveCount(0);
+
+    // 聊天 + 侧栏：图挪到 .body 的 ::before，面板自己那层 display: none（同一张图不画两遍），
+    // 侧栏磨砂滑杆这时才出现。
+    await page.getByTestId("setting-backdrop-scope-chat-sidebar").click();
+    await expect(root).toHaveAttribute("data-backdrop-scope", "chat-sidebar");
+    await expect.poll(() => pseudoStyle(page, ".body", "backgroundImage")).toContain(artUrl);
+    await expect.poll(() => pseudoStyle(page, '[data-testid="main-panel"]', "display")).toBe("none");
+    await expect(sidebarVeil).toBeVisible();
+
+    // 全窗铺底：图挪到 #app 的 ::before，顶栏与侧栏一起磨砂。
+    await page.getByTestId("setting-backdrop-scope-window").click();
+    await expect(root).toHaveAttribute("data-backdrop-scope", "window");
+    await expect.poll(() => pseudoStyle(page, "#app", "backgroundImage")).toContain(artUrl);
+    await expect.poll(() => pseudoStyle(page, '[data-testid="main-panel"]', "display")).toBe("none");
+    await expect(sidebarVeil).toBeVisible();
+
+    // 回到只铺聊天区：面板那层又画回来，侧栏磨砂滑杆收起。
+    await page.getByTestId("setting-backdrop-scope-chat").click();
+    await expect(root).toHaveAttribute("data-backdrop-scope", "chat");
+    await expect.poll(() => panelBackground(page)).toContain(artUrl);
+    await expect(sidebarVeil).toHaveCount(0);
+
+    // 主区遮罩浓度滑杆：值写进根节点的 --bd-chat-veil，面板那层纱跟着变。
+    const chatVeil = page.getByTestId("setting-backdrop-chat-veil");
+    await chatVeil.focus();
+    await chatVeil.press("Home");
+    await expect.poll(() => rootVar(page, "--bd-chat-veil")).toBe("10%");
+    await chatVeil.press("End");
+    await expect.poll(() => rootVar(page, "--bd-chat-veil")).toBe("96%");
   } finally {
     await launched.close();
   }

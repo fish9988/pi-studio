@@ -407,6 +407,10 @@
   grid-template-columns: minmax(0, 1fr);
   row-gap: var(--space-1-5);
 }
+/* 四段的设计风格分段同理横跨整行：双列格里 4 个中文标签挤一格会折成两行 */
+.st-cells .ui-row:has([data-testid="setting-ui-style"]) {
+  grid-column: 1 / -1;
+}
 .st-cells .ui-row:has([data-testid="setting-process-rows"]) {
   grid-column: 1 / -1;
 }
@@ -711,21 +715,22 @@
 
 /* ───────── 通用 → 外观：主题画廊（ThemeGallery.tsx） ───────── */
 
-/* 卡片网格：固定 3×2（六个主题家族刚好两排，左右对称）；容器窄到 520 以下降成两列。
-   预览块挂 data-theme，下面的颜色都是那个主题自己的变量。 */
+/* 卡片网格：固定三列（九个主题家族刚好三排，3×3 左右对称）；容器窄到 520 以下降成两列。
+   预览块挂 data-theme，下面的颜色都是那个主题自己的变量。
+   三排 × 9 张要完整落在弹窗视口里：格距与卡片内边距取最紧的一档，预览块 16 / 7.2 压扁一点。 */
 .st-theme-gallery {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2-5);
+  gap: var(--space-2);
   margin: var(--space-2-5) 0 var(--space-1);
 }
 
 .st-theme-card {
   display: grid;
   grid-template-rows: auto auto;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   min-width: 0;
-  padding: var(--space-2);
+  padding: var(--space-1-5);
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--text-2);
@@ -765,7 +770,7 @@
 /* 迷你界面：底色 = 侧栏 / 顶栏，主区面板在右下（主区底 + 主题插图），右上一个你的消息气泡，左下一个强调色点 */
 .st-theme-preview {
   display: flex;
-  aspect-ratio: 16 / 8.5;
+  aspect-ratio: 16 / 7.2;
   overflow: hidden;
   background: var(--bg-app);
   border: 1px solid var(--border-subtle);
@@ -877,6 +882,60 @@
   .st-theme-gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ───────── 通用 → 外观：背景图区域参数（覆盖范围 / 各层浓淡）的滑杆（GeneralSection.tsx） ───────── */
+
+/* 滑杆 + 右侧百分数：滑杆占满剩下的宽，数字固定宽等宽，拖动时标签那一列不跟着抖。
+   格子窄（双列 / 三列）时滑杆跟着缩，不撑破卡片（min-width 只留能拖的最小宽） */
+.st-range-wrap {
+  display: flex;
+  flex: 1 1 180px;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  max-width: 280px;
+}
+
+/* 原生 range 用强调色画（Chromium 只认 ::-webkit-slider-*）：轨道一条细圆线，滑块一个实心圆点，不用额外图片 */
+.st-range {
+  flex: 1;
+  min-width: 72px;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+.st-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 26%, var(--border-subtle));
+}
+.st-range::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  appearance: none;
+}
+.st-range:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* 右侧百分数：数字等宽，"96%" 和 "100%" 一样宽 */
+.st-range-val {
+  flex: none;
+  min-width: 3.4ch;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* ───────── 工具与权限：工具网格，每格一样 ───────── */

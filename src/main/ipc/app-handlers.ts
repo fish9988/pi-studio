@@ -2,6 +2,10 @@
 import { app, clipboard, ClipboardItem, nativeImage, shell } from "electron";
 import path from "node:path";
 import {
+  backdropChatVeilRange,
+  backdropScopes,
+  backdropSidebarVeilRange,
+  backdropSurfaceOpacityRange,
   brandStyles,
   codeBlockStyles,
   conversationViews,
@@ -16,6 +20,7 @@ import {
   titleBarFades,
   uiStyles,
   type AppInfo,
+  type BackdropStrength,
   type HandlerGroup,
   type ShellState,
 } from "../../shared/ipc.ts";
@@ -57,6 +62,9 @@ import {
 function platform(): AppInfo["platform"] {
   return process.platform === "win32" || process.platform === "darwin" ? process.platform : "linux";
 }
+
+/** 预设浓度对应的主区遮罩浓度（%，见 ShellState.backdropChatVeil）：两者是同一个值，点预设就同步滑杆。 */
+const backdropStrengthVeils: Record<BackdropStrength, number> = { low: 90, medium: 82, high: 75 };
 
 export const appHandlers: HandlerGroup<
   | "getAppInfo"
@@ -110,7 +118,17 @@ export const appHandlers: HandlerGroup<
       throw new Error("no custom backdrop chosen yet");
     updateSettings({ backdrop });
   },
-  setBackdropStrength: async (value) => updateSettings({ backdropStrength: parseBackdropStrength(value) }),
+  setBackdropStrength: async (value) => {
+    const backdropStrength = parseBackdropStrength(value);
+    updateSettings({ backdropStrength });
+    // 预设浓度和「主区遮罩浓度」滑杆是同一个值（low/medium/high = 90/82/75）：点预设时把滑杆一起写回去，
+    // 否则两处控件各说各话（设置窗口和主窗口都靠这条事件立即跟着改）。
+    const backdropChatVeil = backdropStrengthVeils[backdropStrength];
+    if (getShellState().backdropChatVeil !== backdropChatVeil) {
+      setShellState({ backdropChatVeil });
+      emitEvent("shellState", { backdropChatVeil });
+    }
+  },
   chooseBackdropImage: () => chooseBackdropImage(getMainWindow()),
   setGlass: async (value) => updateSettings({ glass: parseBoolean(value, "glass") }),
   setFontSize: async (value) => updateSettings({ fontSize: parseFontSize(value) }),
@@ -181,6 +199,29 @@ export const appHandlers: HandlerGroup<
       }),
       ...(record["chatFontFamily"] !== undefined && {
         chatFontFamily: parseString(record["chatFontFamily"], "chatFontFamily", 160, { allowEmpty: true }),
+      }),
+      ...(record["backdropScope"] !== undefined && {
+        backdropScope: parseOneOf(record["backdropScope"], "backdropScope", backdropScopes),
+      }),
+      ...(record["backdropChatVeil"] !== undefined && {
+        backdropChatVeil: parseInteger(record["backdropChatVeil"], "backdropChatVeil", ...backdropChatVeilRange),
+      }),
+      ...(record["backdropSidebarVeil"] !== undefined && {
+        backdropSidebarVeil: parseInteger(
+          record["backdropSidebarVeil"],
+          "backdropSidebarVeil",
+          ...backdropSidebarVeilRange,
+        ),
+      }),
+      ...(record["backdropSurfaceOpacity"] !== undefined && {
+        backdropSurfaceOpacity: parseInteger(
+          record["backdropSurfaceOpacity"],
+          "backdropSurfaceOpacity",
+          ...backdropSurfaceOpacityRange,
+        ),
+      }),
+      ...(record["backdropSoftMask"] !== undefined && {
+        backdropSoftMask: parseBoolean(record["backdropSoftMask"], "backdropSoftMask"),
       }),
     };
     setShellState(patch);

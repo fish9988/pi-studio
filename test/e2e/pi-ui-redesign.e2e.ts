@@ -212,7 +212,7 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     expect(fontVars.chat).toContain(chosenFontName);
     expect(fontVars.chat).toContain("Anthropic Sans");
 
-    // 8. 三套界面风格与代码块配色：圆角跟着骨架变，浅色主题下只有 fluent 用冷灰浅色代码卡，手选配色优先于风格。
+    // 8. 四套界面风格与代码块配色：圆角跟着骨架变，浅色主题下只有 fluent / mica-liquid 用冷灰浅色代码卡，手选配色优先于风格。
     const closeSettings = async () => {
       await page.getByTestId("settings-win-close").click();
       await expect(page.getByTestId("settings")).toHaveCount(0);
@@ -222,6 +222,15 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     await expect(page.locator("html")).toHaveAttribute("data-ui-style", "fluent");
     await closeSettings();
     expect(await readRadii()).toEqual({ panel: "12px", composer: "14px" });
+    await expect(assistantCode).toHaveAttribute("data-code-light", "");
+    await expect(assistantCode).not.toHaveAttribute("data-code-dark");
+
+    // 云母液态：圆角在 Fluent 与液态玻璃之间，浅色主题下同样用冷灰浅色代码卡（code-block-theme.ts）。
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-ui-style-mica-liquid").click();
+    await expect(page.locator("html")).toHaveAttribute("data-ui-style", "mica-liquid");
+    await closeSettings();
+    expect(await readRadii()).toEqual({ panel: "14px", composer: "18px" });
     await expect(assistantCode).toHaveAttribute("data-code-light", "");
     await expect(assistantCode).not.toHaveAttribute("data-code-dark");
 

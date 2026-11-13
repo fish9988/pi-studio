@@ -1,5 +1,5 @@
 // 代码卡用深色终端卡还是冷灰浅色卡（markdown/CodeBlock.tsx 的 data-code-dark / data-code-light）。
-// 抽成纯函数：三种界面风格 × 三种代码块配色 × 主题深浅 × 是不是图，组合起来只在这里判断一次，单测直接覆盖。
+// 抽成纯函数：四种界面风格 × 三种代码块配色 × 主题深浅 × 是不是图，组合起来只在这里判断一次，单测直接覆盖。
 import type { CodeBlockStyle, UiStyle } from "../../../shared/ipc.ts";
 
 export interface CodeBlockTone {
@@ -11,10 +11,10 @@ export interface CodeBlockTone {
   drawing: boolean;
 }
 
-/** 是否用深色终端代码卡。手选优先；auto 下深色主题一律深色卡，浅色主题只有 fluent 用冷灰浅色卡。 */
+/** 是否用深色终端代码卡。手选优先；auto 下深色主题一律深色卡，浅色主题只有 fluent / mica-liquid 用冷灰浅色卡。 */
 export function codeBlockUsesDark({ uiStyle, codeBlockStyle, darkTheme, drawing }: CodeBlockTone): boolean {
   if (drawing) return false;
   if (codeBlockStyle === "dark") return true;
   if (codeBlockStyle === "light") return false;
-  return darkTheme || uiStyle !== "fluent";
+  return darkTheme || (uiStyle !== "fluent" && uiStyle !== "mica-liquid");
 }

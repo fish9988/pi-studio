@@ -5,7 +5,10 @@
 // - aurora（极光翠雾）：Google Material 3 苍翠极光；
 // - coral（液态珊瑚）：Apple Liquid Glass 珊瑚霓虹；
 // - amber（钛金琥珀）：Pro Titanium 琥珀暖金；
-// - obsidian（曜石深空）：Studio Graphite 极客钴灰。
+// - obsidian（曜石深空）：Studio Graphite 极客钴灰；
+// - sage（鼠尾草晨雾）：护眼森系，清晨草雾与翡翠微光；
+// - dusk（暮紫黄昏）：twilight 薰衣草薄雾与紫罗兰玫瑰微光；
+// - slate（海岸青灰）：coastal 海盐薄雾与青蓝微光。三族与前述六族凑成 3×3 画廊。
 
 export const colorModeNames = ["system", "light", "dark"] as const;
 export type ColorMode = (typeof colorModeNames)[number];
@@ -14,7 +17,17 @@ export function isColorMode(value: string): value is ColorMode {
   return (colorModeNames as readonly string[]).includes(value);
 }
 
-export const themeFamilyNames = ["default", "mica", "aurora", "coral", "amber", "obsidian"] as const;
+export const themeFamilyNames = [
+  "default",
+  "mica",
+  "aurora",
+  "sage",
+  "slate",
+  "dusk",
+  "coral",
+  "amber",
+  "obsidian",
+] as const;
 
 export type ThemeFamily = (typeof themeFamilyNames)[number];
 
@@ -35,6 +48,12 @@ export const themeNames = [
   "amber-dark",
   "obsidian-light",
   "obsidian-dark",
+  "sage-light",
+  "sage-dark",
+  "slate-light",
+  "slate-dark",
+  "dusk-light",
+  "dusk-dark",
 ] as const;
 
 export type ThemeName = (typeof themeNames)[number];
@@ -63,6 +82,9 @@ export const themeFamilies = {
   coral: { light: "coral-light", dark: "coral-dark" },
   amber: { light: "amber-light", dark: "amber-dark" },
   obsidian: { light: "obsidian-light", dark: "obsidian-dark" },
+  sage: { light: "sage-light", dark: "sage-dark" },
+  slate: { light: "slate-light", dark: "slate-dark" },
+  dusk: { light: "dusk-light", dark: "dusk-dark" },
 } as const satisfies Record<ThemeFamily, { light: ThemeName; dark: ThemeName }>;
 
 export const themes = {
@@ -162,6 +184,54 @@ export const themes = {
     scrim: "rgba(4, 5, 8, 0.62)",
     art: false,
   },
+  "sage-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#eaf3ed",
+    text: "#0f1f16",
+    scrim: "rgba(15, 31, 22, 0.34)",
+    art: true,
+  },
+  "sage-dark": {
+    dark: true,
+    app: "#111d17",
+    sidebar: "#0a140f",
+    text: "#edf7f1",
+    scrim: "rgba(6, 12, 9, 0.62)",
+    art: true,
+  },
+  "slate-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#ebf2f6",
+    text: "#0f1b24",
+    scrim: "rgba(15, 27, 36, 0.34)",
+    art: true,
+  },
+  "slate-dark": {
+    dark: true,
+    app: "#111c24",
+    sidebar: "#0a1319",
+    text: "#edf5fa",
+    scrim: "rgba(4, 8, 12, 0.62)",
+    art: true,
+  },
+  "dusk-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#f2ecfa",
+    text: "#191229",
+    scrim: "rgba(25, 18, 41, 0.34)",
+    art: true,
+  },
+  "dusk-dark": {
+    dark: true,
+    app: "#161126",
+    sidebar: "#0e0a1a",
+    text: "#f3efff",
+    scrim: "rgba(8, 5, 16, 0.62)",
+    art: true,
+  },
 } as const satisfies Record<ThemeName, ThemeSpec>;
 
 export function isThemeName(value: string): value is ThemeName {
@@ -179,6 +249,9 @@ export function familyOfTheme(preference: string): ThemeFamily {
   if (preference.startsWith("coral-")) return "coral";
   if (preference.startsWith("amber-")) return "amber";
   if (preference.startsWith("obsidian-")) return "obsidian";
+  if (preference.startsWith("sage-")) return "sage";
+  if (preference.startsWith("slate-")) return "slate";
+  if (preference.startsWith("dusk-")) return "dusk";
   // 兼容旧版配置迁移
   if (preference === "deepseek" || preference.startsWith("deepseek-") || preference.startsWith("whale-")) return "mica";
   if (preference === "openai" || preference.startsWith("openai-")) return "aurora";

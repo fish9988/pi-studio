@@ -1,7 +1,11 @@
 // 外壳界面状态：侧栏宽度、折叠、终端面板高度、历史会话排列（主进程持久化）和窄窗抽屉是否打开（只在内存）。
 // 拖动侧栏 / 终端拖拽条时不经过这里：拖拽条自己直接改 DOM，松手时才 commit（一次写 store、一次持久化）。
 import {
+  backdropChatVeilRange,
+  backdropSidebarVeilRange,
+  backdropSurfaceOpacityRange,
   limits,
+  type BackdropScope,
   type BrandStyle,
   type CodeBlockStyle,
   type ConversationView,
@@ -47,6 +51,11 @@ const shellStore = createStore<ShellUiState>({
   uiFontFamily: "",
   chatFontStyle: "sans",
   chatFontFamily: "",
+  backdropScope: "chat",
+  backdropChatVeil: 82,
+  backdropSidebarVeil: 84,
+  backdropSurfaceOpacity: 88,
+  backdropSoftMask: true,
   drawerOpen: false,
 });
 /** 只在有字段真的变了时写入：每次 set 都会通知所有订阅者（例如每次切任务都会调 setDrawerOpen(false)）。 */
@@ -180,6 +189,38 @@ export function setChatFontStyle(chatFontStyle: FontStyle): void {
 export function setChatFontFamily(chatFontFamily: string): void {
   update({ chatFontFamily });
   persist({ chatFontFamily });
+}
+
+export function setBackdropScope(backdropScope: BackdropScope): void {
+  update({ backdropScope });
+  persist({ backdropScope });
+}
+
+export function setBackdropChatVeil(backdropChatVeil: number): void {
+  const value = clampRange(backdropChatVeil, backdropChatVeilRange);
+  update({ backdropChatVeil: value });
+  persist({ backdropChatVeil: value });
+}
+
+export function setBackdropSidebarVeil(backdropSidebarVeil: number): void {
+  const value = clampRange(backdropSidebarVeil, backdropSidebarVeilRange);
+  update({ backdropSidebarVeil: value });
+  persist({ backdropSidebarVeil: value });
+}
+
+export function setBackdropSurfaceOpacity(backdropSurfaceOpacity: number): void {
+  const value = clampRange(backdropSurfaceOpacity, backdropSurfaceOpacityRange);
+  update({ backdropSurfaceOpacity: value });
+  persist({ backdropSurfaceOpacity: value });
+}
+
+export function setBackdropSoftMask(backdropSoftMask: boolean): void {
+  update({ backdropSoftMask });
+  persist({ backdropSoftMask });
+}
+
+function clampRange(value: number, [min, max]: readonly [number, number]): number {
+  return Math.round(Math.min(max, Math.max(min, value)));
 }
 
 export function setDrawerOpen(drawerOpen: boolean): void {

@@ -9,6 +9,19 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
+### Added
+
+- Added a fourth live UI design style, **Mica Glass**, combining Fluent 2 luminance hierarchy and crisp cold-gray light code cards with Apple Liquid Glass translucent floating islands and specular rim highlights.
+- Added **regional backdrop coverage and independent opacity controls**: switch backdrop coverage between `Chat only`, `Chat & sidebar`, and `Full window`, with fine-grained opacity/veil sliders for the main chat area (10%–96%), frosted sidebar & topbar (25%–96%), floating surfaces/cards (40%–100%), and a directional left-to-right text protection fade.
+- Added 3 new dual-mode theme families (**Forest Sage**, **Coastal Slate**, **Twilight Lilac** — 6 new WCAG-verified palettes with matching ambient SVG art and thumbnails), completing a balanced 3×3 theme gallery.
+
+### Fixed
+
+- Eliminated the abrupt white band above the composer/memory status pill on tinted or backdrop canvases by replacing the opaque bottom gradient strip with an alpha scroll-fade mask.
+- Fixed sticky sidebar header bleed-through when using full-window or sidebar backdrops, and tightened theme gallery preview proportions so all 3 rows fit cleanly in the Settings modal.
+
 ## [0.4.0] - 2026-11-14
 
 ### Added

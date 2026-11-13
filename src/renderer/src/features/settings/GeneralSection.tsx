@@ -2,9 +2,12 @@
 // 任务运行中发消息的方式（studio 的 Enter + omp 的插话/稍后处理方式，两两一行）；空闲任务多久关进程；快捷键（只读，三列；studio 的键，加转发给 omp 的键）。格子排法见 settings.css 的 .st-cells。
 import { Fragment, useEffect, useMemo } from "react";
 import {
+  backdropScopes,
   defaultFontSize,
   fontSizeSteps,
+  uiStyles,
   type BackdropMode,
+  type BackdropScope,
   type BackdropStrength,
   type BrandStyle,
   type CodeBlockStyle,
@@ -21,6 +24,11 @@ import { chordKeys } from "../../../../shared/tsp/omp-keybindings.ts";
 import { useT } from "../../i18n/use-t.ts";
 import { shortcutKeys } from "../../app/platform-keys.ts";
 import {
+  setBackdropChatVeil,
+  setBackdropScope,
+  setBackdropSidebarVeil,
+  setBackdropSoftMask,
+  setBackdropSurfaceOpacity,
   setBrandStyle,
   setChatFontFamily,
   setChatFontStyle,
@@ -111,7 +119,7 @@ export function GeneralSection() {
   }));
   const homeRipple = useShellValue("homeRipple") ?? true;
   const uiStyle = useShellValue("uiStyle") ?? "expressive";
-  const uiStyleOptions = (["fluent", "expressive", "liquid"] as const).map((value) => ({
+  const uiStyleOptions = uiStyles.map((value) => ({
     value,
     label: t(`settings.uiStyle.${value}`),
   }));
@@ -129,6 +137,16 @@ export function GeneralSection() {
     value,
     label: t(`settings.backdropStrength.${value}`),
   }));
+  // 背景图铺到哪一块、各层多浓：主进程持久化在 ShellState（和浓度预设同一个值，双边同步）。
+  const backdropScope = useShellValue("backdropScope") ?? "chat";
+  const backdropScopeOptions = backdropScopes.map((value) => ({
+    value,
+    label: t(`settings.backdropScope.${value}`),
+  }));
+  const backdropChatVeil = useShellValue("backdropChatVeil") ?? 82;
+  const backdropSidebarVeil = useShellValue("backdropSidebarVeil") ?? 84;
+  const backdropSurfaceOpacity = useShellValue("backdropSurfaceOpacity") ?? 88;
+  const backdropSoftMask = useShellValue("backdropSoftMask") ?? true;
   const fontSizeOptions = fontSizeSteps.map((size) => ({ value: `${size}` as const, label: `${size}pt` }));
   const uiFontStyle = useShellValue("uiFontStyle") ?? "sans";
   const uiFontFamily = useShellValue("uiFontFamily") ?? "";
@@ -265,18 +283,98 @@ export function GeneralSection() {
           )}
         </Row>
         {backdrop !== "none" && (
-          <Row label={t("settings.backdropStrength")}>
-            {(labelId) => (
-              <Segmented<BackdropStrength>
-                size="sm"
-                value={settings?.backdropStrength ?? "medium"}
-                options={strengthOptions}
-                labelledBy={labelId}
-                onChange={(next) => guard(window.studio.setBackdropStrength(next))}
-                testId="setting-backdrop-strength"
-              />
+          <>
+            <Row label={t("settings.backdropStrength")}>
+              {(labelId) => (
+                <Segmented<BackdropStrength>
+                  size="sm"
+                  value={settings?.backdropStrength ?? "medium"}
+                  options={strengthOptions}
+                  labelledBy={labelId}
+                  onChange={(next) => guard(window.studio.setBackdropStrength(next))}
+                  testId="setting-backdrop-strength"
+                />
+              )}
+            </Row>
+            <Row label={t("settings.backdropScope")}>
+              {(labelId) => (
+                <Segmented<BackdropScope>
+                  size="sm"
+                  value={backdropScope}
+                  options={backdropScopeOptions}
+                  labelledBy={labelId}
+                  onChange={(next) => setBackdropScope(next)}
+                  testId="setting-backdrop-scope"
+                />
+              )}
+            </Row>
+            <Row label={t("settings.backdropChatVeil")}>
+              {(labelId) => (
+                <span className="st-range-wrap">
+                  <input
+                    type="range"
+                    className="st-range"
+                    min={10}
+                    max={96}
+                    step={2}
+                    value={backdropChatVeil}
+                    aria-labelledby={labelId}
+                    onChange={(event) => setBackdropChatVeil(Number(event.currentTarget.value))}
+                    data-testid="setting-backdrop-chat-veil"
+                  />
+                  <span className="st-range-val">{backdropChatVeil}%</span>
+                </span>
+              )}
+            </Row>
+            {backdropScope !== "chat" && (
+              <Row label={t("settings.backdropSidebarVeil")}>
+                {(labelId) => (
+                  <span className="st-range-wrap">
+                    <input
+                      type="range"
+                      className="st-range"
+                      min={25}
+                      max={96}
+                      step={2}
+                      value={backdropSidebarVeil}
+                      aria-labelledby={labelId}
+                      onChange={(event) => setBackdropSidebarVeil(Number(event.currentTarget.value))}
+                      data-testid="setting-backdrop-sidebar-veil"
+                    />
+                    <span className="st-range-val">{backdropSidebarVeil}%</span>
+                  </span>
+                )}
+              </Row>
             )}
-          </Row>
+            <Row label={t("settings.backdropSurfaceOpacity")}>
+              {(labelId) => (
+                <span className="st-range-wrap">
+                  <input
+                    type="range"
+                    className="st-range"
+                    min={40}
+                    max={100}
+                    step={2}
+                    value={backdropSurfaceOpacity}
+                    aria-labelledby={labelId}
+                    onChange={(event) => setBackdropSurfaceOpacity(Number(event.currentTarget.value))}
+                    data-testid="setting-backdrop-surface-opacity"
+                  />
+                  <span className="st-range-val">{backdropSurfaceOpacity}%</span>
+                </span>
+              )}
+            </Row>
+            <Row label={t("settings.backdropSoftMask")}>
+              {(labelId) => (
+                <Switch
+                  checked={backdropSoftMask}
+                  labelledBy={labelId}
+                  onChange={(next) => setBackdropSoftMask(next)}
+                  testId="setting-backdrop-soft-mask"
+                />
+              )}
+            </Row>
+          </>
         )}
         {glassSupported && (
           <Row label={t("settings.glass")}>

@@ -140,6 +140,11 @@
  * 滚动区变高变矮（门出现、对话长过视口）时吸底照旧：use-stick-to-bottom.ts 看着滚动区的尺寸贴回底部。 */
 .tsp-surface[data-mode="inline"] > .tsp-scroller {
   flex: 0 1 auto;
+  /* 对话内容在底端 14px 内渐隐到输入浮岛（2026-11-13）：mask 只改 alpha、不改颜色，纯白底 / Liquid 染色 /
+   * 整窗背景图都能一起淡出，不再用一层实色 --bg-app 的渐变遮住背景。
+   * mask 只在滚动区自己的边框盒里生效（不是滚动内容），所以只要滚动区，不要层层套。 */
+  mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 14px), transparent 100%);
 }
 
 /* 对话列：和旧 ConversationView 同宽同轴（--content-w），块之间 --space-4 */
@@ -158,7 +163,7 @@
 }
 /* dock 里有东西时对话列底下只留一个块间距：对话最后一项和门之间就是普通的块间距（没有 dock 时留 --space-8 到 Composer）。 */
 .tsp-surface[data-mode="inline"]:has(> .tsp-dock:not([data-blank])) > .tsp-scroller > .tsp-column {
-  padding-bottom: var(--space-4);
+  padding-bottom: var(--space-6);
 }
 /* 对话里的顶层块（main 的子节点，node-dom.ts 给它们 data-anchor）：离屏时不排版、不绘制，长会话的样式 / 排版 / 绘制只算视口附近。
  * 没画过的块按估计高度占位，画过一次后记住实际尺寸（auto）；估计值和实际的差由 useStickToBottom 按阅读锚点补偿、

@@ -402,10 +402,10 @@
 }
 .md-codeblock[data-code-light] .md-codelines,
 .md-codeblock[data-code-light] .md-code-preview {
-  color: color-mix(in srgb, var(--fg-code-light) 62%, var(--bg-code-light));
+  color: color-mix(in srgb, var(--fg-code-light) 72%, var(--bg-code-light));
 }
 .md-codeblock[data-code-light] .md-codebtn {
-  color: color-mix(in srgb, var(--fg-code-light) 62%, var(--bg-code-light));
+  color: color-mix(in srgb, var(--fg-code-light) 72%, var(--bg-code-light));
 }
 .md-codeblock[data-code-light]:hover .md-codebtn,
 .md-codeblock[data-code-light]:focus-within .md-codebtn {
@@ -417,8 +417,8 @@
 .md-codeblock[data-code-light] .md-codebody {
   color: var(--fg-code-light);
 }
-/* 用户气泡本身已经是浅底，里面的浅色代码卡再抬一档对比，边界要看得出 */
-.tsp-card[data-role="omp.user"] .md-codeblock[data-code-light] {
+/* 用户气泡本身已经是浅底，里面的浅色代码卡再抬一档对比，边界要看得出（:root 保证高于 ui-style 覆写） */
+:root .tsp-card[data-role="omp.user"] .md-codeblock[data-code-light] {
   background: var(--bg-raised);
   border-color: rgba(15, 23, 42, 0.16);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -453,6 +453,30 @@
 }
 :root[data-ui-style="liquid"] .md-codeblock[data-code-light] .md-codehead {
   background: color-mix(in srgb, var(--bg-code-light-head) 76%, transparent);
+}
+/* 云母 × 液态玻璃：代码卡换成 Fluent 2 的冷灰卡底 + 更薄的玻璃头部（磨砂不抢正文） */
+:root[data-ui-style="mica-liquid"] .md-codeblock {
+  border-color: var(--glass-rim);
+  border-radius: var(--radius-lg);
+}
+:root[data-ui-style="mica-liquid"] .md-codeblock .md-codehead {
+  background: color-mix(in srgb, var(--bg-code-head) 74%, transparent);
+  backdrop-filter: blur(12px);
+}
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-light] {
+  border-color: var(--border-code-light);
+  background: color-mix(in srgb, var(--bg-code-light) 90%, transparent);
+  backdrop-filter: blur(14px);
+}
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-dark] {
+  background: color-mix(in srgb, var(--bg-code) 90%, transparent);
+  backdrop-filter: blur(14px);
+}
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-light] .md-codehead {
+  background: color-mix(in srgb, var(--bg-code-light-head) 78%, transparent);
+}
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-figure] .md-codehead {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 .md-codehead {
   display: flex;

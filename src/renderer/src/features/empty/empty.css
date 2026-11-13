@@ -178,6 +178,41 @@
   border-radius: var(--radius-pill);
 }
 
+/* 云母 × 液态玻璃：用量卡片是云母台面上的薄玻璃 Bento，靠顶缘一道镜面高光立起来 */
+:root[data-ui-style="mica-liquid"] .eu {
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .eu {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="mica-liquid"]:not([data-theme]) .eu {
+    box-shadow:
+      var(--shadow-float),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  }
+}
+
+/* 区域背景图：卡片跟着纱一起透（--bd-surface-alpha），不然 88% 的实卡片会盖掉背后的图 */
+:root[data-backdrop] .eu {
+  background: color-mix(in srgb, var(--bg-raised) var(--bd-surface-alpha, 88%), transparent);
+}
+
+/* 云母的玻璃卡片在同一条规则上再透明度：背景图铺底时把 --bd-surface-alpha 压到 78% 以下，
+   再补一层磨砂（bg-glass-strong 被换掉了），卡片在主题/自定义壁纸上才有浅浅的通透台面感 */
+:root[data-ui-style="mica-liquid"][data-backdrop] .eu {
+  background: color-mix(in srgb, var(--bg-raised) min(var(--bd-surface-alpha, 88%), 78%), transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+
 .eu-bar {
   display: flex;
   align-items: center;

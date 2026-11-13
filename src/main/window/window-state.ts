@@ -3,6 +3,10 @@
 import { app, screen, type BrowserWindow, type Rectangle } from "electron";
 import path from "node:path";
 import {
+  backdropChatVeilRange,
+  backdropScopes,
+  backdropSidebarVeilRange,
+  backdropSurfaceOpacityRange,
   brandStyles,
   codeBlockStyles,
   conversationViews,
@@ -43,6 +47,11 @@ const defaultShellState: ShellState = {
   uiFontFamily: "",
   chatFontStyle: "sans",
   chatFontFamily: "",
+  backdropScope: "chat",
+  backdropChatVeil: 82,
+  backdropSidebarVeil: 84,
+  backdropSurfaceOpacity: 88,
+  backdropSoftMask: true,
 };
 interface WindowBounds {
   x: number;
@@ -234,6 +243,49 @@ function load(): PersistedState {
   try {
     if (raw["chatFontFamily"] !== undefined) {
       shell.chatFontFamily = parseString(raw["chatFontFamily"], "chatFontFamily", 160, { allowEmpty: true });
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["backdropScope"] !== undefined) {
+      shell.backdropScope = parseOneOf(raw["backdropScope"], "backdropScope", backdropScopes);
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["backdropChatVeil"] !== undefined) {
+      shell.backdropChatVeil = parseInteger(raw["backdropChatVeil"], "backdropChatVeil", ...backdropChatVeilRange);
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["backdropSidebarVeil"] !== undefined) {
+      shell.backdropSidebarVeil = parseInteger(
+        raw["backdropSidebarVeil"],
+        "backdropSidebarVeil",
+        ...backdropSidebarVeilRange,
+      );
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["backdropSurfaceOpacity"] !== undefined) {
+      shell.backdropSurfaceOpacity = parseInteger(
+        raw["backdropSurfaceOpacity"],
+        "backdropSurfaceOpacity",
+        ...backdropSurfaceOpacityRange,
+      );
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["backdropSoftMask"] !== undefined) {
+      shell.backdropSoftMask = parseBoolean(raw["backdropSoftMask"], "backdropSoftMask");
     }
   } catch {
     // 保留默认值。

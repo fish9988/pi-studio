@@ -1084,3 +1084,33 @@
   box-shadow: none;
   border-color: var(--border);
 }
+
+/* 云母 × 液态玻璃：右侧工作台是同一层玻璃（描边 + 顶缘镜面高光），头部磨砂；不上浮起阴影，靠 1px 分层。 */
+:root[data-ui-style="mica-liquid"] .dsh-wb {
+  border: 1px solid var(--glass-rim);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+:root[data-ui-style="mica-liquid"] .dsh-wb-header {
+  background: var(--bg-glass);
+  backdrop-filter: blur(22px) saturate(175%);
+}
+:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .dsh-wb {
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="mica-liquid"]:not([data-theme]) .dsh-wb {
+    box-shadow:
+      var(--shadow-1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* 区域背景图：侧栏 / 整窗的图从工作台底下穿过去，工作台稍稍透一点（--bd-surface-alpha） */
+:root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .dsh-wb {
+  background: color-mix(in srgb, var(--bg-app) var(--bd-surface-alpha, 88%), transparent);
+  backdrop-filter: blur(20px);
+}

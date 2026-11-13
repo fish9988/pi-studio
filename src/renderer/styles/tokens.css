@@ -171,6 +171,12 @@
   --shadow-float:
     0 12px 32px color-mix(in srgb, var(--text) 9%, transparent),
     0 2px 6px color-mix(in srgb, var(--text) 4%, transparent);
+  /* 区域背景图的纱（App.tsx 写在根节点内联样式上，app.css 只读）：
+     主区纱 --bd-chat-veil、侧栏与顶栏纱 --bd-sidebar-veil、浮在纱上的卡片 / 输入框透明度 --bd-surface-alpha。
+     默认值和 medium 档一致（82% / 84% / 88%）；旧的 --bd-veil（data-backdrop-strength）只剩兼容回退。 */
+  --bd-chat-veil: 82%;
+  --bd-sidebar-veil: 84%;
+  --bd-surface-alpha: 88%;
   /* 冷灰浅色代码卡（Fluent 云母原型的 #F2F5FA 底色）＋头部、描边与正文色；浅色卡不跟随主题色，深浅主题下都能读 */
   --bg-code-light: #f2f5fa;
   --bg-code-light-head: #e8eef7;
@@ -296,7 +302,8 @@
 }
 
 /* ───────────────────────── 界面设计风格（<html data-ui-style>） ─────────────────────────
-   三套骨架：fluent（Fluent 2 方正分层）、expressive（M3 灵动，默认，用上面 :root 的值）、liquid（液态玻璃）。
+   四套骨架：fluent（Fluent 2 方正分层）、expressive（M3 灵动，默认，用上面 :root 的值）、liquid（液态玻璃）、
+   mica-liquid（云母 × 液态玻璃：Fluent 的分层顺序 + 液态玻璃的折射）。
    只改圆角、玻璃层与浮动阴影，颜色始终由主题决定；specificity 高于 :root，位置在主题色块之前也不影响。 */
 :root[data-ui-style="fluent"] {
   --radius-sm: 4px;
@@ -310,6 +317,24 @@
   --shadow-float:
     0 4px 16px color-mix(in srgb, var(--text) 7%, transparent),
     0 1px 3px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+/* Mica 云母 × Liquid Glass：Fluent 2 的分层顺序（壳体 → 云母台面 → 悬浮玻璃浮层）+ 液态玻璃的半透明折射。
+ * 圆角比 Fluent 大一号、比液态玻璃小一号，几何上一眼能和另外三套分开；玻璃比液态玻璃实一点（70/84%），
+ * 云母台面的色彩要透得出来，但不能像液态玻璃那样把正文后面的环境全部晃出来。 */
+:root[data-ui-style="mica-liquid"] {
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-panel: 14px;
+  --radius-composer: 18px;
+  --bg-glass: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+  --bg-glass-strong: color-mix(in srgb, var(--bg-raised) 84%, transparent);
+  --glass-rim: color-mix(in srgb, var(--border-strong) 62%, rgba(255, 255, 255, 0.36));
+  --shadow-float:
+    0 10px 30px color-mix(in srgb, var(--text) 9%, transparent),
+    0 2px 6px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 :root[data-ui-style="liquid"] {
@@ -627,6 +652,21 @@
 :root:is([data-theme$="dark"], [data-theme="dark"]) {
   --glass-rim: color-mix(in srgb, var(--border) 82%, rgba(255, 255, 255, 0.1));
   --shadow-float: 0 14px 36px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+/* 云母的深色档：描边里混 0.36 的白在深底上是一圈刺眼白边，只留 0.13 镜面高光；
+ * 阴影也改纯黑扩散（深色主题的 --text 是浅色，按文字色算出来的阴影会发灰）。
+ * 放在上一块系统深色之后：test/themes.test.ts 用 indexOf("  :root:not([data-theme]) {") 取那块，
+ * 这一块的根选择器多一个 [data-ui-style]，不会抢到它前面。 */
+:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) {
+  --glass-rim: color-mix(in srgb, var(--border) 78%, rgba(255, 255, 255, 0.13));
+  --shadow-float: 0 12px 34px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="mica-liquid"]:not([data-theme]) {
+    --glass-rim: color-mix(in srgb, var(--border) 78%, rgba(255, 255, 255, 0.13));
+    --shadow-float: 0 12px 34px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
 }
 
 /* ───────────────────────── 基础深色：显式选择（Expressive Cosmic） ───────────────────────── */

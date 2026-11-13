@@ -532,6 +532,8 @@ html[data-platform="darwin"] .topbar-left {
    medium 82%（默认）：所有主题正文都在 4.7:1 以上。
    low 90%：图最淡；正文都在 5.6:1 以上。 */
 .panel[data-backdrop] {
+  /* 旧的三档浓度变量：只剩兼容回退用——真正生效的是根节点上由滑杆写入的 --bd-chat-veil（App.tsx）。
+   * 主进程点预设时会把 --bd-chat-veil 同步成同一个数字（app-handlers.ts 的 backdropStrengthVeils）。 */
   --bd-veil: 82%;
   isolation: isolate;
 }
@@ -544,8 +546,20 @@ html[data-platform="darwin"] .topbar-left {
   will-change: transform;
   background:
     linear-gradient(
-      color-mix(in srgb, var(--bg-app) var(--bd-veil), transparent),
-      color-mix(in srgb, var(--bg-app) var(--bd-veil), transparent)
+      color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, var(--bd-veil, 82%)), transparent),
+      color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, var(--bd-veil, 82%)), transparent)
+    ),
+    var(--bd-art) right bottom / cover no-repeat;
+}
+/* 柔光纱（App.tsx 挂 data-backdrop-soft-mask）：纱变成 100deg 的斜向渐变，左侧正文区域多 8% 的保护、
+ * 右侧让出 14% 给背景图，比左右两段硬切更像真的玻璃；min / max 夹住两端，极端档位下不会算到负数。 */
+:root[data-backdrop-soft-mask="true"] .panel[data-backdrop]::before {
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--bg-app) min(96%, calc(var(--bd-chat-veil, 82%) + 8%)), transparent) 0%,
+      color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, 82%), transparent) 55%,
+      color-mix(in srgb, var(--bg-app) max(12%, calc(var(--bd-chat-veil, 82%) - 14%)), transparent) 100%
     ),
     var(--bd-art) right bottom / cover no-repeat;
 }
@@ -561,6 +575,92 @@ html[data-platform="darwin"] .topbar-left {
 }
 .panel[data-backdrop-strength="low"] {
   --bd-veil: 90%;
+}
+
+/* ── 区域背景图：主区 / 侧栏 / 整窗（App.tsx 在根节点挂 data-backdrop-scope 与 data-backdrop-soft-mask） ──
+   chat（默认）：图只铺主区，纱画在 .panel 的 ::before 上，上面的规则就是这档。--bd-art / 三档浓度都由 App.tsx
+     写在根节点的内联样式上，所以这里只读不写。
+   chat-sidebar：图铺满侧栏 + 主区，纱画在 .body 的 ::before 上；面板自己的 ::before 关掉，
+     否则同一张图要在两个层级各画一遍（多一层合成，两层纱也对不上）。侧栏、面板各自磨砂，
+     否则实底 --bg-sidebar / --bg-app 会把图完全遮掉。
+   window：图铺到整窗（顶栏 + 侧栏 + 主区 + 工作台），顶栏与侧栏一起变磨砂。
+   浮在纱上的卡片、输入框、工作台再按 --bd-surface-alpha 透一点，才不会有“贴纸”感。 */
+
+:root[data-backdrop][data-backdrop-scope="chat-sidebar"] .body {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+}
+
+:root[data-backdrop][data-backdrop-scope="chat-sidebar"] .body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bd-art) right bottom / cover no-repeat;
+}
+
+:root[data-backdrop][data-backdrop-scope="chat-sidebar"] .panel[data-backdrop]::before,
+:root[data-backdrop][data-backdrop-scope="window"] .panel[data-backdrop]::before {
+  display: none;
+}
+
+/* 侧栏列是磨砂台面；.sb 在 sidebar.css 里转成透明，sticky 历史头自己挂同一层纱，不叠两层底色 */
+:root[data-backdrop][data-backdrop-scope="chat-sidebar"] .sidebar-column {
+  background: color-mix(in srgb, var(--bg-sidebar) var(--bd-sidebar-veil, 84%), transparent);
+  backdrop-filter: blur(22px) saturate(150%);
+}
+
+:root[data-backdrop][data-backdrop-scope="chat-sidebar"] .panel {
+  background: color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, 82%), transparent);
+}
+
+:root[data-backdrop][data-backdrop-scope="chat-sidebar"][data-backdrop-soft-mask="true"] .panel {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--bg-app) min(96%, calc(var(--bd-chat-veil, 82%) + 8%)), transparent) 0%,
+    color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, 82%), transparent) 55%,
+    color-mix(in srgb, var(--bg-app) max(12%, calc(var(--bd-chat-veil, 82%) - 14%)), transparent) 100%
+  );
+}
+
+:root[data-backdrop][data-backdrop-scope="window"] #app {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+}
+
+:root[data-backdrop][data-backdrop-scope="window"] #app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bd-art) right bottom / cover no-repeat;
+}
+
+:root[data-backdrop][data-backdrop-scope="window"] .body {
+  background: transparent;
+}
+
+:root[data-backdrop][data-backdrop-scope="window"] .topbar,
+:root[data-backdrop][data-backdrop-scope="window"] .sidebar-column {
+  background: color-mix(in srgb, var(--bg-sidebar) var(--bd-sidebar-veil, 84%), transparent);
+  backdrop-filter: blur(22px) saturate(155%);
+}
+
+:root[data-backdrop][data-backdrop-scope="window"] .panel {
+  background: color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, 82%), transparent);
+}
+
+:root[data-backdrop][data-backdrop-scope="window"][data-backdrop-soft-mask="true"] .panel {
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--bg-app) min(96%, calc(var(--bd-chat-veil, 82%) + 8%)), transparent) 0%,
+    color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, 82%), transparent) 55%,
+    color-mix(in srgb, var(--bg-app) max(12%, calc(var(--bd-chat-veil, 82%) - 14%)), transparent) 100%
+  );
 }
 
 .sidebar-resizer {
@@ -1064,6 +1164,49 @@ html[data-platform="darwin"] .topbar-left {
   }
 
   :root[data-ui-style="liquid"]:not([data-theme]) .topbar-tools {
+    box-shadow:
+      var(--shadow-1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* ── 云母 × 液态玻璃（data-ui-style="mica-liquid"） ──
+   顺序跟 Fluent 2 一致：云母壳体（侧栏）→ 云母台面（主区面板）→ 悬浮玻璃浮层（路径胶囊、工具组、输入浮岛）。
+   面板垫一层极淡的冷色环境晕，磨砂浮层折射时才有深浅可看；不做浮起阴影，靠 1px 描边分层（云母是平贴的）。 */
+:root[data-ui-style="mica-liquid"] .panel:not([data-backdrop]) {
+  background:
+    radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 46%),
+    radial-gradient(circle at 86% 84%, color-mix(in srgb, var(--chart-2) 5%, transparent), transparent 44%),
+    var(--bg-app);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+
+:root[data-ui-style="mica-liquid"] .crumb,
+:root[data-ui-style="mica-liquid"] .topbar-tools {
+  backdrop-filter: blur(22px) saturate(175%);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-rim);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+:root[data-ui-style="mica-liquid"] .topbar-tools > .ui-icon-btn {
+  border-radius: var(--radius-sm);
+}
+
+/* 深色里 0.45 的白会变成玻璃上一圈死白描边，只留 0.12 */
+:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .crumb,
+:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .topbar-tools {
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="mica-liquid"]:not([data-theme]) .crumb,
+  :root[data-ui-style="mica-liquid"]:not([data-theme]) .topbar-tools {
     box-shadow:
       var(--shadow-1),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
