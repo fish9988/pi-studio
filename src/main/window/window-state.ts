@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   brandStyles,
   conversationViews,
+  fontStyles,
   helperThinkingLevels,
   historyOrders,
   limits,
@@ -34,6 +35,10 @@ const defaultShellState: ShellState = {
   preferredShell: "auto",
   conversationView: "chat",
   homeRipple: true,
+  uiFontStyle: "sans",
+  uiFontFamily: "",
+  chatFontStyle: "sans",
+  chatFontFamily: "",
 };
 interface WindowBounds {
   x: number;
@@ -183,6 +188,34 @@ function load(): PersistedState {
   try {
     if (raw["homeRipple"] !== undefined) {
       shell.homeRipple = parseBoolean(raw["homeRipple"], "homeRipple");
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["uiFontStyle"] !== undefined) {
+      shell.uiFontStyle = parseOneOf(raw["uiFontStyle"], "uiFontStyle", fontStyles);
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["uiFontFamily"] !== undefined) {
+      shell.uiFontFamily = parseString(raw["uiFontFamily"], "uiFontFamily", 160, { allowEmpty: true });
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["chatFontStyle"] !== undefined) {
+      shell.chatFontStyle = parseOneOf(raw["chatFontStyle"], "chatFontStyle", fontStyles);
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["chatFontFamily"] !== undefined) {
+      shell.chatFontFamily = parseString(raw["chatFontFamily"], "chatFontFamily", 160, { allowEmpty: true });
     }
   } catch {
     // 保留默认值。

@@ -4,6 +4,7 @@ import {
   brandStyles,
   conversationViews,
   editCommands,
+  fontStyles,
   helperThinkingLevels,
   historyOrders,
   limits,
@@ -156,6 +157,18 @@ export const appHandlers: HandlerGroup<
       }),
       ...(record["homeRipple"] !== undefined && {
         homeRipple: parseBoolean(record["homeRipple"], "homeRipple"),
+      }),
+      ...(record["uiFontStyle"] !== undefined && {
+        uiFontStyle: parseOneOf(record["uiFontStyle"], "uiFontStyle", fontStyles),
+      }),
+      ...(record["uiFontFamily"] !== undefined && {
+        uiFontFamily: parseString(record["uiFontFamily"], "uiFontFamily", 160, { allowEmpty: true }),
+      }),
+      ...(record["chatFontStyle"] !== undefined && {
+        chatFontStyle: parseOneOf(record["chatFontStyle"], "chatFontStyle", fontStyles),
+      }),
+      ...(record["chatFontFamily"] !== undefined && {
+        chatFontFamily: parseString(record["chatFontFamily"], "chatFontFamily", 160, { allowEmpty: true }),
       }),
     };
     setShellState(patch);

@@ -1,40 +1,56 @@
-/* Pi Studio 设置页专属样式（全部以 .pis- 前缀命名，严格使用 tokens.css 已声明的设计变量） */
+/* Pi Studio 设置页专属样式（全部以 .pis- 前缀命名，严格使用 tokens.css 已声明的设计变量）
+   外观：和 .st-cells 同一套卡片（--bg-raised + 一道淡描边、无行间分隔线、悬停时行淡底），
+   卡片里不再嵌灰米色底块（图标块、状态胶囊、模型格都是透明底）。 */
 
 .pis-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .pis-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2-5);
+  gap: var(--space-2);
 }
 
 .pis-card {
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  padding: var(--space-1) var(--space-3);
   overflow: hidden;
 }
 
 .pis-card-padded {
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3-5) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
 }
 
-.pis-card-rows > .ui-row + .ui-row {
-  border-top: 1px solid var(--border-subtle);
+/* 卡内空状态（不另套一个带边框的小卡） */
+.pis-card-empty {
+  margin: 0;
+  padding: var(--space-4) var(--space-2);
+  text-align: center;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
 }
 
+/* 行与行不再画满宽分隔线：行内边距本身就把它们分开了（悬停有淡底，对齐仍然看得出来） */
 .pis-card-rows > .ui-row {
-  padding-inline: var(--space-4);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 0;
+  border-radius: var(--radius-md);
+}
+
+.pis-card-rows > .ui-row:hover {
+  background: var(--bg-hover);
 }
 
 .pis-inline-bar {
@@ -60,25 +76,25 @@
 }
 
 .pis-scope-project {
+  padding: var(--space-0-5) var(--space-2);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
   color: var(--text-2);
-  padding: var(--space-0-5) var(--space-2);
-  background: var(--bg-sunken);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
 }
 
 /* ───────── 7 档思考强度分段条 ───────── */
 
+/* 和 .ui-seg 同一套颜色（淡底轨道 + 当前项实底），只是 7 档等宽、贴满一行 */
 .pis-thinking-bar {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--space-0-5);
+  width: 100%;
   padding: var(--space-0-5);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-active);
   border-radius: var(--radius-md);
 }
 
@@ -128,10 +144,9 @@
 
 .pis-budget-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: var(--space-2-5);
-  padding: var(--space-3-5) var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-1) var(--space-1);
 }
 
 .pis-budget-cell {
@@ -139,10 +154,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2-5);
-  background: var(--bg-tool);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  min-width: 0;
 }
 
 .pis-budget-label {
@@ -156,13 +168,16 @@
 
 .pis-scoped-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  min-width: 0;
 }
 
+/* 搜索框自占一行（flex-basis 220 先换行）且可以缩：窄窗口里不把模型列表挤成一列 */
 .pis-scoped-search {
   flex: 1 1 220px;
+  min-width: 0;
 }
 
 .pis-selected-chips {
@@ -177,15 +192,15 @@
   gap: var(--space-1);
   height: var(--control-h-xs);
   padding-inline: var(--space-2);
-  background: var(--accent-soft);
-  color: var(--accent);
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   line-height: var(--lh-2xs);
+  color: var(--accent);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-out);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .pis-chip:hover {
@@ -197,29 +212,29 @@
   outline-offset: 1px;
 }
 
+/* 模型池：两条平铺的轻行（不画格子底、不画边框），选中只有强调色淡底 + 星标 */
 .pis-model-pool {
-  max-height: 248px;
-  overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--space-1-5);
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1px var(--space-2);
+  max-height: 288px;
   padding-right: var(--space-1);
+  overflow-y: auto;
 }
 
 .pis-model-item {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2-5);
-  background: var(--bg-tool);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  min-width: 0;
+  padding: var(--space-1-5) var(--space-2);
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
 .pis-model-item:hover {
@@ -228,7 +243,6 @@
 
 .pis-model-item[data-selected="true"] {
   background: var(--accent-soft);
-  border-color: var(--accent);
 }
 
 .pis-model-item:focus-visible {
@@ -237,9 +251,9 @@
 }
 
 .pis-model-star {
-  flex: none;
-  color: var(--text-3);
   display: inline-flex;
+  flex: none;
+  color: var(--text-disabled);
 }
 
 .pis-model-item[data-selected="true"] .pis-model-star {
@@ -273,154 +287,160 @@
   text-overflow: ellipsis;
 }
 
-/* ───────── Provider 认证矩阵 ───────── */
+/* ───────── Provider 列表 ───────── */
+/* 一家 provider 一行（不再是一张带边框的卡）：logo + 名称/Meta + 状态 + 一个主操作。
+   次要操作（退出登录）收进行尾的 ⋯（RowMenu），一屏 16 家不会满屏按钮。 */
 
 .pis-provider-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.pis-provider-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-2-5);
+.pis-provider-toolbar > .ui-field {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 360px;
 }
 
-.pis-provider-card {
+.pis-provider-list {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-3-5);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  transition: border-color var(--dur-fast) var(--ease-out);
+  gap: 1px;
 }
 
-.pis-provider-card[data-active="true"] {
-  border-color: var(--border);
+/* “已连接 / 可添加”只是分隔标题，不占一整行高度 */
+.pis-provider-group-label {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
 }
 
-.pis-provider-head {
+.pis-provider-group-label:first-child {
+  padding-top: var(--space-1);
+}
+
+.pis-provider-row {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-2-5);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2-5);
+  min-width: 0;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.pis-provider-row:hover {
+  background: var(--bg-hover);
 }
 
 .pis-provider-logo {
-  width: var(--control-h-md);
-  height: var(--control-h-md);
-  border-radius: var(--radius-md);
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-subtle);
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  flex: none;
-  color: var(--text);
-}
-
-.pis-provider-logo svg {
-  width: var(--icon-md);
-  height: var(--icon-md);
+  width: 18px;
+  height: 18px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  color: var(--text-2);
 }
 
 .pis-provider-info {
-  min-width: 0;
-  flex: 1;
   display: flex;
+  flex: 1 1 160px;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: 1px;
+  min-width: 0;
 }
 
 .pis-provider-title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
+  min-width: 0;
 }
 
 .pis-provider-name {
+  overflow: hidden;
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
-  font-weight: var(--fw-strong);
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pis-provider-sub {
+  overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   line-height: var(--lh-2xs);
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pis-provider-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.pis-provider-actions {
+/* 状态：一个小点 + 一句话，不再套胶囊底 */
+.pis-provider-status {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-1-5);
-  margin-left: auto;
-}
-
-.pis-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: var(--control-h-xs);
-  padding-inline: var(--space-2);
-  border-radius: var(--radius-pill);
+  gap: 5px;
   font-size: var(--fs-2xs);
   line-height: var(--lh-2xs);
-  background: var(--bg-sunken);
   color: var(--text-3);
   white-space: nowrap;
 }
 
-.pis-status-pill[data-tone="oauth"] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.pis-status-pill[data-tone="key"] {
-  background: var(--bg-sunken);
+.pis-provider-status[data-tone="ok"] {
   color: var(--st-done);
 }
 
-.pis-status-pill[data-tone="env"] {
-  background: var(--st-waiting-soft);
+.pis-provider-status[data-tone="env"] {
   color: var(--st-waiting-text);
-  font-family: var(--font-mono);
+}
+
+.pis-provider-status[data-tone="oauth"] {
+  color: var(--accent);
 }
 
 .pis-status-dot {
   width: 6px;
   height: 6px;
-  border-radius: var(--radius-pill);
   background: currentColor;
+  border-radius: var(--radius-pill);
+}
+
+.pis-provider-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.pis-provider-empty {
+  padding: var(--space-4) var(--space-2);
+  text-align: center;
 }
 
 /* ───────── 内置工具矩阵 & 内置扩展卡片 ───────── */
 
+/* 工具是一张卡里的两列行（不再每格一张带边框的卡）；开启的只有图标和开关变色 */
 .pis-tool-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1px var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
 }
 
 .pis-tool-card {
@@ -428,98 +448,91 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2-5) var(--space-3-5);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+  min-width: 0;
+  padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 
-.pis-tool-card[data-enabled="true"] {
-  border-color: var(--border);
+.pis-tool-card:hover {
+  background: var(--bg-hover);
 }
 
 .pis-tool-lead {
-  min-width: 0;
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--space-2-5);
+  min-width: 0;
 }
 
 .pis-tool-icon {
-  width: var(--control-h-sm);
-  height: var(--control-h-sm);
-  border-radius: var(--radius-md);
-  background: var(--bg-sunken);
-  color: var(--text-2);
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  flex: none;
+  color: var(--text-3);
 }
 
 .pis-tool-card[data-enabled="true"] .pis-tool-icon {
-  background: var(--accent-soft);
   color: var(--accent);
 }
 
 .pis-tool-meta {
-  min-width: 0;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .pis-tool-id {
+  overflow: hidden;
   font-family: var(--font-mono);
   font-size: var(--fs-code-sm);
   line-height: var(--lh-code-sm);
-  font-weight: var(--fw-strong);
+  font-weight: var(--fw-medium);
   color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pis-tool-desc {
-  font-size: var(--fs-xs);
-  line-height: var(--lh-xs);
-  color: var(--text-3);
-  white-space: nowrap;
   overflow: hidden;
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  color: var(--text-3);
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ───────── MCP 暴露模式徽标 & 表单 ───────── */
-
+/* 徽标不填底、只调文字颜色：一屏几十个徽标不会看起来像一块块贴纸 */
 .pis-exposure-badge {
   display: inline-flex;
   align-items: center;
   height: 20px;
-  padding-inline: var(--space-2);
-  border-radius: var(--radius-pill);
+  padding-inline: var(--space-1-5);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   line-height: var(--lh-2xs);
-  background: var(--bg-sunken);
   color: var(--text-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
 }
 
 .pis-exposure-badge[data-exposure="codemode"] {
-  background: var(--accent-soft);
   color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
 }
 
 .pis-exposure-badge[data-exposure="deferred"] {
-  background: var(--st-waiting-soft);
   color: var(--st-waiting-text);
 }
 
 .pis-exposure-badge[data-exposure="direct"] {
-  background: var(--bg-sunken);
   color: var(--st-done);
 }
 
 .pis-exposure-badge[data-exposure="hidden"] {
-  background: var(--bg-sunken);
   color: var(--text-disabled);
 }
 
@@ -575,9 +588,14 @@
 }
 
 .pis-doc-textarea {
-  min-height: 240px;
-  resize: vertical;
+  min-height: 220px;
   width: 100%;
+  resize: vertical;
+}
+
+.pis-doc-textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -1px;
 }
 
 .pis-doc-foot {
@@ -600,7 +618,7 @@
   line-height: var(--lh-code-sm);
 }
 
-/* ───────── 配置文件直达栏 & 关于页 Pi CLI 卡 ───────── */
+/* ───────── 配置文件直达栏 & 关于页 Pi CLI 块 ───────── */
 
 .pis-file-bar {
   display: flex;
@@ -608,39 +626,48 @@
   gap: var(--space-2);
 }
 
+/* 关于页：CLI 状态和版本行在同一张卡里，自己不再画一圈边框，只用上面一条 hairline 分开 */
 .pis-cli-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2-5);
-  padding: var(--space-3-5) var(--space-4);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  grid-column: 1 / -1;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2-5) var(--space-1) var(--space-1);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .pis-cli-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
 }
 
 .pis-cli-title {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  font-weight: var(--fw-strong);
+  min-width: 0;
+}
+
+.pis-cli-title > .pis-mono {
+  overflow: hidden;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
   color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pis-cli-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
+  flex: none;
+  width: 6px;
+  height: 6px;
   background: var(--text-disabled);
+  border-radius: var(--radius-pill);
 }
 
 .pis-cli-dot[data-ready="true"] {
@@ -652,11 +679,11 @@
 }
 
 .pis-cli-path {
-  font-family: var(--font-mono);
-  font-size: var(--fs-code-sm);
-  line-height: var(--lh-code-sm);
-  color: var(--text-3);
   overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  color: var(--text-3);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -690,10 +717,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2-5) var(--space-3);
-  background: var(--bg-tool);
-  border: 1px solid var(--border-subtle);
+  padding: var(--space-2) var(--space-1);
   border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.pis-plugin-installed-row:hover {
+  background: var(--bg-hover);
 }
 
 .pis-plugin-installed-body {
@@ -753,13 +783,13 @@
 .pis-market-cat {
   height: 26px;
   padding: 0 var(--space-2-5);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-sunken);
-  color: var(--text-2);
   font-size: var(--fs-xs);
   line-height: 1;
+  color: var(--text-2);
   cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
   transition:
     background-color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
@@ -790,7 +820,6 @@
   justify-content: space-between;
   gap: var(--space-2-5);
   padding: var(--space-3) var(--space-3-5);
-  background: var(--bg-tool);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   transition: border-color var(--dur-fast) var(--ease-out);
@@ -879,11 +908,11 @@
 
 .pis-market-tag {
   padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
-  color: var(--text-3);
   font-size: var(--fs-2xs);
+  color: var(--text-3);
   white-space: nowrap;
+  background: var(--bg-hover);
+  border-radius: var(--radius-xs);
 }
 
 .pis-market-tag[data-featured] {

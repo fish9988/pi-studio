@@ -34,12 +34,17 @@
   flex: none;
 }
 
-/* ───── 顶部三行：搜索（ui/TextField sm）/ [新任务] / [打开文件夹]。后两行是无边框的导航行；新任务在草稿页时用选中底色突出 ───── */
+/* ───── 顶部三行：搜索（M3 药丸框）/ [新任务] / [打开文件夹] ───── */
 .sb-actions {
   display: flex;
   flex-direction: column;
   gap: var(--space-0-5);
   margin: var(--space-1) var(--space-2) var(--space-2);
+}
+.sb-actions .ui-field {
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass-strong);
+  border-color: var(--border-subtle);
 }
 .sb-new {
   display: flex;
@@ -555,6 +560,17 @@
   background: var(--sb-row-selected-bg);
   box-shadow: var(--sb-row-selected-shadow);
 }
+/* Fluent 2 左侧 3px 主题色选中指示竖条 */
+.sb-row[data-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
 :root[data-glass] .sb-row[data-selected="true"] {
   background: color-mix(in srgb, var(--sb-row-selected-bg) 82%, transparent);
 }
@@ -565,7 +581,7 @@
   gap: var(--space-1-5);
   min-width: 0;
   height: 100%;
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-2-5);
   border-radius: var(--radius-md);
   color: var(--text-2);
   transition: color var(--dur-fast) var(--ease-out);

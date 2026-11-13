@@ -69,18 +69,18 @@ export const themeFamilies = {
 export const themes = {
   light: {
     dark: false,
-    app: "#faf9f5",
-    sidebar: "#f3f1ea",
-    text: "#1f1e1d",
-    scrim: "rgba(20, 20, 19, 0.34)",
+    app: "#ffffff",
+    sidebar: "#ebf1fa",
+    text: "#0f172a",
+    scrim: "rgba(15, 23, 42, 0.34)",
     art: false,
   },
   dark: {
     dark: true,
-    app: "#21201e",
-    sidebar: "#191918",
-    text: "#f2f0ea",
-    scrim: "rgba(10, 10, 9, 0.56)",
+    app: "#151c2a",
+    sidebar: "#0e1420",
+    text: "#f1f5f9",
+    scrim: "rgba(4, 8, 16, 0.62)",
     art: false,
   },
   "claude-light": {

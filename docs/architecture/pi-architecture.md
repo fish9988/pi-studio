@@ -49,12 +49,19 @@
 | `AGENTS.md` / `SYSTEM.md` / `APPEND_SYSTEM.md` | 全局与项目级上下文规则、系统提示词覆盖与追加 | 原样保存 UTF-8 文本 |
 | `skills/`、`prompts/`、`extensions/` | 本地 Skill 文件夹导入/移入回收站、提示词模板列表、自定义扩展与 `pi install/remove/update` 包管理 | 删除本地 Skill 走系统回收站，包名严格校验防参数注入 |
 
-## 5. 斜杠命令体系
+## 5. 模型能力（思考档位）与模型目录刷新
+
+- **思考档位来自模型自己的显式能力，不看模型名也不硬编码**：`src/shared/pi-model-capability.ts` 的 `piModelThinkingLevels` 与 Pi 的 `getSupportedThinkingLevels`（`@earendil-works/pi-ai` `dist/models.js`）逐条一致——`reasoning` 不为 true 只有 `off`；`off`…`high` 默认支持，除非 `thinkingLevelMap` 里写 `null`；**`xhigh` / `max` 只在 `thinkingLevelMap` 里显式映射了非 null 值时才支持**（Pi 1.5.2 实测：同一份 `models.json`，没写 map 的 reasoning 模型 `get_available_thinking_levels` 只到 `high`，显式映射 `xhigh`/`max` 的模型回到 `off`…`max`）。所以自定义模型想在界面上选到 `xhigh` / `max`，要在 `~/.pi/agent/models.json` 的模型条目里写 `"thinkingLevelMap": { "xhigh": "xhigh", "max": "max" }`（想藏掉某一档就写 `null`）。`toModelOption`（`pi-service.ts`）把推导结果放进 `ModelOption.thinkingEfforts`，草稿/已结束会话的档位、模型选择器、`/effort` 都用它；活进程仍以 `get_available_thinking_levels` 为准。
+- **模型表在 Pi 进程启动时读一次**：`ModelRuntime.create` → `ModelConfig.load`，`get_available_models` 返回的是那一刻的快照。所以：
+  - 服务进程（草稿、设置页）按 `catalogStamp()` 校验输入指纹，`models.json` / `auth.json` / `.env` / 版本 / key 环境变量变了就重起（`PiService.syncInputs`）；
+  - 任务的旧会话（长驻进程）在 `PiTaskRunner.listModels` 里把进程快照和服务进程现读的目录按“模型 + 能力”比对，少了或能力变了就在空闲时重开进程（同一个会话文件）；`setModel` 碰到 `Model not found` 也会重开一次再设。同一份目录只重开一次，避免按需发现的模型（llama.cpp 等）反复重启。
+
+## 6. 斜杠命令体系
 
 - 输入框 `/` 菜单的数据源为 `src/shared/omp-output/slash-table.ts`（定义 Pi 1.5.2 原生 24 条斜杠命令，按模型/配置/会话/分支进行分类）叠加 `pi --mode rpc` 的 `get_commands` 返回的动态扩展命令、Prompt 模板与 Skill 命令。
 - `src/renderer/src/features/palette/slash-commands.ts` **不调用** `mergeTuiCommands`，确保旧体系命令不会泄漏到输入框补全列表中（由 `test/pi-slash-table.test.ts` 与 `test/e2e/pi-settings.e2e.ts` 双重守护）。
 
-## 6. 测试替身（`test/fake-pi/fake-pi.mjs`）
+## 7. 测试替身（`test/fake-pi/fake-pi.mjs`）
 
 - 完整模拟 `pi --mode rpc`、`-p`（单次打印模式，供 `/btw` 使用）、`--version`、`--export` 及 `install/remove/update/list` 子命令。
 - 支持确定性触发器以便在无真实模型密钥的 CI 上测试全链路：
@@ -63,3 +70,4 @@
   - `[ask:select]` / `[ask:input]` / `[ask:editor]` / `[confirm]`：触发 `extension_ui_request` 并等待前端交互回包；
   - `[slow]`：慢速分块流式输出，供测试中断（`abort`）与忙碌时 `steer` / `followUp` 排队；
   - `[error]`：模拟模型报错返回。
+- `test/fake-pi/catalog-rpc.mjs`：只模拟“模型表在启动时读一次”的最小替身——启动时读 `CATALOG_DIR/catalog.json`，`get_available_models` 永远回那一刻的快照，`set_model` 只认快照里的模型；`spawns.log` 记每起一个进程。旧会话补新模型的重开、服务进程输入指纹变化的重起都靠它测（`test/pi-model-catalog-refresh.test.ts`）。

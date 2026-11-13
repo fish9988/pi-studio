@@ -14,6 +14,7 @@ import { OverlayScrollbar } from "../../ui/OverlayScrollbar.tsx";
 import { noteProgrammaticTop } from "../conversation/scroll-intent.ts";
 import { useStickToBottom, type StickToBottom } from "../conversation/use-stick-to-bottom.ts";
 import { ConversationLine } from "./ConversationLine.tsx";
+import { flushDeferredHistory } from "./deferred-mount.ts";
 import type { TspContext } from "./node-props.ts";
 import { TspHosts } from "./TspHosts.tsx";
 import { TspChildren } from "./TspChildren.tsx";
@@ -131,8 +132,19 @@ function useReveal(
       const selector = `[data-id="${CSS.escape(reveal.id)}"]`;
       const target = el.querySelector(selector);
       if (target === null) {
-        // 不在对话列里（dock / layer 里的节点）：没有可记账的 scrollTop，退回浏览器原生的滚动。
-        surface.current?.querySelector(selector)?.scrollIntoView({ block: reveal.where });
+        // 还在分帧挂载的长历史（MainFlow）：先让它画完，下一帧再定位。
+        flushDeferredHistory();
+        requestAnimationFrame(() => {
+          const later = el.querySelector(selector);
+          if (later !== null) {
+            el.scrollTop = revealScrollTop(el, later, reveal.where);
+            noteProgrammaticTop(el, el.scrollTop);
+            stick?.noteProgrammaticScroll();
+            return;
+          }
+          // 不在对话列里（dock / layer 里的节点）：没有可记账的 scrollTop，退回浏览器原生的滚动。
+          surface.current?.querySelector(selector)?.scrollIntoView({ block: reveal.where });
+        });
         return;
       }
       el.scrollTop = revealScrollTop(el, target, reveal.where);
@@ -183,6 +195,9 @@ interface SurfaceParts {
 
 const NO_IDS: readonly string[] = [];
 
+/** 用户自己动手的信号（和 ConversationLine 的 USER_SCROLL_EVENTS 同一组，再加触摸）：分帧挂载期间遇到就立刻挂完。 */
+const USER_INPUT_EVENTS = ["wheel", "pointerdown", "keydown", "touchstart"] as const;
+
 /** layer：盖在整块上的浮层容器；子代理面板驱动期间不画。 */
 function Layer({ taskId, sf, ctx }: { taskId: TaskId; sf: string; ctx: TspContext }) {
   const node = useTspNode(taskId, sf, "layer");
@@ -222,6 +237,16 @@ function SurfaceBody({
   const driving = useTspDrive(taskId)?.kind === "hub";
   const role = typeof main?.p.role === "string" ? main.p.role : undefined;
   useReveal(taskId, sf, scroller, surface, stick ?? null);
+  // 长历史还在分帧挂载时用户就动手了（滚轮 / 点按 / 按键）：把剩下的历史立刻画完，别让滚动或跳转落在还没挂载的区间上。
+  useEffect(() => {
+    const el = scroller.current;
+    if (el === null) return;
+    const flush = () => flushDeferredHistory();
+    for (const type of USER_INPUT_EVENTS) el.addEventListener(type, flush, { capture: true, passive: true });
+    return () => {
+      for (const type of USER_INPUT_EVENTS) el.removeEventListener(type, flush, { capture: true });
+    };
+  }, [scroller]);
   return (
     <TspCtx.Provider value={ctx}>
       <div
@@ -235,7 +260,7 @@ function SurfaceBody({
         <div ref={scroller} className="tsp-scroller" role="log" aria-label={t("tsp.layoutRegion")} tabIndex={0}>
           <div ref={column} className="tsp-column tsp-main" data-role={role}>
             {header}
-            <MainFlow taskId={taskId} sf={sf} ctx={ctx} />
+            <MainFlow taskId={taskId} sf={sf} ctx={ctx} progressive={mode === "inline"} />
             {tail}
             <div className="tsp-column-end" />
           </div>

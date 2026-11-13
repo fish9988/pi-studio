@@ -1104,7 +1104,18 @@ export interface ShellState {
   conversationView?: ConversationView;
   /** 新任务首页背景字符波纹特效开关（默认开启）。 */
   homeRipple?: boolean;
+  /** 界面（UI）字体风格：无衬线 / 衬线。 */
+  uiFontStyle?: FontStyle;
+  /** 界面（UI）具体字体名；空串表示使用当前风格的内置默认字体栈。 */
+  uiFontFamily?: string;
+  /** 聊天正文字体风格：无衬线 / 衬线。 */
+  chatFontStyle?: FontStyle;
+  /** 聊天正文具体字体名；空串表示使用当前风格的内置默认字体栈。 */
+  chatFontFamily?: string;
 }
+
+export type FontStyle = "sans" | "serif";
+export const fontStyles: readonly FontStyle[] = ["sans", "serif"];
 
 export type ConversationView = "chat" | "trajectory";
 export const conversationViews: readonly ConversationView[] = ["chat", "trajectory"];

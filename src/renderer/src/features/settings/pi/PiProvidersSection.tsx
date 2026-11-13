@@ -1,4 +1,5 @@
-// Pi 模型来源页（providers）：内置 Provider 与认证矩阵（auth.json / OAuth / API Key / ENV）+ 自定义 Provider（models.json）。
+// Pi 模型来源页（providers）：内置 Provider 与凭据（auth.json / OAuth / API Key / ENV）+ 自定义 Provider（models.json）。
+// 每家 provider 一行：logo、名称与来源、当前凭据状态、一个主操作（登录 / 填 Key），次要的退出登录收在行尾 ⋯（见 pi-settings.css 的 .pis-provider-row）。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PiProviderAuthStatus } from "../../../../../shared/pi-config-types.ts";
 import { External, Restart, Search } from "../../../icons.tsx";
@@ -8,6 +9,7 @@ import { reportError } from "../../../ui/errors.ts";
 import { pushToast } from "../../dialogs/toast-store.ts";
 import { CustomProviders } from "../CustomProviders.tsx";
 import { ProviderLogo } from "../ProviderLogo.tsx";
+import { RowMenu } from "../RowMenu.tsx";
 import { TerminalLoginBody } from "../TerminalLoginBody.tsx";
 import { piBridge } from "./pi-bridge.ts";
 import { usePiText } from "./pi-shared.tsx";
@@ -258,6 +260,12 @@ export function PiProvidersSection() {
     [providers],
   );
 
+  // 已连接的在前面（常用的那几家先看得见），其余保持内置顺序
+  const [connectedProviders, availableProviders] = useMemo(() => {
+    const isConfigured = (item: PiProviderAuthStatus) => item.authType !== null || item.activeEnvVar !== null;
+    return [filteredProviders.filter(isConfigured), filteredProviders.filter((item) => !isConfigured(item))];
+  }, [filteredProviders]);
+
   const openApiKeyModal = (provider: PiProviderAuthStatus) => {
     setApiKeyDraft("");
     setKeyModalProvider(provider);
@@ -339,16 +347,118 @@ export function PiProvidersSection() {
     }
   };
 
+  const renderProvider = (provider: PiProviderAuthStatus) => {
+    const isOAuth = provider.authType === "oauth";
+    const isKey = provider.authType === "api_key";
+    const isEnv = !isOAuth && !isKey && provider.activeEnvVar !== null;
+    const active = isOAuth || isKey || isEnv;
+    const tone = isOAuth ? "oauth" : isKey || isEnv ? "ok" : undefined;
+    const statusText = isOAuth
+      ? tr("已登录", "Signed in")
+      : isKey
+        ? tr("API Key 已配置", "API Key saved")
+        : isEnv
+          ? `ENV ${provider.activeEnvVar}`
+          : tr("未配置", "Not configured");
+
+    // 只有已连接的才写状态：未配置的靠分组标题（可添加）和按钮说话，不用每行重复一句“未配置”
+    const showStatus = active;
+    const subtitleParts = [
+      provider.accountHint ?? provider.envVars[0] ?? provider.id,
+      provider.modelCount > 0 ? tr(`${provider.modelCount} 模型`, `${provider.modelCount} models`) : null,
+    ].filter(Boolean);
+
+    return (
+      <div key={provider.id} className="pis-provider-row" data-testid={`pi-provider-${provider.id}`}>
+        <span className="pis-provider-logo" aria-hidden="true">
+          <ProviderLogo id={provider.id} name={provider.name} />
+        </span>
+        <div className="pis-provider-info">
+          <div className="pis-provider-title-row">
+            <span className="pis-provider-name">{provider.name}</span>
+          </div>
+          <span className="pis-provider-sub">{subtitleParts.join(" · ")}</span>
+        </div>
+
+        {showStatus && (
+          <span
+            className="pis-provider-status"
+            data-tone={tone}
+            title={isEnv ? `ENV: ${provider.activeEnvVar}` : undefined}
+            data-testid={`pi-provider-status-${provider.id}`}
+          >
+            <span className="pis-status-dot" aria-hidden="true" />
+            {statusText}
+          </span>
+        )}
+
+        <div className="pis-provider-actions">
+          {/* 一行一个主操作：OAuth 优先，只有 API Key 的 provider 直接给 Key；另一种方式收在行尾 ⋯ 里 */}
+          {provider.supportsOAuth ? (
+            <Button
+              size="sm"
+              variant={active ? "quiet" : "secondary"}
+              onClick={() => startOAuthFlow(provider)}
+              testId={`pi-provider-oauth-${provider.id}`}
+            >
+              {tr("登录", "Sign in")}
+            </Button>
+          ) : (
+            provider.acceptsApiKey && (
+              <Button
+                size="sm"
+                variant={active ? "quiet" : "secondary"}
+                onClick={() => openApiKeyModal(provider)}
+                testId={`pi-provider-key-${provider.id}`}
+              >
+                API Key
+              </Button>
+            )
+          )}
+          {(provider.authType !== null || (provider.supportsOAuth && provider.acceptsApiKey)) && (
+            <RowMenu
+              label={tr(`${provider.name} 更多操作`, `More actions for ${provider.name}`)}
+              menuOnly
+              testId={`pi-provider-more-${provider.id}`}
+              items={[
+                ...(provider.supportsOAuth && provider.acceptsApiKey
+                  ? [
+                      {
+                        id: "api-key",
+                        label: tr("改用 API Key", "Use an API key"),
+                        onSelect: () => openApiKeyModal(provider),
+                      },
+                    ]
+                  : []),
+                ...(provider.authType !== null
+                  ? [
+                      {
+                        id: "logout",
+                        label: tr("退出登录", "Sign out"),
+                        tone: "danger" as const,
+                        testId: `pi-provider-logout-${provider.id}`,
+                        onSelect: () => void handleLogout(provider),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="pis-stack" data-testid="pi-providers-section">
-      {/* 1. 内置 Provider 与认证 */}
+      {/* 1. 内置 Provider 与凭据 */}
       <section className="pis-group">
         <SectionHead
-          title={tr("内置 Provider 与认证", "Built-in providers & auth")}
+          title={tr("内置 Provider 与凭据", "Built-in providers & credentials")}
           count={`${configuredCount}/${providers.length}`}
           note={tr(
-            "凭据保存在 ~/.pi/agent/auth.json 或读取环境变量。",
-            "Credentials stored in ~/.pi/agent/auth.json or read from environment variables.",
+            "凭据存在 ~/.pi/agent/auth.json，也会读环境变量。",
+            "Credentials live in ~/.pi/agent/auth.json; environment variables are read too.",
           )}
           actions={
             <>
@@ -379,7 +489,7 @@ export function PiProvidersSection() {
         <div className="pis-provider-toolbar">
           <TextField
             size="sm"
-            width={280}
+            width="100%"
             leading={<Search size={14} />}
             value={query}
             onChange={setQuery}
@@ -389,85 +499,28 @@ export function PiProvidersSection() {
           />
         </div>
 
-        <div className="pis-provider-grid" data-testid="pi-provider-grid">
-          {filteredProviders.map((provider) => {
-            const isOAuth = provider.authType === "oauth";
-            const isKey = provider.authType === "api_key";
-            const isEnv = !isOAuth && !isKey && provider.activeEnvVar !== null;
-            const active = isOAuth || isKey || isEnv;
-            const tone = isOAuth ? "oauth" : isKey ? "key" : isEnv ? "env" : undefined;
-            const statusText = isOAuth
-              ? tr("OAuth 已登录", "OAuth signed in")
-              : isKey
-                ? tr("API Key 已配置", "API Key saved")
-                : isEnv
-                  ? `ENV: ${provider.activeEnvVar}`
-                  : tr("未配置", "Not configured");
-
-            const subtitleParts = [
-              provider.accountHint ?? provider.envVars[0] ?? provider.id,
-              provider.modelCount > 0 ? tr(`${provider.modelCount} 模型`, `${provider.modelCount} models`) : null,
-            ].filter(Boolean);
-
-            return (
-              <div
-                key={provider.id}
-                className="pis-provider-card"
-                data-active={active || undefined}
-                data-testid={`pi-provider-${provider.id}`}
-              >
-                <div className="pis-provider-head">
-                  <span className="pis-provider-logo" aria-hidden="true">
-                    <ProviderLogo id={provider.id} name={provider.name} />
-                  </span>
-                  <div className="pis-provider-info">
-                    <div className="pis-provider-title-row">
-                      <span className="pis-provider-name">{provider.name}</span>
-                    </div>
-                    <span className="pis-provider-sub">{subtitleParts.join(" · ")}</span>
+        {/* 已连接的排在前（常用的几家先看得见），其余是内置清单里还没配的 */}
+        <div className="pis-card" data-testid="pi-provider-grid">
+          {filteredProviders.length === 0 ? (
+            <p className="pis-muted pis-provider-empty">{tr("没有匹配的 Provider", "No matching providers")}</p>
+          ) : (
+            <div className="pis-provider-list">
+              {connectedProviders.length > 0 && (
+                <>
+                  <div className="pis-provider-group-label">
+                    {tr("已连接", "Connected")} · {connectedProviders.length}
                   </div>
-                </div>
-
-                <div className="pis-provider-foot">
-                  <span className="pis-status-pill" data-tone={tone}>
-                    <span className="pis-status-dot" aria-hidden="true" />
-                    {statusText}
-                  </span>
-
-                  <div className="pis-provider-actions">
-                    {provider.supportsOAuth && (
-                      <Button
-                        size="sm"
-                        onClick={() => startOAuthFlow(provider)}
-                        testId={`pi-provider-oauth-${provider.id}`}
-                      >
-                        {tr("OAuth 登录", "OAuth")}
-                      </Button>
-                    )}
-                    {provider.acceptsApiKey && (
-                      <Button
-                        size="sm"
-                        onClick={() => openApiKeyModal(provider)}
-                        testId={`pi-provider-key-${provider.id}`}
-                      >
-                        API Key
-                      </Button>
-                    )}
-                    {provider.authType !== null && (
-                      <Button
-                        size="sm"
-                        variant="quiet"
-                        onClick={() => void handleLogout(provider)}
-                        testId={`pi-provider-logout-${provider.id}`}
-                      >
-                        {tr("退出", "Sign out")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                  {connectedProviders.map(renderProvider)}
+                </>
+              )}
+              {availableProviders.length > 0 && (
+                <>
+                  <div className="pis-provider-group-label">{tr("可添加", "Available")}</div>
+                  {availableProviders.map(renderProvider)}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

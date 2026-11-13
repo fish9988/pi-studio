@@ -44,9 +44,17 @@ test("Pi 8 大设置分区与 / 斜杠命令菜单端到端验证", async () => 
       })
       .toBe("high");
 
-    // Providers 分区：内置 Provider 与凭据卡片渲染
+    // Providers 分区：内置 Provider 一行一家（搜索过滤、行内一个主操作）
     await page.getByTestId("settings-nav-providers").click();
     await expect(page.getByTestId("pi-providers-section")).toBeVisible();
+    await expect(page.getByTestId("pi-provider-grid")).toBeVisible();
+    await expect(page.getByTestId("pi-provider-openai")).toBeVisible();
+    await expect(page.getByTestId("pi-provider-openai").getByRole("button", { name: "API Key" })).toBeVisible();
+    await page.getByTestId("pi-providers-search").fill("gemini");
+    await expect(page.getByTestId("pi-provider-google")).toBeVisible();
+    await expect(page.getByTestId("pi-provider-openai")).toHaveCount(0);
+    await page.getByTestId("pi-providers-search").fill("");
+    await expect(page.getByTestId("pi-provider-openai")).toBeVisible();
 
     // Tools 分区：内置工具矩阵与 CodeMode 配置渲染
     await page.getByTestId("settings-nav-tools").click();

@@ -1,5 +1,6 @@
 // 自定义模型（设置 → 提供商与账号 → 自定义 provider）：界面和主进程共用的类型和校验。
 // 对应 omp 的 `models.yml` 里的 `providers.<id>`（omp://models.md）。纯逻辑，不引 React、DOM 或 Node。
+import { PI_THINKING_LEVEL_ORDER } from "./pi-model-capability.ts";
 import { apiKeyEnvName, isProviderKeyEnv } from "./provider-keys.ts";
 
 /** omp 的聊天传输 `api`（omp://models.md "Allowed provider/model api values" 去掉判定类和 runner 类）。 */
@@ -88,6 +89,8 @@ export const limits = {
   envName: 128,
   /** contextWindow / maxTokens 的上限（token）。omp 没有上限，这里只挡明显输错的数。 */
   tokens: 100_000_000,
+  /** `thinkingLevelMap` 里一个档位发给上游的值的长度上限。 */
+  thinkingValue: 32,
 } as const;
 
 /**
@@ -119,6 +122,12 @@ export interface FetchedModel extends CustomModelEntry {
 }
 
 /**
+ * `models.json` 里模型（或 `modelOverrides` 覆盖项）的 `thinkingLevelMap`：Pi 档位 → 发给上游的值，
+ * `null` = 明确隐藏这一档。只写需要改或要声明的档位：没写的档 `off`…`high` 用上游默认值、`xhigh`/`max` 不支持。
+ */
+export type CustomThinkingLevelMap = Record<string, string | null>;
+
+/**
  * 模型条目上的能力参数（models.yml 的 `reasoning`、`input`、`contextWindow`、`maxTokens`，omp://models.md）。
  * null = 文件里没写：omp 按模型 id 从它的内置目录补，目录里没有就用默认（不思考、只收文字、上下文 128000、输出 16384；
  * omp 18.12.6 实测）。
@@ -129,6 +138,11 @@ export interface CustomModelMeta {
   images: boolean | null;
   contextWindow: number | null;
   maxTokens: number | null;
+  /**
+   * 只有 Pi 的 `models.json` 认这一项（omp 的 models.yml 没有）：null / 缺省 = 没声明，Pi 按自己的默认判断；
+   * 空对象等同于没声明。
+   */
+  thinkingLevelMap?: CustomThinkingLevelMap | null;
 }
 
 /**
@@ -315,6 +329,40 @@ export function isValidModelName(name: string): boolean {
 
 export function isValidTokenCount(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= limits.tokens;
+}
+
+/** `thinkingLevelMap` 里一个档位的值：非空、无首尾空格、无控制字符，长度不超过 `limits.thinkingValue`。 */
+export function isValidThinkingValue(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= limits.thinkingValue &&
+    value.trim() === value &&
+    !controlPattern.test(value)
+  );
+}
+
+/**
+ * `thinkingLevelMap` 的键只能是 Pi 的七个档位（别的键 Pi 不认），值只能是上游的值字符串或 null（隐藏）。
+ * 空对象是合法的，但和没声明等价。
+ */
+export function isValidThinkingLevelMap(value: unknown): value is CustomThinkingLevelMap {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.entries(value as Record<string, unknown>).every(
+    ([level, mapped]) =>
+      (PI_THINKING_LEVEL_ORDER as readonly string[]).includes(level) &&
+      (mapped === null || isValidThinkingValue(mapped)),
+  );
+}
+
+/** 这一项有没有要写的档位（null / 空对象 = 不声明，一个档位都不写进 models.json）。 */
+export function hasThinkingLevelMap(map: CustomThinkingLevelMap | null | undefined): boolean {
+  return map !== null && map !== undefined && Object.keys(map).length > 0;
+}
+
+/** 能不能存：没声明，或者每个档位都合法（表单用同一份规则禁用保存键）。 */
+export function isThinkingLevelMapSavable(map: CustomThinkingLevelMap | null | undefined): boolean {
+  return !hasThinkingLevelMap(map) || isValidThinkingLevelMap(map);
 }
 
 /**

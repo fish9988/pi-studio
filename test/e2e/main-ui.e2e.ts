@@ -77,17 +77,17 @@ test("输入框：上面输入区、下面工具行，同一块底上没有分�
     // 模型胶囊和输入区之间至少 4px（3.0 起工具行 36 高、胶囊 28 高，上下各 4）。
     const chip = await page.getByTestId("model-chip").boundingBox();
     expect(chip && body && chip.y - (body.y + body.height)).toBeGreaterThanOrEqual(4);
-    // 主区面板无圆角，贴齐窗口右缘与底缘（边到边布局）。
+    // 主区面板采用云母壳体内悬浮圆角画布（18px 圆角，右缘与底缘留出 8px 呼吸边距）。
     const radii = await inPage<string[]>(
       page,
       '[data-testid="main-panel"]',
       "(el) => { const c = getComputedStyle(el); return [c.borderTopLeftRadius, c.borderTopRightRadius, c.borderBottomRightRadius, c.borderBottomLeftRadius]; }",
     );
-    expect(radii).toEqual(["0px", "0px", "0px", "0px"]);
+    expect(radii).toEqual(["18px", "18px", "18px", "18px"]);
     const panelBox = await page.getByTestId("main-panel").boundingBox();
     const [width, height] = await page.evaluate<number[]>("[window.innerWidth, window.innerHeight]");
-    expect(panelBox && width! - (panelBox.x + panelBox.width)).toBe(0);
-    expect(panelBox && height! - (panelBox.y + panelBox.height)).toBe(0);
+    expect(panelBox && width! - (panelBox.x + panelBox.width)).toBe(8);
+    expect(panelBox && height! - (panelBox.y + panelBox.height)).toBe(8);
   } finally {
     await cleanup();
   }

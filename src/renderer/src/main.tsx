@@ -37,6 +37,7 @@ const bootReady = Promise.race([
   Promise.allSettled([
     loadStartupSnapshot(),
     safeFontLoad(13, "--font-sans"),
+    safeFontLoad(15, "--font-serif"),
     safeFontLoad(15, "--font-display"),
     safeFontLoad(13, "--font-mono"),
   ]),

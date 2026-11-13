@@ -122,6 +122,8 @@ export interface PiModelInfo {
   provider: string;
   baseUrl?: string | undefined;
   reasoning?: boolean | undefined;
+  /** Pi 档位 → 发给上游的值；null = 这一档明确不支持。`get_available_models` 原样返回它。 */
+  thinkingLevelMap?: Record<string, string | null | undefined> | undefined;
   input?: ("text" | "image")[] | undefined;
   contextWindow?: number | undefined;
   maxTokens?: number | undefined;

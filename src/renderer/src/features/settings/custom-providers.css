@@ -135,6 +135,60 @@
   min-height: 36px;
 }
 
+/* 一个模型 = 一行各项 + 展开的思考档位：两者都用表格的同一套列（嵌套 subgrid），展开块跨满整行。 */
+.cp-model-item {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.cp-model-name {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.cp-model-name .ui-disclosure {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.cp-levels {
+  grid-column: 1 / -1;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+}
+
+.cp-levels > .ui-help {
+  margin: 0 0 var(--space-2);
+}
+
+/* 七个档位排成几列：宽的时候两列，窄的时候一列，不把它们拉成横向滚动。 */
+.cp-levels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-1) var(--space-4);
+}
+
+.cp-level {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cp-level-name {
+  font-family: var(--font-mono);
+  font-size: var(--fs-code-sm);
+  color: var(--text-3);
+}
+
+.cp-level .ui-choice {
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+
 .cp-model-row:hover {
   background: var(--bg-hover);
 }

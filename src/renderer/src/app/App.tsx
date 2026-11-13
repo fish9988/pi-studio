@@ -109,6 +109,12 @@ function focusRegion(delta: 1 | -1): void {
   regions[(at + delta + regions.length) % regions.length]?.focus();
 }
 
+function buildFontStack(customFamily: string, style: "sans" | "serif"): string {
+  const fallback = style === "serif" ? "var(--font-serif-default)" : "var(--font-sans-default)";
+  const clean = customFamily.replace(/["\\;\r\n]/g, "").trim();
+  return clean === "" ? fallback : `"${clean}", ${fallback}`;
+}
+
 export function App() {
   const t = useT();
   const locale = useLocale();
@@ -119,6 +125,16 @@ export function App() {
   const paletteOpen = usePaletteOpen();
   const draftKey = useDraftTerminalKey();
   const terminalKey = taskId ?? draftKey;
+  const uiFontStyle = useShellValue("uiFontStyle") ?? "sans";
+  const uiFontFamily = useShellValue("uiFontFamily") ?? "";
+  const chatFontStyle = useShellValue("chatFontStyle") ?? "sans";
+  const chatFontFamily = useShellValue("chatFontFamily") ?? "";
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--font-sans", buildFontStack(uiFontFamily, uiFontStyle));
+    root.style.setProperty("--font-display", buildFontStack(chatFontFamily, chatFontStyle));
+  }, [uiFontStyle, uiFontFamily, chatFontStyle, chatFontFamily]);
   // omp 连上了当前任务的浏览器（AI 开始用它）：打开面板，不抢焦点。
   useEffect(
     () =>

@@ -618,7 +618,8 @@ export function PiExtensionsSection() {
                       )}
                       <Button
                         size="sm"
-                        variant="danger"
+                        variant="quiet"
+                        className="st-quiet-danger"
                         loading={pkgBusy === pkg.source}
                         disabled={pkgBusy !== null}
                         onClick={() => void removePackage(pkg)}
@@ -1015,11 +1016,9 @@ export function PiExtensionsSection() {
         />
         <div className="pis-card">
           {visibleMcpServers.length === 0 ? (
-            <div className="pis-card-padded">
-              <p className="pis-muted">
-                {tr("当前范围尚未配置 MCP 服务器。", "No MCP servers configured in this scope.")}
-              </p>
-            </div>
+            <p className="pis-card-empty pis-muted">
+              {tr("当前范围尚未配置 MCP 服务器。", "No MCP servers configured in this scope.")}
+            </p>
           ) : (
             visibleMcpServers.map((server) => {
               const endpoint =
@@ -1121,9 +1120,9 @@ export function PiExtensionsSection() {
         />
         <div className="pis-card">
           {visiblePrompts.length === 0 ? (
-            <div className="pis-card-padded">
-              <p className="pis-muted">{tr("未发现提示词模板文件。", "No prompt templates discovered.")}</p>
-            </div>
+            <p className="pis-card-empty pis-muted">
+              {tr("未发现提示词模板文件。", "No prompt templates discovered.")}
+            </p>
           ) : (
             visiblePrompts.map((prompt) => (
               <ListRow

@@ -12,6 +12,7 @@ import {
 } from "../../../../shared/tsp/user-messages.ts";
 import { useT } from "../../i18n/use-t.ts";
 import { noteProgrammaticTop, noteSmoothScroll } from "../conversation/scroll-intent.ts";
+import { flushDeferredHistory } from "./deferred-mount.ts";
 import { useTspDerived } from "./tsp-store.ts";
 
 const NONE: readonly UserMessage[] = [];
@@ -201,7 +202,27 @@ export function ConversationLine({
     },
     [scroller, onProgrammaticScroll],
   );
-
+  // 长历史刚打开时对话列还在分帧挂载（MainFlow）：目标可能还没画出来。先把剩下的历史画完，再逐帧重试定位（最多 6 帧）。
+  const jumpRef = useRef(jump);
+  jumpRef.current = jump;
+  const goTo = useCallback(
+    (id: string) => {
+      flushDeferredHistory();
+      let attempts = 0;
+      const attempt = (): void => {
+        const el = scroller.current;
+        if (el === null) return;
+        if (card(el, id) !== null || attempts >= 6) {
+          jumpRef.current(id);
+          return;
+        }
+        attempts += 1;
+        requestAnimationFrame(attempt);
+      };
+      attempt();
+    },
+    [scroller],
+  );
   // Alt+↑ / Alt+↓ 在当前会话的用户消息刻度之间快速跳转
   useEffect(() => {
     if (messages.length < 2) return;
@@ -213,11 +234,11 @@ export function ConversationLine({
       const targetMsg = messages[nextIdx];
       if (!targetMsg) return;
       event.preventDefault();
-      jump(targetMsg.id);
+      goTo(targetMsg.id);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, jump, messages]);
+  }, [current, goTo, messages]);
 
   if (messages.length < 2) return null;
 
@@ -259,7 +280,7 @@ export function ConversationLine({
               aria-label={label}
               aria-current={index === current ? "location" : undefined}
               data-testid="conversation-line-tick"
-              onClick={() => jump(message.id)}
+              onClick={() => goTo(message.id)}
             >
               <span className="tsp-convline-text">{shortText || `#${index + 1}`}</span>
               <span className="tsp-convline-dash" aria-hidden="true" />

@@ -1,6 +1,6 @@
 // 设置 → 通用：外观（主题画廊；格子里背景图、浓度、毛玻璃、语言、字号、减少动效、选中即复制）；通知与回顾（omp 的 ask / completion / error 通知、空闲回顾 + studio 的完成提示音）；
 // 任务运行中发消息的方式（studio 的 Enter + omp 的插话/稍后处理方式，两两一行）；空闲任务多久关进程；快捷键（只读，三列；studio 的键，加转发给 omp 的键）。格子排法见 settings.css 的 .st-cells。
-import { Fragment, useEffect } from "react";
+import { Fragment, useEffect, useMemo } from "react";
 import {
   defaultFontSize,
   fontSizeSteps,
@@ -8,6 +8,7 @@ import {
   type BackdropStrength,
   type BrandStyle,
   type ColorMode,
+  type FontStyle,
   type IdleClose,
   type LocalePreference,
   type MascotCharacter,
@@ -19,16 +20,21 @@ import { useT } from "../../i18n/use-t.ts";
 import { shortcutKeys } from "../../app/platform-keys.ts";
 import {
   setBrandStyle,
+  setChatFontFamily,
+  setChatFontStyle,
   setHomeRipple,
   setMascotCharacter,
   setPreferredShell,
   setProcessRowsLayout,
+  setUiFontFamily,
+  setUiFontStyle,
   useShellValue,
 } from "../../app/shell-store.ts";
 import { setAppearanceColorMode, useAppInfo, useSettings } from "../../store/index.ts";
 import { Badge, Button, Row, SectionHead, Segmented, Switch } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
-import { Select } from "../../ui/Select.tsx";
+import { Select, type SelectOption } from "../../ui/Select.tsx";
+import { useInstalledFonts } from "./local-fonts.ts";
 import { systemReducesMotion } from "./motion-preference.ts";
 import { refreshOmpKeybindings, useOmpKeybindings } from "./omp-keybindings-store.ts";
 import { ThemeGallery } from "./ThemeGallery.tsx";
@@ -112,6 +118,30 @@ export function GeneralSection() {
     label: t(`settings.backdropStrength.${value}`),
   }));
   const fontSizeOptions = fontSizeSteps.map((size) => ({ value: `${size}` as const, label: `${size}pt` }));
+  const uiFontStyle = useShellValue("uiFontStyle") ?? "sans";
+  const uiFontFamily = useShellValue("uiFontFamily") ?? "";
+  const chatFontStyle = useShellValue("chatFontStyle") ?? "sans";
+  const chatFontFamily = useShellValue("chatFontFamily") ?? "";
+  const fontStyleOptions = (["sans", "serif"] as const).map((value) => ({
+    value,
+    label: t(`settings.fontStyle.${value}`),
+  }));
+  const { fonts: installedFonts, loading: fontsLoading, refresh: refreshFonts } = useInstalledFonts();
+  const buildFontOptions = useMemo(
+    () =>
+      (currentFamily: string): SelectOption<string>[] => {
+        const names = new Set(installedFonts);
+        if (currentFamily !== "") names.add(currentFamily);
+        const sorted = [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+        return [
+          { value: "", label: t("settings.font.default") },
+          ...sorted.map((family) => ({ value: family, label: family })),
+        ];
+      },
+    [installedFonts, t],
+  );
+  const uiFontOptions = useMemo(() => buildFontOptions(uiFontFamily), [buildFontOptions, uiFontFamily]);
+  const chatFontOptions = useMemo(() => buildFontOptions(chatFontFamily), [buildFontOptions, chatFontFamily]);
   const enterOptions = [
     { value: "steer", label: t("settings.enterBehavior.steer") },
     { value: "followUp", label: t("settings.enterBehavior.later") },
@@ -296,6 +326,63 @@ export function GeneralSection() {
               labelledBy={labelId}
               onChange={(next) => void window.studio.setFontSize(Number(next))}
               testId="setting-font-size"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.uiFontStyle")}>
+          {(labelId) => (
+            <Segmented<FontStyle>
+              size="sm"
+              value={uiFontStyle}
+              options={fontStyleOptions}
+              labelledBy={labelId}
+              onChange={(next) => setUiFontStyle(next)}
+              testId="setting-ui-font-style"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.uiFontFamily")}>
+          {(labelId) => (
+            <>
+              <Select<string>
+                size="sm"
+                width="220px"
+                value={uiFontFamily}
+                options={uiFontOptions}
+                search={t("settings.font.search")}
+                labelledBy={labelId}
+                onChange={(next) => setUiFontFamily(next)}
+                testId="setting-ui-font-family"
+              />
+              <Button size="sm" loading={fontsLoading} onClick={refreshFonts} testId="setting-font-refresh">
+                {t("settings.font.refresh")}
+              </Button>
+            </>
+          )}
+        </Row>
+        <Row label={t("settings.chatFontStyle")}>
+          {(labelId) => (
+            <Segmented<FontStyle>
+              size="sm"
+              value={chatFontStyle}
+              options={fontStyleOptions}
+              labelledBy={labelId}
+              onChange={(next) => setChatFontStyle(next)}
+              testId="setting-chat-font-style"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.chatFontFamily")}>
+          {(labelId) => (
+            <Select<string>
+              size="sm"
+              width="220px"
+              value={chatFontFamily}
+              options={chatFontOptions}
+              search={t("settings.font.search")}
+              labelledBy={labelId}
+              onChange={(next) => setChatFontFamily(next)}
+              testId="setting-chat-font-family"
             />
           )}
         </Row>

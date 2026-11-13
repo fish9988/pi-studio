@@ -4,13 +4,13 @@
 /* ───────── 设置导航（占侧栏的位置） ───────── */
 
 .snav {
-  --snav-item-h: 30px;
+  --snav-item-h: 32px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   height: 100%;
   min-height: 0;
-  padding: var(--space-2) var(--space-2) var(--space-2);
+  padding: var(--space-2);
   overflow-y: auto;
   font-size: var(--fs-sm);
   color: var(--text);
@@ -26,14 +26,20 @@
 .snav-top {
   display: grid;
   flex: none;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
 }
 
 .snav .snav-back {
   justify-content: flex-start;
   width: 100%;
   height: var(--control-h-sm);
-  padding: 0 var(--space-2);
+  padding: 0 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.snav .snav-back:hover {
+  color: var(--text);
 }
 
 .snav .snav-back .ui-hint {
@@ -47,45 +53,25 @@
 
 .snav .ui-field {
   width: 100%;
+  border-radius: var(--radius-pill);
 }
 
 .snav .ui-field input[type="search"]::-webkit-search-cancel-button {
   display: none;
 }
 
-.snav-groups {
+/* 8 节一列平铺：不再分组、不画组间分隔线（组名和线只增加噪音，8 项一屏看得完） */
+.snav-items {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-
-/* 分组：组间一条细分隔线（不是只靠留白），组名 11px 淡色小字 */
-.snav-group {
-  display: grid;
   gap: 1px;
   padding-top: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.snav-group:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.snav-group-label {
-  padding: 0 var(--space-2) var(--space-1);
-  font-size: var(--fs-2xs);
-  line-height: var(--lh-2xs);
-  font-weight: var(--fw-medium);
-  letter-spacing: 0.04em;
-  color: var(--text-3);
 }
 
 .snav-item {
-  position: relative;
   display: flex;
   flex: none;
-  gap: var(--space-2);
+  gap: var(--space-2-5);
   align-items: center;
   height: var(--snav-item-h);
   padding: 0 var(--space-2);
@@ -96,12 +82,10 @@
   text-align: left;
   cursor: default;
   background: transparent;
-  /* 透明描边给选中态的描边留位置（尺寸不变） */
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--radius-md);
   transition:
     background-color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
 
@@ -112,25 +96,26 @@
 
 .snav-item:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
+  outline-offset: -1px;
 }
 
-/* 当前节：胶囊底 + 描边 + 左侧强调色条 + 图标变色（形状与图标都在说话，不只靠颜色） */
+/* 当前节：Fluent 3px 竖条 + 强调色淡底 + 强调色图标 */
 .snav-item[aria-current="page"] {
+  position: relative;
+  padding-left: var(--space-3);
   font-weight: var(--fw-medium);
   color: var(--text);
-  background: var(--bg-active);
-  border-color: var(--border-subtle);
+  background: var(--accent-soft);
 }
-
 .snav-item[aria-current="page"]::before {
-  position: absolute;
-  inset-block: 6px;
-  inset-inline-start: 0;
-  width: 2px;
   content: "";
-  background: var(--accent);
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
   border-radius: var(--radius-pill);
+  background: var(--accent);
 }
 
 .snav-item-icon {
@@ -140,8 +125,8 @@
 }
 
 .snav-item-icon svg {
-  width: var(--icon-sm);
-  height: var(--icon-sm);
+  width: 15px;
+  height: 15px;
 }
 
 .snav-item[aria-current="page"] .snav-item-icon {
@@ -155,29 +140,26 @@
   white-space: nowrap;
 }
 
-/* 版本号：和关于页里的版本一样用等宽（2026-10-29 审计 SET-16），上边一条细分隔线 */
+/* 版本号：和关于页里的版本一样用等宽（2026-10-29 审计 SET-16），不再画分隔线，留白足够分开 */
 .snav-foot {
   flex: none;
   margin-top: auto;
-  padding: var(--space-3) 0 var(--space-1);
+  padding: var(--space-3) var(--space-2) var(--space-1);
   text-align: center;
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   color: var(--text-3);
-  border-top: 1px solid var(--border-subtle);
 }
 
-/* 侧栏不可见时内容顶上的导航：节下拉 + 搜索框，放在一条浅色条里 */
+/* 侧栏不可见时内容顶上的导航：节下拉 + 搜索框，平铺在页头下面，不再套一层底色卡片 */
 .snav-compact {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
   margin-bottom: var(--space-4);
-  padding: var(--space-2);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .snav-compact .ui-select {
@@ -210,9 +192,9 @@
   min-width: 0;
   overflow: hidden;
   padding: var(--space-2-5);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-tool);
+  background: var(--bg-app);
   color: var(--text-2);
   font: inherit;
   text-align: left;
@@ -222,13 +204,12 @@
     background-color var(--dur-fast) var(--ease-out);
 }
 .st-process-card:hover {
-  border-color: var(--border-strong);
+  border-color: var(--border);
 }
-/* 选中：强调色描边（outline，不动布局，forced-colors 下会变成系统色）+ 标签前一个勾号 */
+/* 选中：强调色描边 + 淡底 + 标签前一个勾号（不只靠颜色） */
 .st-process-card[data-active] {
   border-color: var(--accent);
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-app));
   color: var(--text);
 }
 .st-process-card[data-active] .st-process-card-label::before {
@@ -357,9 +338,9 @@
      左右内边距小一点，窄窗口（停靠、独立窗口缩到很小）里控件才有余量。 */
   --settings-pad-x: var(--space-6);
   /* 吸顶的节标题条高度：目录（.st-adv）和滚动定位都按它算偏移 */
-  --st-head-h: 56px;
+  --st-head-h: 52px;
   /* 行里标签列的统一宽度（ui/Row 读它，不在每行各写一处） */
-  --row-label-w: 160px;
+  --row-label-w: 168px;
   padding: 0 var(--settings-pad-x) var(--space-12);
   container-type: inline-size; /* 卡片网格、行、主题图框按内容宽度增减列 / 换排法 */
 }
@@ -376,7 +357,8 @@
   height: var(--st-head-h);
   margin-inline: calc(-1 * var(--settings-pad-x));
   padding-inline: var(--settings-pad-x);
-  background: var(--bg-app);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -384,6 +366,11 @@
   display: inline-flex;
   flex: none;
   color: var(--text-3);
+}
+
+.st-page-icon svg {
+  width: 15px;
+  height: 15px;
 }
 
 .settings-title {
@@ -448,16 +435,68 @@
   margin: 0 0 var(--space-2);
 }
 
-/* ────── 卡片：一组相关设置 = 一张卡；卡与卡之间 16px ────── */
+/* ────── 卡片：一组相关设置 = 一张卡（.st-cells 与 Pi 各节的 .pis-card 同一套外观）────�� */
 .settings-content :is(.st-cells, .st-kb-grid) {
-  padding: var(--space-1) var(--space-4);
+  padding: var(--space-1) var(--space-3);
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
 }
 
 .settings-content :is(.st-cells, .st-kb-grid) + :is(.st-cells, .st-kb-grid) {
   margin-top: var(--space-2);
+}
+
+/* 设置里的输入框/下拉：描边收到 --border（比全应用的 --border-strong 轻一档），
+   一屏十几个控件不会看起来像一堆黑框 */
+.settings-content .ui-field {
+  border-color: var(--border);
+}
+
+/* 控件不比它那一格宽：下拉写了固定宽（300）也不会在窄窗口里顶出卡片 */
+.settings-content .ui-row-control > * {
+  max-width: 100%;
+}
+
+/* 悬停行：淡底 + 圆角（行与行之间不再画满宽分隔线，靠间距和悬停对位） */
+.settings-content .ui-row {
+  border-radius: var(--radius-md);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.settings-content .ui-row:hover {
+  background: var(--bg-hover);
+}
+
+/* 改过的值：行尾一个安静的强调色小点（原来标签左侧一道 2px 竖线，一屏改过的行多了像一排骨牌）。
+   行里的“恢复默认”平时不占视觉：悬停这一行、键盘聚焦到行里才显出来（位置不变，不会跳）。 */
+.settings-content .ui-row[data-modified]::before {
+  position: absolute;
+  top: 50%;
+  left: calc(-1 * var(--space-3) + 2px);
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  content: "";
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+}
+
+.settings-content .ui-row > .ui-row-control + .ui-icon-btn {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.settings-content .ui-row:is(:hover, :focus-within) > .ui-row-control + .ui-icon-btn {
+  opacity: 1;
+}
+
+@media (forced-colors: active) {
+  .settings-content .ui-row > .ui-row-control + .ui-icon-btn {
+    opacity: 1;
+  }
 }
 
 /* 行：标签列宽度统一在 .settings-content 的 --row-label-w（关于页的 omp 路径、记忆卡片的项目用 .st-rows） */
@@ -483,7 +522,7 @@
    标签列统一读 --row-label-w，控件紧跟其后，改过的“恢复默认”在控件右边（没改过时那一列宽度为 0，不白占地方）。
    控件本身仍是 flex-wrap：宽分段、文本框、标签输入再宽也只在控件那一格里折行，不会撑破卡片。 */
 .st-cells .ui-row {
-  grid-template-columns: var(--row-label-w, 160px) minmax(0, max-content) auto 1fr;
+  grid-template-columns: var(--row-label-w, 168px) minmax(0, max-content) auto 1fr;
   column-gap: var(--space-3);
   padding-block: var(--space-2);
   /* 卡里不再每行一条底边：换行后上下两列的线会错开 */
@@ -548,13 +587,8 @@
 .st-wide .ui-row-control:has(> .st-tags, > .ui-field:not(.ui-number, .ui-select)) {
   flex-grow: 0;
 }
-/* 改过的值：标签左侧一道强调色竖线（在卡片里贴卡片内侧，不压住卡片描边） */
-.settings-content .st-cells .ui-row[data-modified]::before {
-  inset-block: 8px;
-  left: calc(-1 * var(--space-4) + 1px);
-}
 
-/* 7 档思考强度条：标签在上、条横跨整行（7 档等宽按钮才不会被挤成省略号） */
+/* 7 档思考强度条：标签在上、条横跨整行（7 档挤在一行会把 minimal / xhigh 截成缩略号） */
 .settings-content .ui-row:has(> .ui-row-control > .pis-thinking-bar) {
   grid-template-columns: minmax(0, 1fr);
   row-gap: var(--space-1-5);
@@ -565,21 +599,22 @@
   width: 100%;
 }
 
-/* 窄窗（停靠、独立窗口缩到最小）：标签列堆到控件上方（控件在左、恢复默认在右），不是只缩字号 */
+/* 窄窗（停靠、独立窗口缩到最小）：标签列堆到控件上方（控件在左、恢复默认在右），不是只缩字号。
+   .st-cells 与 Pi 各节的 .pis-card 里的所有行同为这一套排法 */
 @container (max-width: 560px) {
-  .st-cells .ui-row {
+  .settings-content .ui-row {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: var(--space-1-5);
     padding-block: var(--space-2-5);
   }
-  .st-cells .ui-row-label {
+  .settings-content .ui-row-label {
     grid-column: 1 / -1;
   }
-  .st-cells .ui-row-control {
+  .settings-content .ui-row-control {
     grid-column: 1;
     justify-self: start;
   }
-  .st-cells .ui-row > :last-child:not(.ui-row-control) {
+  .settings-content .ui-row > :last-child:not(.ui-row-control) {
     grid-column: 2;
   }
 }
@@ -587,10 +622,6 @@
   .st-cells,
   .st-kb-grid {
     --cols: 1;
-  }
-  /* 一列时行是上下排的，行间补一条细分隔线 */
-  .st-cells .ui-row + .ui-row {
-    border-top: 1px solid var(--border-subtle);
   }
 }
 /* 一格里要同时放下“标签列 160 + 控件”（三段以上的分段、下拉差不多 230）：格子太窄时少一列，不拆控件。

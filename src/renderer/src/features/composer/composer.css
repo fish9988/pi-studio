@@ -26,14 +26,16 @@
 .panel[data-backdrop] .composer-stack::before {
   display: none;
 }
+/* Liquid Glass 悬浮输入浮岛 */
 .composer {
   position: relative;
   container-type: inline-size;
-  padding: var(--space-1-5) var(--space-2-5) var(--space-1-5) var(--space-2-5);
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-composer);
+  padding: var(--space-2) var(--space-3) var(--space-2);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(22px) saturate(165%);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius-composer);
+  box-shadow: var(--shadow-float);
   transition:
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
@@ -47,8 +49,10 @@
   border-color: var(--border-strong);
 }
 .composer:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-strong));
-  box-shadow: var(--shadow-composer);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-rim));
+  box-shadow:
+    var(--shadow-float),
+    0 0 0 3px var(--accent-soft);
 }
 .composer[data-dragging] {
   border-color: var(--accent);
@@ -415,8 +419,9 @@ button.usage-context:hover,
   color: var(--text);
 }
 .ui-chip.chip-effort:is([data-level="high"], [data-level="xhigh"], [data-level="max"]) {
-  background: color-mix(in srgb, var(--text) 6.5%, transparent);
-  color: var(--text);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
 }
 .effort-pill-icon {
   display: inline-flex;

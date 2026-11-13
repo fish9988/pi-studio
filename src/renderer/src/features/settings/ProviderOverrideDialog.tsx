@@ -5,6 +5,8 @@
 import { useEffect, useState } from "react";
 import {
   defaultEnvName,
+  hasThinkingLevelMap,
+  isThinkingLevelMapSavable,
   parseTokenCount,
   type CustomModelMeta,
   type CustomProviderInfo,
@@ -43,6 +45,7 @@ const emptyRow = (id: string): ModelRow => ({
   images: null,
   contextWindow: "",
   maxTokens: "",
+  thinkingLevelMap: {},
 });
 
 export function ProviderOverrideDialog({ provider, onSaved, onClose }: ProviderOverrideDialogProps) {
@@ -64,6 +67,7 @@ export function ProviderOverrideDialog({ provider, onSaved, onClose }: ProviderO
       images: model.images,
       contextWindow: tokenText(model.contextWindow),
       maxTokens: tokenText(model.maxTokens),
+      thinkingLevelMap: model.thinkingLevelMap ?? {},
     })),
   );
   const [notice, setNotice] = useState<FetchNotice | null>(null);
@@ -109,7 +113,10 @@ export function ProviderOverrideDialog({ provider, onSaved, onClose }: ProviderO
 
   const checkedRows = rows.filter((row) => row.checked);
   const countsValid = checkedRows.every(
-    (row) => parseTokenCount(row.contextWindow) !== undefined && parseTokenCount(row.maxTokens) !== undefined,
+    (row) =>
+      parseTokenCount(row.contextWindow) !== undefined &&
+      parseTokenCount(row.maxTokens) !== undefined &&
+      isThinkingLevelMapSavable(row.thinkingLevelMap),
   );
   const canSave = keyComplete(mode, text, envValue, source) && countsValid && !saving;
 
@@ -130,6 +137,7 @@ export function ProviderOverrideDialog({ provider, onSaved, onClose }: ProviderO
           images: row.images,
           contextWindow: parseTokenCount(row.contextWindow) ?? null,
           maxTokens: parseTokenCount(row.maxTokens) ?? null,
+          thinkingLevelMap: hasThinkingLevelMap(row.thinkingLevelMap) ? row.thinkingLevelMap : null,
         })),
       });
       if (outcome.ok) {

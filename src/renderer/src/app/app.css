@@ -76,7 +76,7 @@ button {
   display: flex;
   align-items: stretch;
   min-width: 0;
-  background: var(--bg-app);
+  background: var(--bg-sidebar);
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -88,7 +88,7 @@ button {
   -webkit-app-region: no-drag;
 }
 
-/* 左段宽度 = 侧栏宽度，底色 --bg-sidebar + 1px 右分割线与下方 .sidebar-column 无缝拼成通天全高侧栏。 */
+/* 左段宽度 = 侧栏宽度，与外层云母底色 --bg-sidebar 无缝融合，去掉生硬分割线。 */
 .topbar-left {
   display: flex;
   flex: none;
@@ -97,8 +97,8 @@ button {
   gap: var(--space-1);
   width: var(--sidebar-current, var(--sidebar-w));
   padding: 0 var(--space-2) 0 var(--space-2-5);
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
+  background: transparent;
+  border-right: 0;
 }
 
 #app[data-sidebar="hidden"] .topbar-left,
@@ -108,7 +108,7 @@ button {
   padding-right: var(--space-1);
   background: transparent;
   border-right-color: transparent;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 0;
 }
 
 .topbar-main {
@@ -116,10 +116,12 @@ button {
   display: flex;
   flex: 1;
   align-items: center;
+  gap: var(--space-2);
   min-width: 0;
+  padding-block: 4px;
   /* 给系统三键让位：窗口宽度减去 titlebar-area 的右缘 */
-  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
-  border-bottom: 1px solid var(--border-subtle);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--space-2));
+  border-bottom: 0;
 }
 
 /* mac（<html data-platform="darwin">，App.tsx 设）：红黄绿三键在窗口左上角，不在右边。
@@ -181,7 +183,13 @@ html[data-platform="darwin"] .topbar-left {
   gap: 5px;
   align-items: center;
   min-width: 0;
-  padding: 0 var(--space-2-5);
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--glass-rim);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 4%, transparent);
   font-size: var(--fs-sm);
   white-space: nowrap;
 }
@@ -358,14 +366,20 @@ html[data-platform="darwin"] .topbar-left {
   }
 }
 
-/* 任务工具（分支、评审、终端）贴任务条右端；竖线把它们和系统三键隔开 */
+/* 任务工具（分支、评审、终端）贴任务条右端，收进 Liquid Glass 胶囊 */
 .topbar-tools {
   display: flex;
   flex: none;
   align-items: center;
   gap: var(--space-0-5);
+  height: 28px;
   margin-left: auto;
-  padding: 0 var(--space-2) 0 var(--space-2);
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--glass-rim);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
 /* 顶栏右侧归位为单个侧栏切换按钮（图2），旧的多面板独立按钮收拢为不可见节点以兼容快捷键与测试 */
@@ -397,10 +411,7 @@ html[data-platform="darwin"] .topbar-left {
 }
 
 .topbar-divider {
-  width: 1px;
-  height: var(--space-4);
-  margin-left: var(--space-1-5);
-  background: var(--border);
+  display: none;
 }
 
 /* 准备页（omp 没就绪，问接管除外）盖住顶栏以下时，顶栏只留标志：任务标题、工具、侧栏开关都作用在还不能用的应用上；
@@ -411,13 +422,19 @@ html[data-platform="darwin"] .topbar-left {
   visibility: hidden;
 }
 
-/* ───────── 侧栏列和主区无边框满幅画布（复刻 DSH 边到边布局） ───────── */
+/* ───────── 云母侧栏壳体 + 圆角悬浮主画布（Fluent 2 × M3 Expressive × Liquid Glass） ───────── */
 
 .body {
   position: relative;
   display: flex;
   min-height: 0;
-  padding: 0;
+  padding: 0 var(--space-2) var(--space-2) 0;
+  background: var(--bg-sidebar);
+}
+
+#app[data-sidebar="hidden"] .body,
+#app[data-drawer="true"] .body {
+  padding-left: var(--space-2);
 }
 
 .sidebar-peek-zone {
@@ -435,7 +452,7 @@ html[data-platform="darwin"] .topbar-left {
   min-width: 0;
   overflow: hidden;
   background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
+  border-right: 0;
   user-select: none;
   transition: transform var(--dur-slow) var(--ease-out);
 }
@@ -491,8 +508,9 @@ html[data-platform="darwin"] .topbar-left {
   /* 对话列宽 --content-w 的 cqi 以主区面板为准（tokens.css） */
   container-type: inline-size;
   background: var(--bg-app);
-  border: 0;
-  border-radius: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-1);
 }
 
 /* 主区背景图（App.tsx 挂 data-backdrop / data-backdrop-strength；docs/architecture/themes.md「主区背景图」）。
@@ -792,7 +810,10 @@ html[data-platform="darwin"] .topbar-left {
 
 .settings-win[data-mode="dock"] {
   flex: 0 1 clamp(540px, 50vw, 840px);
-  border-left: 1px solid var(--border-subtle);
+  margin-left: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-1);
 }
 
 @media (max-width: 1080px) {

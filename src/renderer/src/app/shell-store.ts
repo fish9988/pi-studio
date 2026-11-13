@@ -4,6 +4,7 @@ import {
   limits,
   type BrandStyle,
   type ConversationView,
+  type FontStyle,
   type HelperThinking,
   type HistoryOrder,
   type MascotCharacter,
@@ -38,6 +39,10 @@ const shellStore = createStore<ShellUiState>({
   preferredShell: "auto",
   conversationView: "chat",
   homeRipple: true,
+  uiFontStyle: "sans",
+  uiFontFamily: "",
+  chatFontStyle: "sans",
+  chatFontFamily: "",
   drawerOpen: false,
 });
 /** 只在有字段真的变了时写入：每次 set 都会通知所有订阅者（例如每次切任务都会调 setDrawerOpen(false)）。 */
@@ -141,6 +146,26 @@ export function setConversationView(conversationView: ConversationView): void {
 export function setHomeRipple(homeRipple: boolean): void {
   update({ homeRipple });
   persist({ homeRipple });
+}
+
+export function setUiFontStyle(uiFontStyle: FontStyle): void {
+  update({ uiFontStyle });
+  persist({ uiFontStyle });
+}
+
+export function setUiFontFamily(uiFontFamily: string): void {
+  update({ uiFontFamily });
+  persist({ uiFontFamily });
+}
+
+export function setChatFontStyle(chatFontStyle: FontStyle): void {
+  update({ chatFontStyle });
+  persist({ chatFontStyle });
+}
+
+export function setChatFontFamily(chatFontFamily: string): void {
+  update({ chatFontFamily });
+  persist({ chatFontFamily });
 }
 
 export function setDrawerOpen(drawerOpen: boolean): void {

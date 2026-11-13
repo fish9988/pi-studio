@@ -13,18 +13,23 @@ import { openReview } from "../../store/review-store.ts";
 import { currentLocale, useSettings } from "../../store/settings-store.ts";
 import { openFilePreview, openInlineArtifact, type InlineArtifact } from "../file-preview/index.ts";
 import { openChangesPanel } from "../workbench/index.ts";
+import { canDeferInitialHistory } from "../conversation/use-stick-to-bottom.ts";
 import { Clamp } from "./Clamp.tsx";
 import { formatElapsed } from "./fmt.ts";
 import { TspIcon } from "./icons.tsx";
 import type { TspContext } from "./node-props.ts";
 import { dropGroupFolds, groupFoldKey, useGroupFold } from "./process-fold.ts";
+import { ownsReadingPosition, subscribeReadingChanges } from "./reading-hold.ts";
 import { useSessionExtras } from "./session-extras-store.ts";
 import { cleanGlyphs } from "./span-tokens.ts";
+import { deferredHeadStart, DEFER_STEP_BLOCKS, registerDeferredFlush } from "./deferred-mount.ts";
 import { TspNode } from "./TspChildren.tsx";
 import { onTspDocumentDropped, peekTspNode, useTspDerived, useTspStatusNotes } from "./tsp-store.ts";
 import { useClock } from "./use-clock.ts";
 import { setNodesFolded } from "./use-fold.ts";
 const STATUS_NOTE_LINES = 2;
+
+// 长历史首次挂载时先画最近内容，再分帧补齐。恢复阅读中段的位置时仍一次挂载，避免把保存的 scrollTop 夹到尾部片段。
 
 // 任务被移除 / 登录会话换新进程：它的过程组折叠记录一起清掉，store 不跟着关过的任务越攒越大。
 onTspDocumentDropped(dropGroupFolds);
@@ -1460,21 +1465,43 @@ function ProcessGroup({
 
   // 自动折叠只在真的结束时触发：settled === true 表示这一轮已经出现正式回答，过程组真的结束了。
   // 不再看 `!running` —— 一轮之内每结束一个工具 / 一段思考 running 都会短暂为 false，那会把用户刚展开的抽屉又收回。
+  // 参考 PI-Desktop 阅读保护：结束瞬间若用户正将焦点或划词停留在正文内，暂缓收起直至其离开。
   const prevSettled = useRef(settled);
   const prevAutoTools = useRef(autoCollapseTools);
+  const deferredAutoCollapse = useRef(false);
   useEffect(() => {
     const justSettled = !prevSettled.current && settled;
     const prefChanged = prevAutoTools.current !== autoCollapseTools;
     prevSettled.current = settled;
     prevAutoTools.current = autoCollapseTools;
-    if (isTrajectory) return;
-    // 设置项实时翻转：这是用户主动下的全局指令，连手动翻过的组也一并纠正；
-    // 开「自动收起」就把子卡片一起收，关了就一起展开（内部子卡片的折叠状态也同步过来）。
-    if (prefChanged && applyFold("pref")) applyDetailsFold(!autoCollapseTools);
-    // 真的结束了：收起过程组，连带收起里面的子卡片。
-    // applyFold 只有在“用户没手动翻过”时才会真的写值，靠它的返回值守住：用户展开的抽屉不许被程序连带收起。
-    if (justSettled && autoCollapseTools && applyFold("auto-collapse")) applyDetailsFold(false);
+    if (isTrajectory) {
+      deferredAutoCollapse.current = false;
+      return;
+    }
+    if (prefChanged && applyFold("pref")) {
+      deferredAutoCollapse.current = false;
+      applyDetailsFold(!autoCollapseTools);
+    }
+    if (justSettled && autoCollapseTools) {
+      if (ownsReadingPosition(bodyRef.current)) {
+        deferredAutoCollapse.current = true;
+      } else if (applyFold("auto-collapse")) {
+        deferredAutoCollapse.current = false;
+        applyDetailsFold(false);
+      }
+    }
   }, [settled, autoCollapseTools, isTrajectory, applyFold, applyDetailsFold]);
+
+  useEffect(() => {
+    return subscribeReadingChanges(() => {
+      if (!deferredAutoCollapse.current) return;
+      if (ownsReadingPosition(bodyRef.current)) return;
+      deferredAutoCollapse.current = false;
+      if (autoCollapseTools && !isTrajectory && applyFold("auto-collapse")) {
+        applyDetailsFold(false);
+      }
+    });
+  }, [autoCollapseTools, isTrajectory, applyFold, applyDetailsFold]);
 
   useEffect(() => {
     if (effectiveFolded || isTrajectory || !stickRef.current) return;
@@ -1567,6 +1594,15 @@ function ProcessGroup({
                 stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
               }}
             >
+              {!isTrajectory && (
+                <button
+                  type="button"
+                  className="tsp-collapse-rail"
+                  title={zh ? "收起本轮工作过程" : "Collapse process"}
+                  aria-label={zh ? "收起本轮工作过程" : "Collapse process"}
+                  onClick={() => applyFold("toggle")}
+                />
+              )}
               {renderItems.map((item) =>
                 item.kind === "explore-group" ? (
                   <ExplorationGroupRow key={item.key} item={item} after={after} ctx={ctx} />
@@ -1589,11 +1625,21 @@ function ProcessGroup({
 }
 
 // memo：外层（SurfaceBody）每次重渲染都新建 header / tail 等元素，这里的 props（任务、surface、memo 过的 ctx）不变就不重建整条对话。
-export const MainFlow = memo(function MainFlow({ taskId, sf, ctx }: { taskId: TaskId; sf: string; ctx: TspContext }) {
+export const MainFlow = memo(function MainFlow({
+  taskId,
+  sf,
+  ctx,
+  progressive,
+}: {
+  taskId: TaskId;
+  sf: string;
+  ctx: TspContext;
+  /** inline 对话区才渐进挂载长历史；screen 页面短，不值得。 */
+  progressive: boolean;
+}) {
   const bySurface = useTspDerived(taskId, deriveSegmentsBySurface, sameSegmentsBySurface);
   const notes = useTspStatusNotes(taskId, sf);
-  const segments = bySurface?.get(sf);
-  if (!segments || segments.length === 0) return null;
+  const segments = bySurface?.get(sf) ?? EMPTY_SEGMENTS;
 
   // 锚点节点没了的状态行不画：下面只按 main.c 里的 id 取。
   const atStart: StatusNote[] = [];
@@ -1631,5 +1677,28 @@ export const MainFlow = memo(function MainFlow({ taskId, sf, ctx }: { taskId: Ta
       (after.get(seg.id) ?? []).forEach((note, i) => out.push(<StatusLine key={`s-${seg.id}-${i}`} note={note} />));
     }
   }
-  return <>{out}</>;
+  const hidden = useDeferredHead(`${taskId}:${sf}`, out.length, progressive && canDeferInitialHistory(taskId));
+  return <>{out.slice(hidden)}</>;
 });
+
+/** 只在首份非空历史到达时决定是否分帧；短会话后来长大也不会把已经显示的历史摘掉。 */
+function useDeferredHead(key: string, total: number, enabled: boolean): number {
+  const [state, setState] = useState({ key, decided: false, hidden: 0 });
+  if (state.key !== key || (!state.decided && total > 0)) {
+    setState({ key, decided: total > 0, hidden: deferredHeadStart(total, enabled) });
+  }
+  const hidden = state.key === key ? state.hidden : 0;
+  useEffect(() => {
+    if (hidden <= 0) return;
+    const frame = requestAnimationFrame(() =>
+      setState((current) => ({ ...current, hidden: Math.max(0, current.hidden - DEFER_STEP_BLOCKS) })),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [hidden]);
+  const deferring = hidden > 0;
+  useEffect(
+    () => (deferring ? registerDeferredFlush(() => setState((current) => ({ ...current, hidden: 0 }))) : undefined),
+    [deferring],
+  );
+  return hidden;
+}

@@ -1,7 +1,8 @@
 // 设置导航（spec §4.19，direction-3.2 §4 第 1 条）：进设置时占侧栏的位置（App.tsx 在侧栏位置渲染 SettingsNav），
-// 顶上 `‹ 返回任务  Esc`、搜索全部设置、8 节按语义分 5 组（外观 / 智能 / 能力 / 会话 / 系统，组间一条细分隔，每节一个 14px 图标）；
-// 窗口窄到侧栏变抽屉、或侧栏被收起时，导航变成内容顶上的一个下拉 + 搜索框（SettingsCompactNav，由 SettingsView 渲染）。
-// 当前节和搜索词在 ui-store（SettingsView 读同一份）。当前节 = 胶囊底 + 左侧强调色条 + aria-current="page"（不只靠颜色）。
+// 顶上 `‹ 返回任务  Esc`、搜索全部设置，下面是一列 8 节（每节一个 16px 图标，不再分 5 组加组名和分隔线：
+// 8 项一屏放得下，组名只增加噪音）；窗口窄到侧栏变抽屉、或侧栏被收起时，导航变成内容顶上的一个下拉 + 搜索框
+// （SettingsCompactNav，由 SettingsView 渲染）。当前节和搜索词在 ui-store（SettingsView 读同一份）。
+// 当前节 = 强调色淡底 + 强调色图标 + aria-current="page"（不只靠颜色）。
 import type { KeyboardEvent, ReactNode } from "react";
 import { useT } from "../../i18n/use-t.ts";
 import {
@@ -30,20 +31,20 @@ import {
 import { Button, IconButton, TextField } from "../../ui/controls.tsx";
 import { Select } from "../../ui/Select.tsx";
 
-/** 导航里的一个分组（组名只是分类标签，8 节本身仍是平级的）。 */
-type NavGroup = "appearance" | "intelligence" | "capabilities" | "session" | "system";
-
-// 按 Pi 的核心配置域排成 8 节（~/.pi/agent 与项目级 .pi 共用同一套分区），8 节分 5 组。
-const navGroups: readonly { id: NavGroup; pages: readonly SettingsPage[] }[] = [
-  { id: "appearance", pages: ["general"] },
-  { id: "intelligence", pages: ["models", "providers"] },
-  { id: "capabilities", pages: ["tools", "extensions"] },
-  { id: "session", pages: ["context"] },
-  { id: "system", pages: ["advanced", "about"] },
+// 按 Pi 的核心配置域排成 8 节（~/.pi/agent 与项目级 .pi 共用同一套分区），顺序即导航顺序。
+const navPages: readonly SettingsPage[] = [
+  "general",
+  "models",
+  "providers",
+  "tools",
+  "extensions",
+  "context",
+  "advanced",
+  "about",
 ];
 
 /** 8 节（导航顺序；紧凑导航的下拉也用它）。 */
-export const settingsPages: readonly SettingsPage[] = navGroups.flatMap((group) => group.pages);
+export const settingsPages: readonly SettingsPage[] = navPages;
 
 /** 每节一个 16 栅格 / 1.5 描边的线性图标（和 icons.tsx 里其余图标同一套）。 */
 const pageIcons: Record<SettingsPage, ReactNode> = {
@@ -154,26 +155,21 @@ export function SettingsNav() {
           <SearchBox width="100%" />
         </div>
       </div>
-      <div className="snav-groups">
-        {navGroups.map((group) => (
-          <div key={group.id} className="snav-group">
-            <div className="snav-group-label">{t(`settings.group.${group.id}`)}</div>
-            {group.pages.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className="snav-item"
-                aria-current={!searching && page === item ? "page" : undefined}
-                onClick={() => setSettingsPage(item)}
-                data-testid={`settings-nav-${item}`}
-              >
-                <span className="snav-item-icon" aria-hidden="true">
-                  {pageIcons[item]}
-                </span>
-                <span className="snav-item-text">{t(`settings.${item}`)}</span>
-              </button>
-            ))}
-          </div>
+      <div className="snav-items">
+        {settingsPages.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className="snav-item"
+            aria-current={!searching && page === item ? "page" : undefined}
+            onClick={() => setSettingsPage(item)}
+            data-testid={`settings-nav-${item}`}
+          >
+            <span className="snav-item-icon" aria-hidden="true">
+              {pageIcons[item]}
+            </span>
+            <span className="snav-item-text">{t(`settings.${item}`)}</span>
+          </button>
         ))}
       </div>
       {info !== null && (

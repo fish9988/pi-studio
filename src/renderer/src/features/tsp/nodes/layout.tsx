@@ -30,6 +30,7 @@ import { TspSpans } from "../spans.tsx";
 import { previewToLines } from "../props-util.ts";
 import { TspChildren, TspNode } from "../TspChildren.tsx";
 import { useFold } from "../use-fold.ts";
+import { ownsReadingPosition, subscribeReadingChanges } from "../reading-hold.ts";
 import {
   peekTspDocument,
   peekTspNode,
@@ -755,7 +756,24 @@ export function Section(props: NodeProps) {
   // 照 reasoning-fold.ts：思考结束（head 从 shimmer 变成 text "Thought for Ns"）后默认自动收起，点行可随时展开。
   const thoughtDone = isThinking && headNode?.k === "text";
   const collapsible = p.collapsible === true;
-  const [collapsed, toggle] = useFold(props, collapsible && (p.collapsed === true || thoughtDone));
+  const [rawCollapsed, toggle] = useFold(props, collapsible && (p.collapsed === true || thoughtDone));
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [readingHold, setReadingHold] = useState(false);
+  const prevThoughtDone = useRef(thoughtDone);
+  useEffect(() => {
+    const justFinished = isThinking && !prevThoughtDone.current && thoughtDone;
+    prevThoughtDone.current = thoughtDone;
+    if (justFinished && ownsReadingPosition(bodyRef.current)) {
+      setReadingHold(true);
+    }
+  }, [isThinking, thoughtDone]);
+  useEffect(() => {
+    if (!readingHold) return;
+    return subscribeReadingChanges(() => {
+      if (!ownsReadingPosition(bodyRef.current)) setReadingHold(false);
+    });
+  }, [readingHold]);
+  const collapsed = rawCollapsed && !readingHold;
   const bodyChildId = isThinking ? (node.c.find((cid) => cid !== headId) ?? null) : null;
   const liveBodyNode = useTspNode(
     props.ctx.taskId,
@@ -765,7 +783,6 @@ export function Section(props: NodeProps) {
   const liveChildText = typeof liveBodyNode?.p.text === "string" ? liveBodyNode.p.text : "";
   const previewLine = isThinking && collapsed ? firstThoughtLine(props, headId, thoughtLive) : null;
   const zh = currentLocale() === "zh-CN";
-  const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
 
   useEffect(() => {

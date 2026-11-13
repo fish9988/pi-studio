@@ -297,12 +297,9 @@ export function PiModelsSection() {
       {/* 2. 常用模型池 (/scoped-models · enabledModels) */}
       <section className="pis-group">
         <SectionHead
-          title={tr("常用模型池 (/scoped-models)", "Scoped models (/scoped-models)")}
+          title={tr("常用模型池", "Scoped models")}
           count={enabledModels.value.length > 0 ? enabledModels.value.length : tr("全部", "All")}
-          note={tr(
-            "Ctrl+P 轮换与 /scoped-models 的候选范围；留空表示包含全部已认证模型。",
-            "Used by Ctrl+P model cycling and /scoped-models; empty includes all available models.",
-          )}
+          note={tr("留空即包含全部已认证模型。", "Leave empty to include every authenticated model.")}
           actions={
             enabledModels.value.length > 0 ? (
               <Button size="sm" onClick={() => void enabledModels.save([])} testId="pi-scoped-clear">
@@ -496,11 +493,8 @@ export function PiModelsSection() {
       {/* 4. AI 辅助模型 (Studio) */}
       <section className="pis-group">
         <SectionHead
-          title={tr("AI 辅助模型 (Studio)", "AI helper model (Studio)")}
-          note={tr(
-            "用于会话标题智能重命名与提交说明生成。",
-            "Used for smart session titles and commit message drafts.",
-          )}
+          title={tr("AI 辅助模型", "AI helper model")}
+          note={tr("用于会话标题与提交说明生成。", "Used for session titles and commit message drafts.")}
         />
         <div className="pis-card pis-card-rows">
           <Row label={tr("新对话自动智能命名", "Auto smart title")} testId="pi-helper-rename-row">

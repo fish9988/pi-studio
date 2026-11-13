@@ -6,10 +6,12 @@ import path from "node:path";
 import { net, shell } from "electron";
 import {
   isValidEnvName,
+  isValidThinkingLevelMap,
   limits,
   type CustomKeyInput,
   type CustomModelMeta,
   type CustomProviderInput,
+  type CustomThinkingLevelMap,
   type FetchModelsOutcome,
   type ProviderOverrideInput,
 } from "../../shared/custom-models.ts";
@@ -64,7 +66,25 @@ function parseMeta(model: Record<string, unknown>): CustomModelMeta {
     images: nullable(model["images"], "model.images", parseBoolean),
     contextWindow: nullable(model["contextWindow"], "model.contextWindow", parseTokens),
     maxTokens: nullable(model["maxTokens"], "model.maxTokens", parseTokens),
+    thinkingLevelMap: parseThinkingLevelMap(model["thinkingLevelMap"]),
   };
+}
+
+/** `thinkingLevelMap`：缺省 / null = 没声明；键必须是 Pi 的档位，值必须是字符串或 null（隐藏）。 */
+function parseThinkingLevelMap(value: unknown): CustomThinkingLevelMap | null {
+  if (value === undefined || value === null) return null;
+  const record = parseRecord(value, "model.thinkingLevelMap");
+  const out: CustomThinkingLevelMap = {};
+  for (const [level, mapped] of Object.entries(record)) {
+    if (mapped === null) {
+      out[level] = null;
+      continue;
+    }
+    // 值的合法性（长度、控制字符、首尾空格、档位名）由主进程的 isMetaValid 统一判，这里只卡形状。
+    out[level] = parseString(mapped, `model.thinkingLevelMap.${level}`, limits.thinkingValue, { allowEmpty: true });
+  }
+  if (!isValidThinkingLevelMap(out)) throw new IpcValidationError("model.thinkingLevelMap 不合法");
+  return Object.keys(out).length === 0 ? null : out;
 }
 
 function parseTokens(value: unknown, name: string): number {

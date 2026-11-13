@@ -78,6 +78,15 @@ export const custom = {
   "form.meta.yes": "Yes",
   "form.meta.no": "No",
   "form.meta.cell": "{column}: {model}",
+  "form.meta.levels": "Thinking levels",
+  "form.meta.levels.count": "Thinking levels · {count}",
+  "form.meta.levels.help":
+    "Only write the levels you want to change: blank means undeclared (off…high use the provider default, xhigh / max stay unsupported); a value is what gets sent for that level.",
+  "form.meta.levels.unset": "Undeclared",
+  "form.meta.levels.unset.extra": "Undeclared · unsupported",
+  "form.meta.levels.hidden": "Hide",
+  "form.meta.levels.hide": "{level} level: {model}",
+  "form.meta.levels.cell": "Value sent for the {level} level: {model}",
   "form.title.add": "Add a custom provider",
   "form.discovery": "Discover models automatically",
   "form.discovery.unsupported": "This API type has no general way to discover models; add them by hand.",
@@ -99,7 +108,7 @@ export const custom = {
   "err.invalid-key":
     "The key isn't valid: it can't be empty, can't contain line breaks, and can't start with ! (omp's “key from command” syntax).",
   "err.invalid-models":
-    "Model ids can't be empty, duplicated, or have leading/trailing spaces or control characters; context window and max output must be whole numbers above 0.",
+    "Model ids can't be empty, duplicated, or have leading/trailing spaces or control characters; context window and max output must be whole numbers above 0; thinking levels must be off…max, with non-empty values and no leading/trailing spaces.",
   "err.needs-model": "Add at least one model, or turn on “Discover models automatically”.",
   "err.exists": "A provider with this ID already exists.",
   "err.not-found": "models.yml no longer has this provider; it may have been changed in the terminal.",

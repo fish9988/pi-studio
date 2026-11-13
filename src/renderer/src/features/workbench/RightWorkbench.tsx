@@ -267,45 +267,53 @@ function DshStartView({
 
         <section className="dsh-ov-section" aria-label={isZh ? "快捷导航" : "Quick navigation"}>
           <div className="dsh-ov-section-head">{isZh ? "工作台视图" : "Workbench"}</div>
-          <div className="dsh-ov-nav-list">
+          <div className="dsh-ov-tile-grid">
             {taskId !== null && (
               <button
                 type="button"
-                className="dsh-ov-nav-row"
+                className="dsh-ov-tile"
                 data-testid="dsh-start-changes"
                 onClick={() => {
                   openChangesPanel(taskId);
                   openDshToolTab(panelKey, "changes", { replaceTabId: tabId });
                 }}
               >
-                <span className="dsh-ov-nav-ic">
-                  <Diff size={14} />
-                </span>
-                <span className="dsh-ov-nav-label">{isZh ? "Review（代码变更）" : "Review (Changes)"}</span>
-                {reviewBadgeCount > 0 && <span className="dsh-ov-badge">{reviewBadgeCount}</span>}
-                <span className="dsh-ov-nav-kbd">{shortcutLabel("Ctrl Shift D")}</span>
+                <div className="dsh-ov-tile-top">
+                  <span className="dsh-ov-tile-ic is-accent">
+                    <Diff size={14} />
+                  </span>
+                  <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl Shift D")}</span>
+                </div>
+                <div className="dsh-ov-tile-foot">
+                  <span className="dsh-ov-tile-title">{isZh ? "Review · 变更" : "Review"}</span>
+                  {reviewBadgeCount > 0 && <span className="dsh-ov-badge">{reviewBadgeCount}</span>}
+                </div>
               </button>
             )}
 
             <button
               type="button"
-              className="dsh-ov-nav-row"
+              className="dsh-ov-tile"
               data-testid="dsh-start-files"
               onClick={() => {
                 openFilesPanel(panelKey);
                 openDshToolTab(panelKey, "files", { replaceTabId: tabId });
               }}
             >
-              <span className="dsh-ov-nav-ic">
-                <Folder size={14} />
-              </span>
-              <span className="dsh-ov-nav-label">{isZh ? "Files（工作区文件）" : "Files (Workspace)"}</span>
-              <span className="dsh-ov-nav-kbd">{shortcutLabel("Ctrl Shift E")}</span>
+              <div className="dsh-ov-tile-top">
+                <span className="dsh-ov-tile-ic is-sky">
+                  <Folder size={14} />
+                </span>
+                <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl Shift E")}</span>
+              </div>
+              <div className="dsh-ov-tile-foot">
+                <span className="dsh-ov-tile-title">{isZh ? "Files · 文件" : "Files"}</span>
+              </div>
             </button>
 
             <button
               type="button"
-              className="dsh-ov-nav-row"
+              className="dsh-ov-tile"
               data-testid="dsh-start-terminal"
               onClick={() => {
                 const created = openDshToolTab(panelKey, "terminal", {
@@ -317,51 +325,62 @@ function DshStartView({
                 }
               }}
             >
-              <span className="dsh-ov-nav-ic">
-                <Terminal size={14} />
-              </span>
-              <span className="dsh-ov-nav-label">{isZh ? "Terminal（内置终端）" : "Terminal"}</span>
-              <span className="dsh-ov-nav-kbd">{shortcutLabel("Ctrl `")}</span>
+              <div className="dsh-ov-tile-top">
+                <span className="dsh-ov-tile-ic is-mint">
+                  <Terminal size={14} />
+                </span>
+                <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl `")}</span>
+              </div>
+              <div className="dsh-ov-tile-foot">
+                <span className="dsh-ov-tile-title">{isZh ? "Terminal · 终端" : "Terminal"}</span>
+              </div>
             </button>
 
             {taskId !== null && (
               <button
                 type="button"
-                className="dsh-ov-nav-row"
+                className="dsh-ov-tile"
                 data-testid="dsh-start-browser"
                 onClick={() => {
                   openBrowserPanel(taskId, true);
                   openDshToolTab(panelKey, "browser", { replaceTabId: tabId });
                 }}
               >
-                <span className="dsh-ov-nav-ic">
-                  <Globe size={14} />
-                </span>
-                <span className="dsh-ov-nav-label">{isZh ? "Browser（内置浏览器）" : "Browser"}</span>
-                <span className="dsh-ov-nav-kbd">{shortcutLabel("Ctrl Shift B")}</span>
+                <div className="dsh-ov-tile-top">
+                  <span className="dsh-ov-tile-ic is-violet">
+                    <Globe size={14} />
+                  </span>
+                  <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl Shift B")}</span>
+                </div>
+                <div className="dsh-ov-tile-foot">
+                  <span className="dsh-ov-tile-title">{isZh ? "Browser · 浏览" : "Browser"}</span>
+                </div>
               </button>
             )}
-
-            <button
-              type="button"
-              className="dsh-ov-nav-row"
-              data-testid="dsh-start-extensions"
-              onClick={() => {
-                openDshToolTab(panelKey, "extensions", { replaceTabId: tabId });
-              }}
-            >
-              <span className="dsh-ov-nav-ic">
-                <Puzzle size={14} />
-              </span>
-              <span className="dsh-ov-nav-label">{isZh ? "Extensions（插件与 Skill）" : "Extensions & Skills"}</span>
-              <ChevronRight size={13} className="dsh-ov-nav-arrow" />
-            </button>
           </div>
+
+          <button
+            type="button"
+            className="dsh-ov-tile-wide"
+            data-testid="dsh-start-extensions"
+            onClick={() => {
+              openDshToolTab(panelKey, "extensions", { replaceTabId: tabId });
+            }}
+          >
+            <span className="dsh-ov-tile-ic is-violet">
+              <Puzzle size={14} />
+            </span>
+            <span className="dsh-ov-nav-label">{isZh ? "Extensions（插件与 Skill）" : "Extensions & Skills"}</span>
+            <ChevronRight size={13} className="dsh-ov-nav-arrow" />
+          </button>
         </section>
 
         {taskId !== null && (
           <>
-            <section className="dsh-ov-section" aria-label={isZh ? "本轮涉及文件" : "Artifacts & Touched Files"}>
+            <section
+              className="dsh-ov-section dsh-ov-card"
+              aria-label={isZh ? "本轮涉及文件" : "Artifacts & Touched Files"}
+            >
               <div className="dsh-ov-section-head">
                 <span>{isZh ? "Artifacts / 本轮涉及文件" : "Artifacts / Touched Files"}</span>
                 {sessionFiles.length > 0 && <span className="dsh-ov-head-count">{sessionFiles.length}</span>}
@@ -398,7 +417,7 @@ function DshStartView({
               )}
             </section>
 
-            <section className="dsh-ov-section" aria-label="Subagents">
+            <section className="dsh-ov-section dsh-ov-card" aria-label="Subagents">
               <div className="dsh-ov-section-head">
                 <span>Subagents</span>
                 {agents.length > 0 && (
@@ -440,7 +459,7 @@ function DshStartView({
           </>
         )}
 
-        <section className="dsh-ov-section" aria-label="Background Tasks">
+        <section className="dsh-ov-section dsh-ov-card" aria-label="Background Tasks">
           <div className="dsh-ov-section-head">
             <span>Background Tasks</span>
             {(terminalTabs.length > 0 || isRunningTask) && (

@@ -1,12 +1,19 @@
 // 自定义提供商对话框里的"模型"一栏：工具栏（全选方框、一键拉取、自动发现开关）、勾选、筛选、手动添加；勾选的模型在同一行选对话 / 生图，
-// 对话模型再设思考、图片输入、上下文窗口、最大输出（models.yml 模型条目或 `modelOverrides` 覆盖项的 reasoning / input / contextWindow /
-// maxTokens）。状态（rows、提示）由对话框持有。覆盖内置 provider 的对话框不传 fetch / discovery / image，工具栏里没有前两项，表里没有类型列。
+// 对话模型再设思考、图片输入、上下文窗口、最大输出（Pi 的 models.json 模型条目或 `modelOverrides` 覆盖项的 reasoning / input /
+// contextWindow / maxTokens）。每个对话模型还能展开写 `thinkingLevelMap`（Pi 的七个思考档位，ModelThinkingLevels）。
+// 状态（rows、提示）由对话框持有。覆盖内置 provider 的对话框不传 fetch / discovery / image，工具栏里没有前两项，表里没有类型列。
 import { useMemo, useState } from "react";
-import { parseTokenCount, type CustomModelMeta } from "../../../../shared/custom-models.ts";
+import {
+  hasThinkingLevelMap,
+  parseTokenCount,
+  type CustomModelMeta,
+  type CustomThinkingLevelMap,
+} from "../../../../shared/custom-models.ts";
 import { useT } from "../../i18n/use-t.ts";
-import { Button, Checkbox, Notice, NumberField, Switch, TextField } from "../../ui/controls.tsx";
+import { Button, Checkbox, Disclosure, Notice, NumberField, Switch, TextField } from "../../ui/controls.tsx";
 import { Select } from "../../ui/Select.tsx";
 import { formatCount } from "../composer/usage-format.ts";
+import { ModelThinkingLevels } from "./ModelThinkingLevels.tsx";
 
 export interface ModelRow {
   id: string;
@@ -19,17 +26,20 @@ export interface ModelRow {
   /** 输入框里的原文（可以写 272k、1m）；保存时用 parseTokenCount 换成数。空 = 自动。 */
   contextWindow: string;
   maxTokens: string;
+  /** 只有写了的那几个档位（`thinkingLevelMap`）；空对象 = 不声明，Pi 按自己的默认判断。 */
+  thinkingLevelMap: CustomThinkingLevelMap;
   /** 生图模型（models.yml 里 `api: openai-images` / `kind: image`）：没有对话的四项参数。undefined = 新加的、类型还没定。 */
   image?: boolean;
 }
 
-/** 改成生图时清掉对话的四项：生图模型用不上，留着会照样写进 models.yml。 */
+/** 改成生图时清掉对话五项：生图模型用不上，留着会照样写进 models.json。 */
 export const imageRowPatch = {
   image: true,
   reasoning: null,
   images: null,
   contextWindow: "",
   maxTokens: "",
+  thinkingLevelMap: {},
 } satisfies Partial<ModelRow>;
 
 export interface FetchNotice {
@@ -71,6 +81,10 @@ export function CustomModelList({
   const t = useT();
   const [filter, setFilter] = useState("");
   const [manual, setManual] = useState("");
+  /** 展开了思考档位的那几个模型（默认收起：只有需要声明档位的模型才展开）。 */
+  const [openLevels, setOpenLevels] = useState<readonly string[]>([]);
+  const toggleLevels = (id: string) =>
+    setOpenLevels((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
 
   const selectedCount = rows.filter((row) => row.checked).length;
   const visibleRows = useMemo(() => {
@@ -93,7 +107,15 @@ export function CustomModelList({
     onNotice(null);
     onRows((current) => [
       ...current,
-      { id: modelId, checked: true, reasoning: null, images: null, contextWindow: "", maxTokens: "" },
+      {
+        id: modelId,
+        checked: true,
+        reasoning: null,
+        images: null,
+        contextWindow: "",
+        maxTokens: "",
+        thinkingLevelMap: {},
+      },
     ]);
   };
 
@@ -225,26 +247,52 @@ export function CustomModelList({
           </div>
           {visibleRows.map((row) => {
             const hint = row.checked ? hintOf(row.id) : null;
+            const levelsShown = hint !== null && row.image !== true;
+            const open = levelsShown && openLevels.includes(row.id);
             return (
-              <div key={row.id} className="cp-model-row" data-checked={row.checked || undefined}>
-                <Checkbox
-                  checked={row.checked}
-                  testId={`custom-model-${row.id}`}
-                  onChange={(next) => update(row.id, { checked: next })}
-                >
-                  <span className="cp-model-id" title={row.id}>
-                    {row.id}
-                  </span>
-                </Checkbox>
-                {hint !== null && image !== undefined && kindCell(row, image.supported)}
-                {hint !== null && row.image !== true && (
-                  <>
-                    {flagCell(row, "reasoning", hint.reasoning)}
-                    {flagCell(row, "images", hint.images)}
-                    {countCell(row, "contextWindow", hint.contextWindow)}
-                    {countCell(row, "maxTokens", hint.maxTokens)}
-                  </>
-                )}
+              <div key={row.id} className="cp-model-item" data-checked={row.checked || undefined}>
+                <div className="cp-model-row">
+                  <div className="cp-model-name">
+                    <Checkbox
+                      checked={row.checked}
+                      testId={`custom-model-${row.id}`}
+                      onChange={(next) => update(row.id, { checked: next })}
+                    >
+                      <span className="cp-model-id" title={row.id}>
+                        {row.id}
+                      </span>
+                    </Checkbox>
+                    {levelsShown && (
+                      <Disclosure
+                        expanded={open}
+                        onToggle={() => toggleLevels(row.id)}
+                        testId={`custom-model-levels-${row.id}`}
+                      >
+                        {hasThinkingLevelMap(row.thinkingLevelMap)
+                          ? t("custom.form.meta.levels.count", {
+                              count: Object.keys(row.thinkingLevelMap).length,
+                            })
+                          : t("custom.form.meta.levels")}
+                      </Disclosure>
+                    )}
+                  </div>
+                  {hint !== null && image !== undefined && kindCell(row, image.supported)}
+                  {hint !== null && row.image !== true && (
+                    <>
+                      {flagCell(row, "reasoning", hint.reasoning)}
+                      {flagCell(row, "images", hint.images)}
+                      {countCell(row, "contextWindow", hint.contextWindow)}
+                      {countCell(row, "maxTokens", hint.maxTokens)}
+                    </>
+                  )}
+                  {open && (
+                    <ModelThinkingLevels
+                      modelId={row.id}
+                      value={row.thinkingLevelMap}
+                      onChange={(next) => update(row.id, { thinkingLevelMap: next })}
+                    />
+                  )}
+                </div>
               </div>
             );
           })}

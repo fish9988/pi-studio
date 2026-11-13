@@ -11,6 +11,8 @@ import {
   isValidModelId,
   isValidModelName,
   isValidProviderId,
+  isValidThinkingLevelMap,
+  isValidThinkingValue,
   isValidTokenCount,
   limits,
   normalizeBaseUrl,
@@ -22,10 +24,12 @@ import {
   type CustomModelsOutcome,
   type CustomProviderInfo,
   type CustomProviderInput,
+  type CustomThinkingLevelMap,
   type EnvSource,
   type ProviderOverrideInput,
 } from "../../shared/custom-models.ts";
 import type { LoginProvider, LogoutAccount } from "../../shared/omp-wire/rpc-wire.generated.ts";
+import { PI_THINKING_LEVEL_ORDER } from "../../shared/pi-model-capability.ts";
 import type { PiProviderAuthStatus } from "../../shared/pi-config-types.ts";
 import { findPiBuiltinProvider, PI_BUILTIN_PROVIDERS } from "../../shared/pi-settings-schema.ts";
 import { keyEnvProviderIds, providerKeyEnv, type ProviderKeyEnv } from "../../shared/provider-keys.ts";
@@ -425,8 +429,33 @@ function metaOf(entry: Record<string, unknown>): CustomModelMeta {
     images: Array.isArray(input) ? input.includes("image") : null,
     contextWindow: isValidTokenCount(contextWindow) ? contextWindow : null,
     maxTokens: isValidTokenCount(maxTokens) ? maxTokens : null,
+    thinkingLevelMap: thinkingMapOf(entry),
   };
 }
+
+/**
+ * `models.json` 里的 `thinkingLevelMap` → 界面表示。null = 没声明，或者文件里的写法认不出（不认识的档位 / 不是字符串也不是 null）：
+ * 认不出的写法原样保留，不拿界面上的空值覆盖（`applyThinkingMapToObj`）。键按 Pi 的档位顺序排，写回去才是稳定的。
+ */
+function thinkingMapOf(entry: Record<string, unknown>): CustomThinkingLevelMap | null {
+  const raw = entry["thinkingLevelMap"];
+  if (!isRecord(raw)) return null;
+  const out: CustomThinkingLevelMap = {};
+  for (const level of PI_THINKING_LEVEL_ORDER) {
+    const mapped = raw[level];
+    if (mapped === null) out[level] = null;
+    else if (isValidThinkingValue(mapped)) out[level] = mapped;
+    else if (mapped !== undefined) return null;
+  }
+  if (Object.keys(out).length !== Object.keys(raw).length) return null;
+  return Object.keys(out).length === 0 ? null : out;
+}
+
+const sameThinkingMap = (a: CustomThinkingLevelMap | null, b: CustomThinkingLevelMap | null): boolean => {
+  if (a === null || b === null) return a === b;
+  const levels = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...levels].every((level) => a[level] === b[level]);
+};
 
 function isImageModel(entry: Record<string, unknown>): boolean {
   return entry["api"] === "openai-images" || entry["kind"] === "image" || entry["type"] === "image";
@@ -446,7 +475,11 @@ function modelEntries(value: unknown): CustomProviderInfo["models"] {
 }
 
 const hasMeta = (meta: CustomModelMeta): boolean =>
-  meta.reasoning !== null || meta.images !== null || meta.contextWindow !== null || meta.maxTokens !== null;
+  meta.reasoning !== null ||
+  meta.images !== null ||
+  meta.contextWindow !== null ||
+  meta.maxTokens !== null ||
+  (meta.thinkingLevelMap ?? null) !== null;
 
 function overrideEntries(value: unknown): ({ id: string } & CustomModelMeta)[] {
   if (!isRecord(value)) return [];
@@ -519,7 +552,14 @@ export function piProviderKeyValue(text: string | null, providerId: string): str
 function isMetaValid(meta: CustomModelMeta): boolean {
   const flag = (v: unknown) => v === null || typeof v === "boolean";
   const count = (v: unknown) => v === null || isValidTokenCount(v);
-  return flag(meta.reasoning) && flag(meta.images) && count(meta.contextWindow) && count(meta.maxTokens);
+  const map = meta.thinkingLevelMap;
+  return (
+    flag(meta.reasoning) &&
+    flag(meta.images) &&
+    count(meta.contextWindow) &&
+    count(meta.maxTokens) &&
+    (map === undefined || map === null || isValidThinkingLevelMap(map))
+  );
 }
 
 function isValidEnvKey(key: { name: string; value?: string }): boolean {
@@ -573,6 +613,23 @@ function applyMetaToObj(node: Record<string, unknown>, meta: CustomModelMeta): v
   }
   if (meta.contextWindow !== current.contextWindow) put("contextWindow", meta.contextWindow);
   if (meta.maxTokens !== current.maxTokens) put("maxTokens", meta.maxTokens);
+  applyThinkingMapToObj(node, meta.thinkingLevelMap ?? null, current.thinkingLevelMap ?? null);
+}
+
+/**
+ * 只在这一项真的有变化时改写：界面没声明（null）时删掉整个字段（连同 Pi 档位之外的键也不会被顺手抹掉）。
+ * 文件里有这个字段但读不出（`current === null`）时整项原样保留；空对象 `{}` 和没声明等价，不挡写入。
+ */
+function applyThinkingMapToObj(
+  node: Record<string, unknown>,
+  desired: CustomThinkingLevelMap | null,
+  current: CustomThinkingLevelMap | null,
+): void {
+  const raw = node["thinkingLevelMap"];
+  if (current === null && isRecord(raw) && Object.keys(raw).length > 0) return;
+  if (sameThinkingMap(current, desired)) return;
+  if (desired === null || Object.keys(desired).length === 0) delete node["thinkingLevelMap"];
+  else node["thinkingLevelMap"] = { ...desired };
 }
 
 function applyModelsToObj(provider: Record<string, unknown>, input: CustomProviderInput): CustomModelsErrorCode | null {
@@ -715,6 +772,7 @@ export function applyPiOverride(text: string | null, id: string, input: Provider
     images: null,
     contextWindow: null,
     maxTokens: null,
+    thinkingLevelMap: null,
   };
 
   for (const [modelId, current] of Object.entries(overrides)) {

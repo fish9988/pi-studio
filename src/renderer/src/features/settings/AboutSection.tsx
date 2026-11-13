@@ -21,10 +21,11 @@ export function AboutSection() {
   return (
     <>
       <SectionHead title={t("settings.about.versions")} />
-      <div className="st-cells">
+      {/* 版本 + CLI 状态在同一张卡里（不再一个卡里再套一个带边框的小卡） */}
+      <div className="st-cells" data-testid="about-versions">
         <StudioUpdate />
+        <PiCliCard />
       </div>
-      <PiCliCard />
       <Changelog />
       <SectionHead title={t("settings.about.troubleshoot")} />
       <TroubleshootCard />

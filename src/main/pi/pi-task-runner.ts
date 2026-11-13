@@ -103,6 +103,51 @@ const STDERR_LINES_IN_ERROR = 8;
 /** `compaction.reserveTokens` 的 schema 默认值：全局、项目级与模型覆盖都没配时用它。 */
 const DEFAULT_COMPACTION_RESERVE_TOKENS = 16_384;
 
+const modelKeyOf = (model: ModelOption): string => `${model.key.provider}/${model.key.modelId}`;
+
+/** 一个模型的身份 + 能力：档位（`thinkingLevelMap` 推出来的）或上下文变了，也算目录变了。 */
+function modelSignature(model: ModelOption): string {
+  return [
+    modelKeyOf(model),
+    model.reasoning ? "reasoning" : "plain",
+    (model.thinkingEfforts ?? []).join(","),
+    model.contextWindow ?? "",
+    model.maxTokens ?? "",
+  ].join("|");
+}
+
+/** 整份目录的指纹（按签名排序，和顺序无关）。 */
+export function catalogSignature(models: readonly ModelOption[]): string {
+  return models.map(modelSignature).sort().join("\n");
+}
+
+/** 服务进程（现读 models.json）的目录里，每个模型及其能力活进程都有：这个进程的模型快照还够新。 */
+export function catalogCovers(processCatalog: readonly ModelOption[], freshCatalog: readonly ModelOption[]): boolean {
+  const known = new Set(processCatalog.map(modelSignature));
+  return freshCatalog.every((model) => known.has(modelSignature(model)));
+}
+
+/**
+ * 进程还忙、不能重开时的选择器列表：现读的目录在前（新的 provider / 模型能看见、能力也对），
+ * 活进程多出来的（比如 llama.cpp 按需加载的）接在后面。同一个 key 只留一份。
+ */
+export function mergeModelCatalogs(
+  processCatalog: readonly ModelOption[],
+  freshCatalog: readonly ModelOption[],
+): ModelOption[] {
+  const merged = [...freshCatalog];
+  const keys = new Set(freshCatalog.map(modelKeyOf));
+  for (const model of processCatalog) {
+    if (!keys.has(modelKeyOf(model))) merged.push(model);
+  }
+  return merged;
+}
+
+/** Pi 的 `set_model` 在进程的模型表里找不到这个模型时回的错（`Model not found: provider/id`）。 */
+function isUnknownModelError(error: unknown): boolean {
+  return error instanceof Error && /model not found/i.test(error.message);
+}
+
 function nonNegativeNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
@@ -204,6 +249,8 @@ export class PiTaskRunner {
   /** readContext 时刷新的合并后预留 token 数（全局 → 项目级 → 当前模型覆盖）；null = 还没算过。 */
   #compactionReserveTokens: number | null = null;
   #catalog: ModelOption[] = [];
+  /** 为了哪份目录指纹重开过进程：同一份目录重开后还差（例如按需发现的模型）就不再反复重开。 */
+  #restartedCatalog: string | null = null;
   #newTaskDefault: { model: ModelOption | null; thinkingLevel: ThinkingLevel | null } = {
     model: null,
     thinkingLevel: null,
@@ -788,28 +835,80 @@ export class PiTaskRunner {
 
   // ───────── Models, Thinking, Context & Slash Commands ─────────
 
+  /**
+   * 这个任务的模型选择器列表。Pi 进程只在启动时读一次 `models.json`（`ModelRuntime.create` → `ModelConfig.load`），
+   * `get_available_models` 是那一刻的快照：新增了 provider / 模型（或者给模型补了 xhigh/max 的 thinkingLevelMap）之后，
+   * 还跑着的旧会话只能看到旧目录。这里拿服务进程现读的目录比一下，空闲就把进程重开（同一个会话文件）。
+   */
   async listModels(): Promise<ModelOption[]> {
     const client = this.#client;
-    if (client !== null && client.alive) {
+    if (client === null || !client.alive) return this.#refreshCatalog(true);
+
+    const processCatalog = await this.#readProcessCatalog(client);
+    if (processCatalog === null) return this.#refreshCatalog(true);
+
+    // 先拿启动缓存里的目录比（指纹没变就不起服务进程）；缓存没盯上变化时（刚改完 models.json）再现读。
+    const cached = await this.#refreshCatalog(false);
+    if (cached.length > 0 && catalogCovers(processCatalog, cached)) {
+      this.#catalog = processCatalog;
+      return processCatalog;
+    }
+
+    const fresh = await this.#refreshCatalog(true);
+    if (fresh.length === 0 || catalogCovers(processCatalog, fresh)) {
+      this.#catalog = processCatalog;
+      return processCatalog;
+    }
+
+    const signature = catalogSignature(fresh);
+    if (this.restartable && this.#restartedCatalog !== signature) {
       try {
-        const { models } = await client.getAvailableModels();
-        this.#catalog = models.map((m) => toModelOption(m));
-        return this.#catalog;
+        await this.restart();
+        this.#restartedCatalog = signature;
+        const restarted = this.#client;
+        const reloaded = restarted !== null && restarted.alive ? await this.#readProcessCatalog(restarted) : null;
+        if (reloaded !== null) {
+          this.#catalog = mergeModelCatalogs(reloaded, fresh);
+          return this.#catalog;
+        }
       } catch (error) {
-        log.warn(`task ${this.id} get_available_models failed`, { message: errorMessage(error) });
+        log.warn(`task ${this.id} restart to pick up new models failed`, { message: errorMessage(error) });
       }
     }
-    return this.#refreshCatalog(true);
+
+    // 还在跑（不能重开），或者同一份目录重开过一次还是差：先把现读的目录显示出来，选新模型时会再重开一次。
+    this.#catalog = mergeModelCatalogs(processCatalog, fresh);
+    return this.#catalog;
+  }
+
+  async #readProcessCatalog(client: PiRpcClient): Promise<ModelOption[] | null> {
+    try {
+      const { models } = await client.getAvailableModels();
+      return models.map((m) => toModelOption(m));
+    } catch (error) {
+      log.warn(`task ${this.id} get_available_models failed`, { message: errorMessage(error) });
+      return null;
+    }
   }
 
   async setModel(key: ModelKey): Promise<void> {
     await this.start();
-    const client = this.#requireClient();
-    const updated = await client.setModel(key.provider, key.modelId);
+    let client = this.#requireClient();
+    let updated;
+    try {
+      updated = await client.setModel(key.provider, key.modelId);
+    } catch (error) {
+      // 进程启动后才加的模型：Pi 的模型表是启动时读的，set_model 会说 Model not found。
+      // 空闲时重开进程（同一个会话文件）再设一次；正在跑时不动进程（会让当前回复失败）。
+      if (!isUnknownModelError(error) || !this.restartable) throw error;
+      await this.restart();
+      client = this.#requireClient();
+      updated = await client.setModel(key.provider, key.modelId);
+    }
     const { levels } = await client.getAvailableThinkingLevels();
     const efforts = extractEfforts(levels);
     this.#model = toModelOption(updated, efforts);
-    this.#thinkingLevels = toThinkingLevelsList(levels, updated.reasoning === true);
+    this.#thinkingLevels = toThinkingLevelsList(levels, updated);
     this.#record = await this.#host.persist(this.id, { model: key });
     await this.#syncStats(client);
     this.#publish();
@@ -1721,7 +1820,7 @@ export class PiTaskRunner {
       if (state.model !== undefined) {
         this.#model = toModelOption(state.model, efforts);
       }
-      this.#thinkingLevels = toThinkingLevelsList(levels, state.model?.reasoning === true);
+      this.#thinkingLevels = toThinkingLevelsList(levels, state.model);
     } catch {
       if (state.model !== undefined) {
         this.#model = toModelOption(state.model);
@@ -2024,7 +2123,26 @@ export class PiTaskRunner {
     } catch {
       // Keep last known catalog.
     }
+    this.#adoptCatalogModel();
     return this.#catalog;
+  }
+
+  /**
+   * 没有活进程时（还没起 / 已经关掉），胶囊上的模型和档位按最新的模型目录来：目录里给模型补了 xhigh/max
+   * 或改了能力，旧会话也要显示对的档位。有进程时以 Pi 的 `get_available_thinking_levels` 为准，不拿目录盖它。
+   */
+  #adoptCatalogModel(): void {
+    const client = this.#client;
+    if (client !== null && client.alive) return;
+    const key = this.#model?.key ?? this.#record.model;
+    if (key === undefined || key === null) return;
+    const model = this.#catalog.find((m) => m.key.provider === key.provider && m.key.modelId === key.modelId);
+    if (model === undefined) return;
+    const levels: ThinkingLevel[] = model.reasoning ? ["off", ...(model.thinkingEfforts ?? [])] : ["off"];
+    if (this.#model === model && this.#thinkingLevels.join() === levels.join()) return;
+    this.#model = model;
+    this.#thinkingLevels = levels;
+    this.#publish();
   }
 
   #emitBtw(event: BtwUiEvent): void {

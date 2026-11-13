@@ -10,7 +10,9 @@ import type { AvailableSlashCommand } from "../../shared/omp-wire/rpc-wire.gener
 import type { OmpBinary, OmpVersionCache } from "../omp/discover.ts";
 
 /** 文件格式版本；StartupSnapshot 的形状变了就加一，旧文件整个作废。 */
-const formatVersion = 2;
+// 3：`ModelOption.thinkingEfforts` 改为按模型的 thinkingLevelMap 推（以前对每个 reasoning 模型都写 minimal…high），
+// 旧文件里存的档位会少掉 xhigh/max，当没有重读。
+const formatVersion = 3;
 
 export interface StartupCacheDeps {
   file: string;

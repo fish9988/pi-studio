@@ -31,6 +31,11 @@ interface SavedScroll {
 /** 各任务的滚动位置（切任务回来时恢复）。 */
 const saved = new Map<string, SavedScroll>();
 
+/** 恢复中段阅读时必须先有完整布局，才能按保存的 scrollTop 定位。 */
+export function canDeferInitialHistory(taskId: TaskId): boolean {
+  return saved.get(taskId)?.stuck !== false;
+}
+
 /** 一个"基准块 + 它当时的视口偏移"：锚点块断开时用它量位移。 */
 interface AnchorStop {
   element: Element;

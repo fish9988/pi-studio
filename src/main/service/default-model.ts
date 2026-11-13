@@ -45,7 +45,7 @@ export async function readDefaultModel(refresh: boolean): Promise<DefaultModelIn
     const stamp = await catalogStamp();
     const cached = refresh ? undefined : startupCache().freshDefaultModel(stamp);
     if (cached !== undefined) return cached;
-    const model = await piService().readDefaultModel(refresh);
+    const model = await piService().readDefaultModel(refresh, stamp);
     startupCache().setDefaultModel(model, stamp, generation);
     return model;
   } catch (error) {
@@ -64,7 +64,7 @@ export async function listModelOptions(refresh: boolean): Promise<ModelOption[]>
   const cached = refresh ? null : startupCache().freshModels(stamp);
   if (cached) return cached;
   if (refresh) void readDefaultModel(true).then((model) => emitEvent("defaultModel", model));
-  const models = await piService().listModelOptions(true);
+  const models = await piService().listModelOptions(true, stamp);
   startupCache().setModels(models, stamp, generation);
   return models;
 }

@@ -3,16 +3,17 @@
 import { session, type WebContents } from "electron";
 
 /**
- * 唯一放行的权限：navigator.clipboard.writeText（复制按钮、选中即复制）。Chromium 把它算作 clipboard-sanitized-write，
- * 全拒时所有复制都会报 NotAllowedError。读剪贴板（clipboard-read）照旧拒绝。
- * 只认主框架且是应用自己的页面：文件预览里的 HTML 沙箱 iframe 不算。
+ * 放行的权限（仅限主框架自己的应用页面）：
+ *  - clipboard-sanitized-write：navigator.clipboard.writeText（复制按钮、选中即复制）；读剪贴板照旧拒绝。
+ *  - local-fonts：window.queryLocalFonts()，用于在设置页检索并列出本机全部已安装字体。
+ * 文件预览里的 HTML 沙箱 iframe 不算主框架，一律拒绝。
  */
-const allowedPermission = "clipboard-sanitized-write";
+const allowedPermissions = new Set(["clipboard-sanitized-write", "local-fonts"]);
 
 export function installSessionSecurity(isAppUrl: (url: string) => boolean): void {
   const { defaultSession } = session;
   const allowed = (permission: string, url: string | undefined, isMainFrame: boolean) => {
-    if (permission !== allowedPermission || !isMainFrame || url === undefined) return false;
+    if (!allowedPermissions.has(permission) || !isMainFrame || url === undefined) return false;
     try {
       return isAppUrl(url);
     } catch {

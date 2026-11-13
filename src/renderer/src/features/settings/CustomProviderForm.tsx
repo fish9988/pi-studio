@@ -7,8 +7,10 @@ import {
   defaultDiscoveryType,
   defaultEnvName,
   formApis,
+  hasThinkingLevelMap,
   imageModelField,
   isFetchableApi,
+  isThinkingLevelMapSavable,
   isValidEnvName,
   parseTokenCount,
   type CustomKeyInput,
@@ -215,7 +217,13 @@ function initialKeyMode(provider: CustomProviderInfo | undefined): KeyMode {
 export const tokenText = (value: number | null) => (value === null ? "" : String(value));
 
 /** omp 不知道这一项（新模型、还没加载、文件里写了值）时的提示：全 null。 */
-export const noHint: CustomModelMeta = { reasoning: null, images: null, contextWindow: null, maxTokens: null };
+export const noHint: CustomModelMeta = {
+  reasoning: null,
+  images: null,
+  contextWindow: null,
+  maxTokens: null,
+  thinkingLevelMap: null,
+};
 
 /** omp 给认不出的模型补的兜底值（omp 18.12.6 / 18.13.1 实测，custom-models.md「模型的能力参数」）。 */
 const ompFallback = { reasoning: false, images: false, contextWindow: 128_000 };
@@ -262,6 +270,7 @@ export function CustomProviderForm({ mode, provider, onSaved, onClose }: CustomP
         images: model.images,
         contextWindow: tokenText(model.contextWindow),
         maxTokens: tokenText(model.maxTokens),
+        thinkingLevelMap: model.thinkingLevelMap ?? {},
         image: model.image,
       })) ?? [],
   );
@@ -367,7 +376,10 @@ export function CustomProviderForm({ mode, provider, onSaved, onClose }: CustomP
   const checkedRows = rows.filter((row) => row.checked);
   const selectedCount = checkedRows.length;
   const countsValid = checkedRows.every(
-    (row) => parseTokenCount(row.contextWindow) !== undefined && parseTokenCount(row.maxTokens) !== undefined,
+    (row) =>
+      parseTokenCount(row.contextWindow) !== undefined &&
+      parseTokenCount(row.maxTokens) !== undefined &&
+      isThinkingLevelMapSavable(row.thinkingLevelMap),
   );
   const keyReady = keyComplete(keyMode, keyText, envValue, envSource);
   // 接口类型改成没有通用发现方式的：开关停用，开着也不写；条目里本来就有 discovery 的照旧能保存（原样保留）。
@@ -419,6 +431,7 @@ export function CustomProviderForm({ mode, provider, onSaved, onClose }: CustomP
           images: null,
           contextWindow: "",
           maxTokens: "",
+          thinkingLevelMap: {},
           // 中转站的列表说了是不是生图模型就照它（接口类型不能生图时不标）；没说的等查公开模型目录（上面的 effect）。
           ...(model.imageModel !== null && { image: model.imageModel && imageModelField(api) !== null }),
         })),
@@ -441,6 +454,7 @@ export function CustomProviderForm({ mode, provider, onSaved, onClose }: CustomP
           images: row.images,
           contextWindow: parseTokenCount(row.contextWindow) ?? null,
           maxTokens: parseTokenCount(row.maxTokens) ?? null,
+          thinkingLevelMap: hasThinkingLevelMap(row.thinkingLevelMap) ? row.thinkingLevelMap : null,
           image: row.image === true,
         })),
         discovery: discoveryOn,
