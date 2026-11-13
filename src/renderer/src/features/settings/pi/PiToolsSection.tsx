@@ -1,35 +1,15 @@
 // Pi 工具与沙箱页（tools）：内置工具矩阵（defaultTools）、CodeMode 沙箱与内联预算、图像输入处理。
 import { useMemo, type ReactNode } from "react";
 import { PI_BUILTIN_TOOLS, type PiBuiltinToolId } from "../../../../../shared/pi-config-types.ts";
+import { resolveActiveToolSet } from "../../../../../shared/pi-settings-schema.ts";
 import { Code, Eye, FileIcon, Folder, Pencil, Search, Sparkle, Terminal } from "../../../icons.tsx";
 import { Button, Row, SectionHead, Segmented, Switch, type Option } from "../../../ui/controls.tsx";
 import { asBoolean, asNumber, asStringArray, PiNumberCommitField, usePiSetting, usePiText } from "./pi-shared.tsx";
 
 type CodeModeSetting = "on" | "only";
 
-const DEFAULT_ACTIVE_TOOLS: readonly PiBuiltinToolId[] = ["read", "bash", "edit", "write"];
-
 const asCodeMode = (raw: unknown, fallback: CodeModeSetting): CodeModeSetting =>
   raw === "on" || raw === "only" ? raw : fallback;
-
-function resolveActiveToolSet(rawList: readonly string[], modified: boolean): Set<PiBuiltinToolId> {
-  if (!modified || rawList.length === 0) return new Set(DEFAULT_ACTIVE_TOOLS);
-  const allModifiers = rawList.every((token) => token.startsWith("+") || token.startsWith("-"));
-  const set = new Set<PiBuiltinToolId>(allModifiers ? DEFAULT_ACTIVE_TOOLS : []);
-  const known = new Set<string>(PI_BUILTIN_TOOLS);
-  for (const entry of rawList) {
-    if (entry.startsWith("+")) {
-      const id = entry.slice(1);
-      if (known.has(id)) set.add(id as PiBuiltinToolId);
-    } else if (entry.startsWith("-")) {
-      const id = entry.slice(1);
-      if (known.has(id)) set.delete(id as PiBuiltinToolId);
-    } else if (known.has(entry)) {
-      set.add(entry as PiBuiltinToolId);
-    }
-  }
-  return set;
-}
 
 interface ToolMeta {
   id: PiBuiltinToolId;
@@ -64,6 +44,8 @@ export function PiToolsSection() {
   );
 
   const toggleTool = (toolId: PiBuiltinToolId, enabled: boolean) => {
+    // 把当前生效集合整体写回（纯名称列表即“整体替换”）：全部禁用（defaultTools: []）时
+    // 只会写入刚打开的那一个工具，不会把另外几个默认工具悄悄写活。
     const next = new Set(activeSet);
     if (enabled) next.add(toolId);
     else next.delete(toolId);

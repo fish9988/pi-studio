@@ -2,6 +2,7 @@
 // 内容由主进程 readPreviewFile 读（校验落在根目录内）；这里不拼任何文件路径去加载，避免绕过主进程校验。
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { PreviewFile, ProjectFilesTarget } from "../../../../shared/ipc.ts";
+import { draftKey } from "../../../../shared/ipc.ts";
 import { useLocale, useT } from "../../i18n/use-t.ts";
 import { CopyIcon, External, FileIcon, Folder } from "../../icons.tsx";
 import { Button, Checkbox, IconButton, Segmented } from "../../ui/controls.tsx";
@@ -9,24 +10,11 @@ import { reportError } from "../../ui/errors.ts";
 import { pushToast } from "../dialogs/index.ts";
 import { baseName, extension, PreviewContent } from "./PreviewContent.tsx";
 import { getInlineArtifact } from "./preview-store.ts";
+import { quotePathToComposer } from "../composer/quote.ts";
 
+/** 文件树的右键菜单只拿得到路径（没有草稿键），走 quote.ts 的 `@path ` 写入。 */
 export function insertFileRefIntoComposer(filePath: string): void {
-  const el = document.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]');
-  if (!el) return;
-  const normalized = filePath.replace(/\\/g, "/");
-  const token = normalized.includes(" ") ? `@"${normalized}" ` : `@${normalized} `;
-  const start = el.selectionStart ?? el.value.length;
-  const end = el.selectionEnd ?? el.value.length;
-  const before = el.value.slice(0, start);
-  const after = el.value.slice(end);
-  const prefix = before.length > 0 && !/\s$/.test(before) ? " " : "";
-  const nextVal = `${before}${prefix}${token}${after}`;
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
-  setter?.call(el, nextVal);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.focus();
-  const caret = (before + prefix + token).length;
-  el.setSelectionRange(caret, caret);
+  quotePathToComposer(filePath);
 }
 
 interface MarkdownHeading {
@@ -201,6 +189,9 @@ export function PreviewPage({
 
   // 系统打开按任务 id 走；在文件夹中显示支持任务与项目/默认文件夹。
   const taskId = target.kind === "task" ? target.taskId : null;
+  // `@file` 引用进哪份草稿：任务 → 这个任务；项目文件面板 → 这个项目的草稿页；默认文件夹 → 无项目的聊天草稿。
+  const quoteTarget =
+    target.kind === "task" ? target.taskId : target.kind === "project" ? draftKey(target.projectId) : null;
   const run = (action: "openTaskFile" | "revealTaskFile") => {
     if (!file) return;
     if (taskId !== null) {
@@ -290,7 +281,7 @@ export function PreviewPage({
             <IconButton
               label={isZh ? "引用 @file 到输入框" : "Insert @file into composer"}
               testId="file-preview-insert-ref"
-              onClick={() => insertFileRefIntoComposer(file?.path ?? path)}
+              onClick={() => quotePathToComposer(file?.path ?? path, quoteTarget)}
             >
               <span className="file-preview-at-glyph">@</span>
             </IconButton>

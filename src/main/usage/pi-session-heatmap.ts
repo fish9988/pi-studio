@@ -13,6 +13,7 @@ import type {
   UsageHeatmap,
   UsageModelDay,
 } from "../../shared/ipc.ts";
+import { stripBom } from "../../shared/strip-bom.ts";
 import { finiteNumber, finiteOrZero, isRecord, nonEmptyString } from "../../shared/type-guards.ts";
 import { log } from "../log/log.ts";
 import { writeFileAtomic } from "../tasks/atomic-write.ts";
@@ -75,10 +76,6 @@ function enqueueCacheWrite(cacheFile: string, content: string): Promise<void> {
     if (cacheWriteQueues.get(key) === tracked) cacheWriteQueues.delete(key);
   });
   return next;
-}
-
-function stripBom(text: string): string {
-  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 function isNotFound(error: unknown): boolean {

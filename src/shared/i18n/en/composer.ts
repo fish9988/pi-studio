@@ -44,6 +44,7 @@ export const composer = {
   "usage.subagents": "In parentheses: subagents {cost}, not in the first number",
   "usage.cacheWrite": "Cache write",
   "usage.cacheHit": "Cache hit rate",
+  "usage.noData": "No usage data yet",
   "context.title": "Context breakdown",
   "context.systemPrompt": "System prompt",
   "context.systemTools": "System tools",

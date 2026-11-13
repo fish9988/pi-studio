@@ -113,6 +113,12 @@ export function buildCommands({ t, locale, current, terminalKey, hasWaiting }: C
       run: () => emitStudioCommand("copyLast"),
     },
     current && {
+      id: "quoteSelection",
+      label: t("palette.quoteSelection"),
+      shortcut: "Ctrl Shift Q",
+      run: () => emitStudioCommand("quoteSelection"),
+    },
+    current && {
       id: "toggleProcess",
       label: t("cmd.toggleProcess"),
       shortcut: "Ctrl O",

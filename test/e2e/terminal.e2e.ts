@@ -1,5 +1,5 @@
 // 内置终端的端到端：真实的 主进程 node-pty → IPC → 渲染进程 xterm，shell 是本机的 pwsh/powershell（mac 是 zsh，没有在 mac 上跑过）。
-// 任务用假 omp（回放 bash-tool），项目目录带空格和中文。断言用户看得见的结果（xterm 的 DOM 行）和进程是否残留。
+// 任务用假 pi（test/fake-pi/fake-pi.mjs），项目目录带空格和中文。断言用户看得见的结果（xterm 的 DOM 行）和进程是否残留。
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
@@ -7,7 +7,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import type { TaskId } from "../../src/shared/ipc.ts";
 import { findOmp, makeRepo, makeScratch } from "../git-helpers.ts";
-import { launchApp, openTaskRow, setLocale, testOmp, type LaunchedApp } from "./launch.ts";
+import { launchApp, openTaskRow, setLocale, testPi, type LaunchedApp } from "./launch.ts";
 
 interface Started {
   launched: LaunchedApp;
@@ -20,7 +20,7 @@ async function start(): Promise<Started> {
   const work = await mkdtemp(path.join(os.tmpdir(), "omp 终端 e2e-"));
   const project = path.join(work, "项目 目录");
   await mkdir(project);
-  const launched = await launchApp({ STUDIO_TEST_OMP: testOmp("slash-status") });
+  const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   await launched.app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
   }, project);
@@ -350,7 +350,7 @@ test("worktree 任务的终端在 worktree 目录里；丢弃 worktree 时先结
     OMP_WORKTREE_DIR: path.join(scratch, "omp worktrees"),
     PI_CODING_AGENT_DIR: path.join(scratch, "omp agent"),
     STUDIO_TEST_WORKTREE_OMP: realOmp ?? "",
-    STUDIO_TEST_OMP: testOmp("slash-status"),
+    STUDIO_TEST_PI: testPi(),
   });
   try {
     const { page } = launched;

@@ -1336,3 +1336,173 @@ describe("PiTspBridge — 漏进正文通道的思维/旁白折叠成过程段",
     );
   });
 });
+
+describe("PiTspBridge — 压缩失败 / 扩展报错 / 排队与 widget（平时 0 占位）", () => {
+  const surfaceOf = (bridge: PiTspBridge) => bridge.document.surfaces.get(PI_SURFACE_ID)!;
+  const dockChildren = (bridge: PiTspBridge): string[] => [...(surfaceOf(bridge).nodes.get("dock")?.c ?? [])];
+  const spanTexts = (bridge: PiTspBridge, nodeId: string): string =>
+    (surfaceOf(bridge).nodes.get(nodeId)?.c ?? [])
+      .map((id) => JSON.stringify(surfaceOf(bridge).nodes.get(id)?.p["spans"]))
+      .join(" ");
+
+  it("compaction_start 的 HUD 写清触发原因", () => {
+    const bridge = new PiTspBridge("Compact");
+    for (const [reason, label] of [
+      ["overflow", "Compacting context (overflow)…"],
+      ["threshold", "Compacting context (threshold)…"],
+      ["manual", "Compacting context (manual)…"],
+      ["something-new", "Compacting context…"],
+    ] as const) {
+      bridge.handleRpcEvent({ type: "compaction_start", reason });
+      expect(deriveWorkingLabel(bridge.document)).toBe(label);
+    }
+  });
+
+  it("compaction_end aborted：发一条 info 通知、清掉 HUD，不往消息流插节点", () => {
+    const bridge = new PiTspBridge("Compact Aborted");
+    const notes: { message: string; level: string }[] = [];
+    bridge.onNotify((info) => notes.push(info));
+    bridge.handleRpcEvent({ type: "compaction_start", reason: "threshold" });
+    const mainBefore = [...(surfaceOf(bridge).nodes.get("main")?.c ?? [])];
+
+    bridge.handleRpcEvent({ type: "compaction_end", reason: "threshold", aborted: true, willRetry: false });
+
+    expect(notes).toEqual([{ message: "Compaction cancelled", level: "info" }]);
+    expect([...(surfaceOf(bridge).nodes.get("main")?.c ?? [])]).toEqual(mainBefore);
+    expect(surfaceOf(bridge).nodes.get("dock.hud")?.c).toEqual([]);
+  });
+
+  it("compaction_end 带 errorMessage：插一张错误卡并清掉 HUD（不再静默丢弃）", () => {
+    const bridge = new PiTspBridge("Compact Error");
+    bridge.handleRpcEvent({ type: "compaction_start", reason: "manual" });
+    bridge.handleRpcEvent({
+      type: "compaction_end",
+      reason: "manual",
+      aborted: false,
+      willRetry: false,
+      errorMessage: "summarizer failed",
+    });
+
+    const nodes = [...surfaceOf(bridge).nodes.values()];
+    expect(nodes.some((n) => n.p["role"] === "omp.error")).toBe(true);
+    expect(nodes.find((n) => n.p["role"] === "omp.error.body")?.p["text"]).toBe("summarizer failed");
+    expect(surfaceOf(bridge).nodes.get("dock.hud")?.c).toEqual([]);
+  });
+
+  it("compaction_end 有结果时照旧生成压缩段", () => {
+    const bridge = new PiTspBridge("Compact Ok");
+    bridge.handleRpcEvent({ type: "compaction_start", reason: "threshold" });
+    bridge.handleRpcEvent({
+      type: "compaction_end",
+      reason: "threshold",
+      aborted: false,
+      willRetry: false,
+      result: {
+        summary: "已压缩的摘要",
+        firstKeptEntryId: "entry_100",
+        tokensBefore: 120_000,
+        estimatedTokensAfter: 8_000,
+      },
+    });
+    const nodes = [...surfaceOf(bridge).nodes.values()];
+    expect(nodes.some((n) => n.p["role"] === "omp.compaction")).toBe(true);
+    expect(surfaceOf(bridge).nodes.get("dock.hud")?.c).toEqual([]);
+  });
+
+  it("extension_error 只发一条 error 通知，不污染消息流", () => {
+    const bridge = new PiTspBridge("Ext Error");
+    const notes: { message: string; level: string }[] = [];
+    bridge.onNotify((info) => notes.push(info));
+    const mainBefore = [...(surfaceOf(bridge).nodes.get("main")?.c ?? [])];
+
+    bridge.handleRpcEvent({
+      type: "extension_error",
+      extensionPath: "/home/u/.pi/agent/extensions/git.ts",
+      event: "tool_call",
+      error: "boom",
+    });
+
+    expect(notes).toEqual([{ message: "Extension error (git.ts): boom", level: "error" }]);
+    expect([...(surfaceOf(bridge).nodes.get("main")?.c ?? [])]).toEqual(mainBefore);
+  });
+
+  it("setWidget 动态挂 dock.widget，清空后连节点一起摧掉", () => {
+    const bridge = new PiTspBridge("Widget");
+    expect(dockChildren(bridge)).toEqual(["dock.hud", "dock.dialog"]);
+
+    bridge.handleRpcEvent({
+      type: "extension_ui_request",
+      id: "w1",
+      method: "setWidget",
+      widgetKey: "git",
+      widgetLines: ["main ↑2", "working tree clean"],
+    });
+    expect(dockChildren(bridge)).toEqual(["dock.hud", "dock.dialog", "dock.widget"]);
+    const first = spanTexts(bridge, "dock.widget");
+    expect(first).toContain("main ↑2");
+    expect(first).toContain("working tree clean");
+
+    // 同一个 key 再写一次：节点原地替换，不会多出一层。
+    bridge.handleRpcEvent({
+      type: "extension_ui_request",
+      id: "w2",
+      method: "setWidget",
+      widgetKey: "git",
+      widgetLines: ["main ↑3"],
+    });
+    expect(dockChildren(bridge)).toEqual(["dock.hud", "dock.dialog", "dock.widget"]);
+    const second = spanTexts(bridge, "dock.widget");
+    expect(second).toContain("main ↑3");
+    expect(second).not.toContain("working tree clean");
+
+    // widgetLines 缺省 = 清掉这个 widget；最后一个没了就连 dock.widget 节点一起摧掉。
+    bridge.handleRpcEvent({ type: "extension_ui_request", id: "w3", method: "setWidget", widgetKey: "git" });
+    expect(surfaceOf(bridge).nodes.has("dock.widget")).toBe(false);
+    expect(dockChildren(bridge)).toEqual(["dock.hud", "dock.dialog"]);
+  });
+
+  it("queue_update 只在真有排队内容时挂 dock.queue，两边都空就摧掉", () => {
+    const bridge = new PiTspBridge("Queue");
+    expect(dockChildren(bridge)).toEqual(["dock.hud", "dock.dialog"]);
+
+    bridge.handleRpcEvent({ type: "queue_update", steering: ["use tabs"], followUp: ["then run tests"] });
+    expect(dockChildren(bridge)).toContain("dock.queue");
+    const text = spanTexts(bridge, "dock.queue");
+    expect(text).toContain("[Steering] use tabs");
+    expect(text).toContain("[Queued] then run tests");
+
+    bridge.handleRpcEvent({ type: "queue_update", steering: [], followUp: [] });
+    expect(surfaceOf(bridge).nodes.has("dock.queue")).toBe(false);
+    expect(dockChildren(bridge)).toEqual(["dock.hud", "dock.dialog"]);
+
+    // 本来就空的队列再报一次：不发帧，文档序号不动。
+    const seqBefore = bridge.seq;
+    expect(bridge.handleRpcEvent({ type: "queue_update", steering: [], followUp: [] })).toEqual([]);
+    expect(bridge.seq).toBe(seqBefore);
+  });
+
+  it("message_end 的用量脚注带上本轮真实耗时", () => {
+    const bridge = new PiTspBridge("Elapsed");
+    bridge.handleRpcEvent({ type: "turn_start" });
+    // 把本轮开始时间往前拨 1.4 秒，模拟一轮真实耗时。
+    (bridge as unknown as { turnStartedAtMs: number }).turnStartedAtMs = Date.now() - 1400;
+    bridge.handleRpcEvent({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "done" }],
+        stopReason: "stop",
+        model: "anthropic/claude-sonnet-4-5",
+        usage: { input: 700, output: 28, cacheRead: 0, cacheWrite: 0, totalTokens: 728 },
+        timestamp: Date.now(),
+      },
+    });
+
+    const nodes = [...surfaceOf(bridge).nodes.values()];
+    const footer = nodes.find((n) => n.p["role"] === "omp.turn.usage");
+    expect(footer).toBeDefined();
+    const footerSpan = JSON.stringify(surfaceOf(bridge).nodes.get(`${footer!.id}/text`)?.p["spans"]);
+    expect(footerSpan).toContain("1.4s");
+    expect(footerSpan).toContain("728 tok");
+  });
+});

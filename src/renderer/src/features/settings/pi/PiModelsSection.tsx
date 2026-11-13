@@ -172,7 +172,7 @@ export function PiModelsSection() {
   const budgetMedium = usePiSetting("thinkingBudgets.medium", 8192, asNumber);
   const budgetHigh = usePiSetting("thinkingBudgets.high", 16384, asNumber);
   const hideThinkingBlock = usePiSetting("hideThinkingBlock", false, asBoolean);
-  const cacheWarming = usePiSetting<CacheWarmingMode>("cacheWarming", "off", asCacheWarming);
+  const cacheWarming = usePiSetting<CacheWarmingMode>("cacheWarming", "idle", asCacheWarming);
   const showCacheMissNotices = usePiSetting("showCacheMissNotices", false, asBoolean);
 
   const cacheWarmingOptions: readonly Option<CacheWarmingMode>[] = [
@@ -442,6 +442,7 @@ export function PiModelsSection() {
 
           <Row
             label={tr("隐藏思考过程折叠块", "Hide thinking blocks")}
+            info={tr("仅 Pi CLI 生效，桌面端暂不读取。", "Pi CLI only; not yet applied in desktop UI.")}
             modified={hideThinkingBlock.modified}
             reset={{ tip: "false", onReset: () => void hideThinkingBlock.reset() }}
             testId="pi-hide-thinking-row"
@@ -458,7 +459,7 @@ export function PiModelsSection() {
           <Row
             label={tr("提示词缓存预热 (cacheWarming)", "Cache warming")}
             modified={cacheWarming.modified}
-            reset={{ tip: "off", onReset: () => void cacheWarming.reset() }}
+            reset={{ tip: "idle", onReset: () => void cacheWarming.reset() }}
             testId="pi-cache-warming-row"
           >
             {(labelId) => (
@@ -475,6 +476,7 @@ export function PiModelsSection() {
           </Row>
           <Row
             label={tr("显示缓存未命中提示", "Show cache-miss notices")}
+            info={tr("仅 Pi CLI 生效，桌面端暂不读取。", "Pi CLI only; not yet applied in desktop UI.")}
             modified={showCacheMissNotices.modified}
             reset={{ tip: "false", onReset: () => void showCacheMissNotices.reset() }}
             testId="pi-cache-miss-row"

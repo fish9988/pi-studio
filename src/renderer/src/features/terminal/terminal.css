@@ -87,6 +87,14 @@
   height: 100%;
 }
 
+/* 右栏终端头部（.dsh-wb-term-head）的工具按钮：可触达的最小点击尺寸 24×24（用 min-* 而不是写死宽高，
+   让图标可以变大而不被裁掉）。焦点环用全局 :focus-visible 的 outline（app.css），不另外写：
+   outline 在 forced-colors 下由系统配色接管，比 box-shadow 安全。终端里不放悬浮工具栏，操作走右键菜单（ui/Menu）。 */
+.dsh-wb-term-head .ui-icon-btn {
+  min-block-size: 24px;
+  min-inline-size: 24px;
+}
+
 /* xterm 的滚动条走全局细滚动条（ui/scrollbars.css）；背景交给主题，不让它画自己的底色 */
 .terminal-host .xterm .xterm-viewport {
   background: transparent !important;

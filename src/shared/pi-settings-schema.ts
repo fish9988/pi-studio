@@ -1,7 +1,7 @@
 // Pi 1.5.2 第一方设置 Schema 与内置提供商目录（纯数据与类型，供主进程与渲染进程共用）。
 // 对应 `<agentDir>/settings.json` 与 `<projectDir>/.pi/settings.json`（参考 @earendil-works/pi-coding-agent docs/settings.md）。
 import type { OmpConfigType } from "./ipc.ts";
-import { PI_THINKING_LEVELS } from "./pi-config-types.ts";
+import { PI_BUILTIN_TOOLS, PI_THINKING_LEVELS, type PiBuiltinToolId } from "./pi-config-types.ts";
 
 export const PI_SETTINGS_TABS = [
   "models",
@@ -150,15 +150,15 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     hasDefault: true,
     labelZh: "隐藏思考过程块",
     labelEn: "Hide Thinking Block",
-    descZh: "在对话记录中默认折叠或隐藏模型的思考过程块。",
-    descEn: "Hide model thinking blocks in the conversation transcript.",
+    descZh: "在对话记录中默认折叠或隐藏模型的思考过程块（仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn: "Hide model thinking blocks in the transcript (Pi CLI only; not yet applied in desktop UI).",
   },
   {
     key: "cacheWarming",
     tab: "models",
     type: "enum",
     options: ["off", "streaming", "idle"],
-    defaultValue: "off",
+    defaultValue: "idle",
     hasDefault: true,
     globalOnly: true,
     labelZh: "提示词缓存保活",
@@ -172,12 +172,13 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     tab: "models",
     type: "boolean",
     options: null,
-    defaultValue: true,
+    defaultValue: false,
     hasDefault: true,
     labelZh: "显示缓存未命中提示",
     labelEn: "Show Cache Miss Notices",
-    descZh: "在出现显著缓存失效、缓存保活、上下文压缩和提供商恢复时显示提示。",
-    descEn: "Show notices for significant cache misses, cache warming, compaction usage, and provider recovery.",
+    descZh: "在出现显著缓存失效、缓存保活、上下文压缩和提供商恢复时显示提示（仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn:
+      "Show notices for significant cache misses, cache warming, compaction usage, and provider recovery (Pi CLI only; not yet applied in desktop UI).",
   },
 
   // ——— interaction ———
@@ -226,8 +227,10 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     hasDefault: true,
     labelZh: "双击 Esc 动作",
     labelEn: "Double-Escape Action",
-    descZh: "输入框为空时连续按两次 Escape 触发的操作（打开会话树、分叉会话或无操作）。",
-    descEn: "Action triggered by pressing Escape twice when the editor is empty.",
+    descZh:
+      "输入框为空时连续按两次 Escape 触发的操作（打开会话树、分叉会话或无操作；仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn:
+      "Action triggered by pressing Escape twice when the editor is empty (Pi CLI only; not yet applied in desktop UI).",
   },
   {
     key: "treeFilterMode",
@@ -238,8 +241,8 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     hasDefault: true,
     labelZh: "会话树默认过滤模式",
     labelEn: "Tree Filter Mode",
-    descZh: "打开 `/tree` 会话分支视图时的初始节点过滤方式。",
-    descEn: "Initial node filter mode used when opening `/tree`.",
+    descZh: "打开 `/tree` 会话分支视图时的初始节点过滤方式（仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn: "Initial node filter mode used when opening `/tree` (Pi CLI only; not yet applied in desktop UI).",
   },
   {
     key: "defaultProjectTrust",
@@ -251,8 +254,9 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     globalOnly: true,
     labelZh: "项目配置信任策略",
     labelEn: "Default Project Trust",
-    descZh: "首次进入包含 `.pi` 配置的项目目录时的默认信任行为（仅全局设置可配）。",
-    descEn: "Fallback project-trust behavior for `.pi` configurations (global setting only).",
+    descZh: "首次进入包含 `.pi` 配置的项目目录时的默认信任行为（仅全局设置可配；仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn:
+      "Fallback project-trust behavior for `.pi` configurations (global only; Pi CLI only, not yet applied in desktop UI).",
   },
 
   // ——— tools ———
@@ -399,8 +403,10 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     hasDefault: true,
     labelZh: "会话分享目标",
     labelEn: "Session Share Destination",
-    descZh: "`/share` 命令使用的分享目标（`auto` 优先 Radius，未登录时回退到 GitHub Gist）。",
-    descEn: "Destination used by `/share` (`auto` prefers Radius when authenticated, falling back to GitHub Gist).",
+    descZh:
+      "`/share` 命令使用的分享目标（`auto` 优先 Radius，未登录时回退到 GitHub Gist；仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn:
+      "Destination used by `/share` (`auto` prefers Radius when authenticated, falling back to GitHub Gist; Pi CLI only, not yet applied in desktop UI).",
   },
   {
     key: "sessionDir",
@@ -520,7 +526,7 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     tab: "network",
     type: "number",
     options: null,
-    defaultValue: 15000,
+    defaultValue: 300000,
     hasDefault: true,
     labelZh: "HTTP 空闲超时 (ms)",
     labelEn: "HTTP Idle Timeout (ms)",
@@ -532,7 +538,7 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     tab: "network",
     type: "number",
     options: null,
-    defaultValue: 10000,
+    defaultValue: 15000,
     hasDefault: true,
     labelZh: "WebSocket 连接超时 (ms)",
     labelEn: "WebSocket Connect Timeout (ms)",
@@ -592,24 +598,25 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     tab: "network",
     type: "number",
     options: null,
-    defaultValue: 120000,
-    hasDefault: true,
+    defaultValue: null,
+    hasDefault: false,
     labelZh: "提供商请求超时 (ms)",
     labelEn: "Provider Request Timeout (ms)",
-    descZh: "底层提供商 SDK 单次请求的超时毫秒数。",
-    descEn: "Provider SDK request timeout in milliseconds.",
+    descZh: "底层提供商 SDK 单次请求的超时毫秒数（未设置时跟随 `httpIdleTimeoutMs`）。",
+    descEn: "Provider SDK request timeout in milliseconds (follows `httpIdleTimeoutMs` when unset).",
   },
   {
     key: "retry.provider.maxRetries",
     tab: "network",
     type: "number",
     options: null,
-    defaultValue: 0,
-    hasDefault: true,
+    defaultValue: null,
+    hasDefault: false,
     labelZh: "提供商 SDK 内部重试次数",
     labelEn: "Provider SDK Max Retries",
-    descZh: "底层提供商 SDK 自身的重试次数（建议保持 `0`，交由 Pi 统一处理限流）。",
-    descEn: "Provider-level SDK retry attempts (keep `0` so Pi handles rate limits directly).",
+    descZh: "底层提供商 SDK 自身的重试次数（未设置时交给 Pi 与 SDK 决定；建议显式设 `0` 交由 Pi 统一处理限流）。",
+    descEn:
+      "Provider-level SDK retry attempts (left to Pi and the SDK when unset; set `0` so Pi handles rate limits directly).",
   },
   {
     key: "retry.provider.maxRetryDelayMs",
@@ -745,8 +752,9 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     hasDefault: true,
     labelZh: "Mermaid 图表渲染时机",
     labelEn: "Mermaid Rendering Mode",
-    descZh: "控制 Markdown 中 Mermaid 图表在流式输出期间、完成后渲染还是关闭。",
-    descEn: "When to render Mermaid diagrams in Markdown (`off`, `final`, or `streaming`).",
+    descZh: "控制 Markdown 中 Mermaid 图表在流式输出期间、完成后渲染还是关闭（仅 Pi CLI 生效，桌面端暂不读取）。",
+    descEn:
+      "When to render Mermaid diagrams in Markdown (`off`, `final`, or `streaming`; Pi CLI only, not yet applied in desktop UI).",
   },
   {
     key: "enableInstallTelemetry",
@@ -773,6 +781,35 @@ export const PI_SETTINGS_SCHEMA: readonly PiSettingSchemaEntry[] = [
     descEn: "Warn when Anthropic subscription authentication may incur paid extra usage.",
   },
 ];
+
+/** `defaultTools` 未设置时 Pi 启动的工具（与 Pi 内核 `DEFAULT_TOOL_NAMES` 一致）。 */
+export const PI_DEFAULT_ACTIVE_TOOLS: readonly PiBuiltinToolId[] = ["read", "bash", "edit", "write"];
+
+/**
+ * 把 `settings.json` 里的 `defaultTools` 解析成实际生效的工具集合（语义对齐 Pi 内核 `resolveDefaultTools`）：
+ * - 未设置（`modified === false`）时回退到 `DEFAULT_TOOL_NAMES`；
+ * - 显式 `[]` 是“禁用全部工具”，不是“未设置”（Pi 对该值返回空集）；
+ * - 纯名称列表整体替换默认集合；列表非空、且全部是 `+name` / `-name` 时在默认集合上增减。
+ */
+export function resolveActiveToolSet(rawList: readonly string[], modified: boolean): Set<PiBuiltinToolId> {
+  if (!modified) return new Set(PI_DEFAULT_ACTIVE_TOOLS);
+  // 空列表“整体替换为空集”；只要出现了纯工具名就不是在默认集合上增减（与 Pi 一致）。
+  const hasPlainName = rawList.some((token) => !token.startsWith("+") && !token.startsWith("-"));
+  const set = new Set<PiBuiltinToolId>(rawList.length > 0 && !hasPlainName ? PI_DEFAULT_ACTIVE_TOOLS : []);
+  const known = new Set<string>(PI_BUILTIN_TOOLS);
+  for (const entry of rawList) {
+    if (entry.startsWith("+")) {
+      const id = entry.slice(1);
+      if (known.has(id)) set.add(id as PiBuiltinToolId);
+    } else if (entry.startsWith("-")) {
+      const id = entry.slice(1);
+      if (known.has(id)) set.delete(id as PiBuiltinToolId);
+    } else if (known.has(entry)) {
+      set.add(entry as PiBuiltinToolId);
+    }
+  }
+  return set;
+}
 
 const SCHEMA_BY_KEY = new Map<string, PiSettingSchemaEntry>(PI_SETTINGS_SCHEMA.map((entry) => [entry.key, entry]));
 

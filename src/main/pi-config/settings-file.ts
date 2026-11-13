@@ -10,6 +10,7 @@ import {
   PI_SETTINGS_TABS,
   type PiSettingSchemaEntry,
 } from "../../shared/pi-settings-schema.ts";
+import { stripBom } from "../../shared/strip-bom.ts";
 import { isRecord } from "../../shared/type-guards.ts";
 import { log } from "../log/log.ts";
 import { writeFileAtomic } from "../tasks/atomic-write.ts";
@@ -43,10 +44,6 @@ export function enqueueFileWrite<T>(filePath: string, fn: () => Promise<T>): Pro
     if (fileQueues.get(key) === tracked) fileQueues.delete(key);
   });
   return next;
-}
-
-function stripBom(text: string): string {
-  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 function isNotFound(error: unknown): boolean {

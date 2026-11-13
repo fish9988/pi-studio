@@ -104,6 +104,9 @@ export function OmpSetupView() {
   const answer = (job: Promise<void>) => void job.catch((error: unknown) => reportError(t, error));
   // 只有 Windows 会把 omp-studio 装的 omp 放进用户 PATH；macOS / Linux 不改 PATH，文案不能说会放进 PATH。
   const studioOnly = platform !== "win32";
+  // installOmp / answerTakeover 在主进程已是空桩：这两个分支只留真正能用的“重新检测”，
+  // 并给出一条可以直接照抄的 CLI 安装命令（与主进程 `upgradePi` 用的包名一致）。
+  const cliCommand = "npm install -g @earendil-works/pi-coding-agent";
 
   let body;
   switch (status.state) {
@@ -137,16 +140,15 @@ export function OmpSetupView() {
               ? t("omp.takeover.whereVersion", { path: status.path, version: status.version })
               : t("omp.takeover.where", { path: status.path })}
           </p>
+          <p className="setup-path">{cliCommand}</p>
           <div className="setup-actions">
-            <Button autoFocus onClick={() => answer(window.studio.answerTakeover(false))} testId="takeover-no">
-              {other !== null
-                ? t("omp.takeover.keepOther", { name: other })
-                : status.launchable
-                  ? t("omp.takeover.keep")
-                  : t("omp.takeover.no")}
-            </Button>
-            <Button variant="primary" onClick={() => answer(window.studio.answerTakeover(true))} testId="takeover-yes">
-              {t("omp.takeover.yes")}
+            <Button
+              variant="primary"
+              autoFocus
+              onClick={() => answer(window.studio.retryOmpSetup())}
+              testId="recheck-omp"
+            >
+              {t("omp.recheck")}
             </Button>
           </div>
         </>
@@ -167,12 +169,15 @@ export function OmpSetupView() {
                   source: status.source,
                 })}
           </p>
+          <p className="setup-path">{cliCommand}</p>
           <div className="setup-actions">
-            <Button onClick={() => answer(window.studio.retryOmpSetup())} testId="recheck-omp">
+            <Button
+              variant="primary"
+              autoFocus
+              onClick={() => answer(window.studio.retryOmpSetup())}
+              testId="recheck-omp"
+            >
               {t("omp.recheck")}
-            </Button>
-            <Button variant="primary" autoFocus onClick={() => answer(window.studio.installOmp())} testId="install-omp">
-              {t("omp.install")}
             </Button>
           </div>
         </>

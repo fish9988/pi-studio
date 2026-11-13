@@ -442,8 +442,8 @@ export interface TaskState {
 
 /** omp 的自动压缩（上下文圆环上的刻度和构成浮层里的说明）。百分数都是占上下文窗口的比例（0–100）。 */
 export interface ContextCompaction {
-  /** 自动压缩触发点。 */
-  autoAtPercent: number;
+  /** 自动压缩触发点（窗口或预留不可用时为 null，但仍可携带 summary 状态）。 */
+  autoAtPercent: number | null;
   /** omp 开始预生成压缩摘要的位置；没有开预生成为 null。 */
   summaryStartsAtPercent: number | null;
   /** 压缩摘要：running = 生成中，ready = 已备好（到触发点时直接用）；null = 没在生成（或 omp 没给）。 */
@@ -495,6 +495,52 @@ export interface ComposerFile {
   id: string;
   name: string;
   size: number;
+}
+
+/**
+ * 输入框草稿里的一张图片（落盘用）：内容按 sha256 存在 `userData/draft-attachments/<sha256>.<ext>`，
+ * drafts.json 只留这份元数据（base64 不进 drafts.json）。`id` 就是文件名，读回内容用 getDraftAttachment。
+ */
+export interface PersistedDraftImage {
+  id: string;
+  name: string;
+  mimeType: PromptImage["mimeType"];
+  width?: number;
+  height?: number;
+}
+
+/** 保存草稿时的一张图片：`data` 只在第一次落盘时给（主进程按内容 sha256 存盘并去重），之后只带 id。 */
+export interface DraftImageSave {
+  /** 已落过盘的附件 id（`<sha256>.<ext>`）；第一次存时没有，由主进程按 data 算出来。 */
+  id?: string;
+  name: string;
+  mimeType: PromptImage["mimeType"];
+  data?: string;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * 落盘的草稿（v2）。`text` 原样保留占位符（`[Image #N, WxH]` / `[Paste #N]` / `[File #N, 名字]`），不展开粘贴原文；
+ * 旧版只存一个字符串（v1），读回时按只有文字的 v2 处理。
+ */
+export interface PersistedDraft {
+  text: string;
+  pastes: Record<string, string>;
+  pasteCounter: number;
+  /** 和文字里的 `[Image #N]` 按位置对应。 */
+  images: PersistedDraftImage[];
+  /** 和文字里的 `[File #N]` 按位置对应；`null` = 文件已不在磁盘上（只占位置，渲染进程丢掉它和它的占位符）。 */
+  files: (ComposerFile | null)[];
+}
+
+/** saveDraft 的载荷：字段都可省（旧渲染进程只发文字）。 */
+export interface DraftSave {
+  text: string;
+  pastes?: Record<string, string>;
+  pasteCounter?: number;
+  images?: DraftImageSave[];
+  files?: ComposerFile[];
 }
 
 export interface PromptInput {
@@ -1271,9 +1317,15 @@ export interface StudioInvokeApi {
   shareTask(taskId: TaskId, gist: boolean): Promise<ShareResult>;
   /** 任务当前可用的斜杠命令（get_available_commands）；`null` = 草稿页（还没有任务），用服务进程的列表。没有可用的 omp 进程时返回空数组。 */
   listSlashCommands(taskId: TaskId | null): Promise<AvailableSlashCommand[]>;
-  /** 输入框草稿（文字）：key 是任务 id 或 `new:<projectId>`。主进程持久化，重启不丢。 */
-  getDrafts(): Promise<Record<string, string>>;
-  saveDraft(key: string, text: string): Promise<void>;
+  /**
+   * 输入框草稿：key 是任务 id 或 `new:<projectId>`。主进程持久化（drafts.json），重启不丢。
+   * 值是 v2（文字占位符 + 粘贴原文 + 附件元数据）；旧版存的是纯字符串（v1，只有文字）。
+   */
+  getDrafts(): Promise<Record<string, string | PersistedDraft>>;
+  /** 存草稿：返回这次落盘的图片（id + 元数据），渲染进程记住后下次只发 id，不再重复传 base64。 */
+  saveDraft(key: string, draft: DraftSave | string): Promise<PersistedDraftImage[]>;
+  /** 读回落盘草稿里某张图片的内容（base64）；文件被清理掉时返回 null（草稿里的那张图按不可用丢掉）。 */
+  getDraftAttachment(id: string): Promise<PromptImage | null>;
   /** 这个项目发过的消息（studio 自己存在 userData/input-history.json，从旧到新，最多 200 条）：输入框 ↑ 翻看和 Ctrl+R 搜索用。 */
   getInputHistory(projectId: ProjectId): Promise<string[]>;
   /** 记一条发出去的消息（只存文字；空的、太长的、和上一条相同的不记）。 */
@@ -1827,6 +1879,7 @@ export const invokeNames = {
   listSlashCommands: true,
   getDrafts: true,
   saveDraft: true,
+  getDraftAttachment: true,
   getInputHistory: true,
   recordInputHistory: true,
   compactTask: true,

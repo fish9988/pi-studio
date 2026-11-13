@@ -3,6 +3,7 @@
 // shared `src/shared/tsp/*` selectors render Pi conversations with 100% visual & behavioral fidelity.
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { classifyAssistantText, PROCESS_HEAD_TEXT } from "../../shared/assistant-text-kind.ts";
 import { applyMessage, createDocument, type TspDocMessage, type TspDocument } from "../../shared/tsp/document.ts";
 import type { TspDiffHunk, TspEvent, TspNode, TspOp, TspProps } from "../../shared/tsp/tsp.generated.ts";
@@ -326,6 +327,19 @@ function shortenModelLabel(model: string): string {
   return base.replace(/-\d{8}$/, "");
 }
 
+/** 压缩 HUD 文案：Pi 会带触发原因（threshold / overflow / manual），写清楚比一律一句好认。 */
+function compactionHudLabel(reason: string): string {
+  return reason === "threshold" || reason === "overflow" || reason === "manual"
+    ? `Compacting context (${reason})…`
+    : "Compacting context…";
+}
+
+/** 耗时脚注：`1.4s` / `12s`，不到 10 秒保留一位小数。 */
+function formatElapsed(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  return ms >= 10_000 ? `${Math.round(ms / 1000)}s` : `${(ms / 1000).toFixed(1)}s`;
+}
+
 function formatClockTime(ts: number | undefined): string | null {
   if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return null;
   const d = new Date(ts);
@@ -334,9 +348,18 @@ function formatClockTime(ts: number | undefined): string | null {
   return `${hh}:${mm}`;
 }
 
-function formatUsageFooter(usage: PiUsage | undefined, model?: string, timestamp?: number): string | null {
-  if (usage === undefined && (model === undefined || model === "")) return null;
+function formatUsageFooter(
+  usage: PiUsage | undefined,
+  model?: string,
+  timestamp?: number,
+  elapsedMs?: number,
+): string | null {
+  const duration = typeof elapsedMs === "number" && Number.isFinite(elapsedMs) ? formatElapsed(elapsedMs) : "";
+  if (usage === undefined && (model === undefined || model === "") && duration === "") return null;
   const parts: string[] = [];
+  if (duration !== "") {
+    parts.push(duration);
+  }
   if (usage !== undefined) {
     const totalTokens =
       usage.totalTokens ?? (usage.input ?? 0) + (usage.output ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
@@ -803,6 +826,10 @@ export class PiTspBridge {
   private idCounter = 0;
 
   private hudActive = false;
+  /** 扩展调 `setWidget` 写在 `dock.widget` 里的文本行；表空时文档里没有 `dock.widget` 节点。 */
+  private readonly widgets = new Map<string, { lines: string[]; placement?: string | undefined }>();
+  /** 当前轮开始的时间（`turn_start`）；没在跑时为 null，耗时脚注靠它算。 */
+  private turnStartedAtMs: number | null = null;
   private liveThinking = new Map<number, LiveThinkingState>();
   private liveText = new Map<number, LiveTextState>();
   /** 流式时已经折成过程段的 text 块下标，`message_end` 不再重复生成。 */
@@ -1944,6 +1971,11 @@ export class PiTspBridge {
     this.appendClearChildrenOps(ops, "main");
     this.appendClearChildrenOps(ops, "dock.hud");
     this.appendClearChildrenOps(ops, "dock.dialog");
+    // `dock.widget` / `dock.queue` 是扩展与排队队列临时挂进去的：重放前清干净，没挂过就不发 op。
+    if (this.widgets.size > 0) this.widgets.clear();
+    for (const dockChild of ["dock.widget", "dock.queue"]) {
+      if (this.nodeExists(dockChild)) ops.push(["del", dockChild]);
+    }
 
     const consumedToolResults = new Set<string>();
 
@@ -2153,7 +2185,9 @@ export class PiTspBridge {
 
     const answerText = textPieces.join("\n\n");
     const isErrorStop = msg.stopReason === "error" && typeof msg.errorMessage === "string" && msg.errorMessage !== "";
-    const usageSummary = !isErrorStop ? formatUsageFooter(msg.usage, msg.model, msg.timestamp) : null;
+    const usageSummary = !isErrorStop
+      ? formatUsageFooter(msg.usage, msg.model, msg.timestamp, this.elapsedTurnMs())
+      : null;
 
     if (answerText !== "" || isErrorStop || (usageSummary !== null && blocks.every((b) => b.type !== "toolCall"))) {
       const colId = this.nextId("asst");
@@ -2189,6 +2223,68 @@ export class PiTspBridge {
 
   // ───────── Live Streaming RPC Event Handler ─────────
 
+  /** 给界面发一条通知（不写进消息流）。 */
+  private notify(message: string, level: "info" | "warning" | "error"): void {
+    for (const listener of this.notifyListeners) {
+      listener({ message, level });
+    }
+  }
+
+  /** 当前轮已经跑了多久（毫秒）；没在跑时返回 undefined，脚注就不带耗时。 */
+  private elapsedTurnMs(): number | undefined {
+    if (this.turnStartedAtMs === null) return undefined;
+    const elapsed = Date.now() - this.turnStartedAtMs;
+    return elapsed > 0 ? elapsed : undefined;
+  }
+
+  /** `queue_update`：真有排队内容时挂上 `dock.queue`，两边都空就摧掉（空队列时文档结构不变）。 */
+  private applyQueueUpdate(steering: readonly string[], followUp: readonly string[]): TspDocMessage[] {
+    const nodeId = "dock.queue";
+    const lines = [...steering.map((text) => `[Steering] ${text}`), ...followUp.map((text) => `[Queued] ${text}`)];
+    const ops: TspOp[] = [];
+    if (lines.length === 0) {
+      if (this.nodeExists(nodeId)) ops.push(["del", nodeId]);
+      return this.emitOps(ops);
+    }
+    const node: TspNode = {
+      id: nodeId,
+      k: "col",
+      p: { role: "omp.queue", gap: "xs" },
+      c: lines.map((line, index) => ({
+        id: `${nodeId}/${index}`,
+        k: "text",
+        p: { role: "omp.queue.item", spans: [{ t: line, s: "muted" }] },
+      })),
+    };
+    if (this.nodeExists(nodeId)) this.appendReplaceNodeOps(ops, nodeId, node, "dock");
+    else ops.push(["add", nodeId, "dock", null, node]);
+    return this.emitOps(ops);
+  }
+
+  /** 把 `setWidget` 收到的文本行渲染到 `dock.widget`；一个 widget 都没时节点不存在，文档树不变。 */
+  private renderWidgets(): TspDocMessage[] {
+    const nodeId = "dock.widget";
+    const children: TspNode[] = [];
+    for (const [, widget] of this.widgets) {
+      for (const line of widget.lines) {
+        children.push({
+          id: `${nodeId}/${children.length}`,
+          k: "text",
+          p: { role: "omp.widget.line", spans: [{ t: line, s: "muted" }] },
+        });
+      }
+    }
+    if (children.length === 0) {
+      this.widgets.clear();
+      return this.nodeExists(nodeId) ? this.emitOps([["del", nodeId]]) : [];
+    }
+    const node: TspNode = { id: nodeId, k: "col", p: { role: "omp.widget", gap: "xs" }, c: children };
+    const ops: TspOp[] = [];
+    if (this.nodeExists(nodeId)) this.appendReplaceNodeOps(ops, nodeId, node, "dock");
+    else ops.push(["add", nodeId, "dock", null, node]);
+    return this.emitOps(ops);
+  }
+
   handleRpcEvent(event: PiRpcEvent): TspDocMessage[] {
     switch (event.type) {
       case "agent_start":
@@ -2200,6 +2296,7 @@ export class PiTspBridge {
         this.liveProcessIndexes.clear();
         this.liveProcessContainers.clear();
         this.lastStreamAssistantId = null;
+        this.turnStartedAtMs = Date.now();
         return this.ensureWorkingHud("Working…");
 
       case "message_start":
@@ -2227,29 +2324,64 @@ export class PiTspBridge {
         return this.handleMessageEnd(event.message);
 
       case "compaction_start":
-        return this.ensureWorkingHud("Compacting context…");
+        return this.ensureWorkingHud(compactionHudLabel(event.reason));
 
       case "compaction_end": {
         const ops: TspOp[] = [];
-        if (!event.aborted && event.result !== undefined && event.result !== null) {
+        const errorText = typeof event.errorMessage === "string" ? event.errorMessage.trim() : "";
+        const result = event.result;
+        if (event.aborted) {
+          // 用户/中断取消：消息流不插节点，只提醒一句。
+          this.notify("Compaction cancelled", "info");
+        } else if (errorText !== "") {
+          const colId = this.nextId("compact_err");
+          ops.push([
+            "add",
+            colId,
+            "main",
+            null,
+            {
+              id: colId,
+              k: "col",
+              p: { role: "omp.assistant", gap: "sm" },
+              c: [this.buildErrorCardNode(`${colId}/err`, errorText)],
+            },
+          ]);
+        } else if (result !== undefined && result !== null) {
           const secId = this.nextId("compact");
           ops.push([
             "add",
             secId,
             "main",
             null,
-            this.buildCompactionSectionNode(
-              secId,
-              event.result.summary,
-              event.result.tokensBefore,
-              event.result.estimatedTokensAfter,
-            ),
+            this.buildCompactionSectionNode(secId, result.summary, result.tokensBefore, result.estimatedTokensAfter),
           ]);
+        } else {
+          this.notify("Compaction finished without a summary", "warning");
         }
         if (!event.willRetry) {
           this.appendClearHudOps(ops);
         }
         return this.emitOps(ops);
+      }
+
+      case "queue_update": {
+        const steering = Array.isArray(event.steering)
+          ? event.steering.filter((item): item is string => typeof item === "string")
+          : [];
+        const followUp = Array.isArray(event.followUp)
+          ? event.followUp.filter((item): item is string => typeof item === "string")
+          : [];
+        return this.applyQueueUpdate(steering, followUp);
+      }
+
+      case "extension_error": {
+        const file = typeof event.extensionPath === "string" ? event.extensionPath.trim() : "";
+        const errText = typeof event.error === "string" && event.error.trim() !== "" ? event.error : "unknown error";
+        const name = file === "" ? "unknown extension" : basename(file);
+        // 扩展报错不进消息流，只温和提醒，不打断对话。
+        this.notify(`Extension error (${name}): ${errText}`, "error");
+        return [];
       }
 
       case "auto_retry_start":
@@ -2292,6 +2424,7 @@ export class PiTspBridge {
         if (event.willRetry === true) {
           return [];
         }
+        this.turnStartedAtMs = null;
         return this.clearWorkingHud();
 
       case "agent_settled": {
@@ -2300,6 +2433,7 @@ export class PiTspBridge {
         this.liveProcessIndexes.clear();
         this.liveProcessContainers.clear();
         this.lastStreamAssistantId = null;
+        this.turnStartedAtMs = null;
         return this.clearWorkingHud();
       }
 
@@ -2921,7 +3055,7 @@ export class PiTspBridge {
     }
 
     const usageSummary = !hasToolCalls
-      ? formatUsageFooter(message.usage, message.model, message.timestamp ?? Date.now())
+      ? formatUsageFooter(message.usage, message.model, message.timestamp ?? Date.now(), this.elapsedTurnMs())
       : null;
     if (usageSummary !== null && containerId !== null) {
       const usageRowId = `${containerId}/usage`;
@@ -2949,11 +3083,18 @@ export class PiTspBridge {
       case "notify": {
         const level = req.notifyType ?? "info";
         if (typeof req.message === "string" && req.message !== "") {
-          for (const listener of this.notifyListeners) {
-            listener({ message: req.message, level });
-          }
+          this.notify(req.message, level);
         }
         return [];
+      }
+      case "setWidget": {
+        const key = typeof req.widgetKey === "string" && req.widgetKey !== "" ? req.widgetKey : "widget";
+        const lines = Array.isArray(req.widgetLines)
+          ? req.widgetLines.filter((line): line is string => typeof line === "string")
+          : [];
+        if (lines.length === 0) this.widgets.delete(key);
+        else this.widgets.set(key, { lines, placement: req.widgetPlacement });
+        return this.renderWidgets();
       }
       case "setStatus": {
         if (typeof req.statusText === "string" && req.statusText.trim() !== "" && this.hudActive) {
@@ -3528,5 +3669,7 @@ export class PiTspBridge {
     this.lastStreamAssistantId = null;
     this.pendingOptimisticUsers = [];
     this.activeDialog = null;
+    this.widgets.clear();
+    this.turnStartedAtMs = null;
   }
 }

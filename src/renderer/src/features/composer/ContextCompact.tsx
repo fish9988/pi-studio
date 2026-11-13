@@ -29,7 +29,7 @@ export function ContextCompact({ task }: { task: TaskState }) {
   return (
     <div className="ctx-compact" data-testid="context-compaction">
       <div className="ctx-compact-row">
-        {info !== null && (
+        {info !== null && info.autoAtPercent !== null && (
           <p className="ctx-compact-line" data-testid="context-auto-at">
             {t("board.ctxAutoAt", { p: Math.round(info.autoAtPercent) })}
           </p>

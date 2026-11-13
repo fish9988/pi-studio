@@ -40,6 +40,7 @@ export const composer = {
   "usage.subagents": "括号内：subagent {cost}，未计入前数",
   "usage.cacheWrite": "缓存写入",
   "usage.cacheHit": "缓存命中率",
+  "usage.noData": "暂无用量数据",
   "context.title": "Context 构成",
   "context.systemPrompt": "System prompt",
   "context.systemTools": "System tools",

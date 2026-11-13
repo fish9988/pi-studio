@@ -29,6 +29,7 @@ import type { LoginProvider, LogoutAccount } from "../../shared/omp-wire/rpc-wir
 import type { PiProviderAuthStatus } from "../../shared/pi-config-types.ts";
 import { findPiBuiltinProvider, PI_BUILTIN_PROVIDERS } from "../../shared/pi-settings-schema.ts";
 import { keyEnvProviderIds, providerKeyEnv, type ProviderKeyEnv } from "../../shared/provider-keys.ts";
+import { stripBom } from "../../shared/strip-bom.ts";
 import { isRecord, nonEmptyString as str } from "../../shared/type-guards.ts";
 import { log } from "../log/log.ts";
 import { envFilePath, envSourceOf, readEnvText, removeEnvLine, setEnvLine } from "../omp-config/env-file.ts";
@@ -39,10 +40,6 @@ const ENV_LIKE_KEY = /^[A-Z][A-Z0-9_]*$/;
 const DOLLAR_ENV_RE = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))$/;
 
 let secretTmpSeq = 0;
-
-function stripBom(text: string): string {
-  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-}
 
 /** 剥除 JSONC 中的 `//` 行注释与 `/* ... * /` 块注释（保留字符串字面量原样）。 */
 export function stripJsonComments(input: string): string {

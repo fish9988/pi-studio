@@ -173,15 +173,32 @@ export function appEnv(extraEnv: Record<string, string>): Record<string, string>
   return { ...env, ...extraEnv };
 }
 
+const fakePi = path.join(root, "test", "fake-pi", "fake-pi.mjs");
+
+/**
+ * STUDIO_TEST_PI 的值：用假 pi（test/fake-pi/fake-pi.mjs，确定性的 RPC 服务端）顶替 PATH 上的 pi。
+ * 不依赖真机装了什么、不调真模型，也不写真实 `~/.pi/agent`（agent 目录由调用方或 `launchApp` 指到临时目录）。
+ */
+export function testPi(): string {
+  return JSON.stringify({ command: process.execPath, args: [fakePi] });
+}
+
 /**
  * askTakeover=false（默认）时预先替用户拒绝接管 PATH 上的 omp 和 STUDIO_TEST_OMP 的假 omp：
  * 不测接管的用例不该被接管弹窗挡住，也绝不能在测试里真的下载 omp、改用户 PATH。
+ * `extraEnv` 里既没有 `STUDIO_TEST_PI` 也没有 `STUDIO_TEST_OMP` 时自动注入 `STUDIO_TEST_PI: testPi()`：
+ * 大量用例只是要一个假会话，不传的话就会去扫真机 PATH 上的 pi（甚至真的跑起来）。要测「没有 pi」的用例
+ * 显式传 `STUDIO_TEST_PI: ""`（空串等于不覆盖，见 src/main/pi/discover.ts）。
  * 环境变量见 `appEnv`。返回前等 `app-root` 挂上：主入口要先等字体和启动快照，拿到窗口时快捷键还没有监听。
  */
 export async function launchApp(
   extraEnv: Record<string, string> = {},
   options: { askTakeover?: boolean } = {},
 ): Promise<LaunchedApp> {
+  const fakePiEnv =
+    extraEnv["STUDIO_TEST_PI"] === undefined && extraEnv["STUDIO_TEST_OMP"] === undefined
+      ? { STUDIO_TEST_PI: testPi() }
+      : {};
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "omp-studio-e2e-"));
   if (options.askTakeover !== true) {
     const testOmp = extraEnv["STUDIO_TEST_OMP"];
@@ -209,7 +226,7 @@ export async function launchApp(
     app = await electron.launch({
       args: [root],
       cwd: root,
-      env: appEnv({ STUDIO_USER_DATA: userDataDir, PI_CODING_AGENT_DIR: agentDir, ...extraEnv }),
+      env: appEnv({ STUDIO_USER_DATA: userDataDir, PI_CODING_AGENT_DIR: agentDir, ...fakePiEnv, ...extraEnv }),
     });
     const page = await app.firstWindow();
     await page.getByTestId("app-root").waitFor({ state: "attached" });

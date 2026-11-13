@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ModelKey, Project, ProjectId, TaskId } from "../../shared/ipc.ts";
 import type { ThinkingLevel } from "../../shared/omp-wire/rpc-wire.generated.ts";
+import { stripBom } from "../../shared/strip-bom.ts";
 import { writeFileAtomic } from "./atomic-write.ts";
 
 export interface TaskRecord {
@@ -68,7 +69,8 @@ export class TaskRegistry {
       throw error;
     }
     // 文件损坏时抛错让问题被看见，而不是当作空表覆盖掉用户的任务列表。
-    const parsed: unknown = JSON.parse(text);
+    // BOM 不算损坏：Windows 编辑器可能带 UTF-8 BOM 写入，先剥掉再解析。
+    const parsed: unknown = JSON.parse(stripBom(text));
     if (typeof parsed !== "object" || parsed === null || !("version" in parsed) || parsed.version !== 1)
       throw new Error(`${this.#file}: unsupported tasks.json format`);
     // 老版本写的记录：没有 worktree 字段的补 null；带 `engine` 字段的（rpc 引擎删除之前写的，`rpc` 或 `tsp`）去掉这个字段——

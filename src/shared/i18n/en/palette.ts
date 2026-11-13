@@ -11,4 +11,5 @@ export const palette = {
   slash: "Slash commands",
   noResults: "No matches",
   askNew: "Ask in a new task",
+  quoteSelection: "Quote selection to composer",
 } satisfies Record<keyof typeof zhCN, MessageEntry>;

@@ -38,6 +38,15 @@ describe("斜杠守卫", () => {
   it("命令列表还没载入（空）时不拦", () => {
     expect(decideSlashSend("/plan", [])).toEqual({ kind: "send" });
   });
+  it("Pi 原生命令（llama / import / share / bug / trust）一次放行，不弹提醒", () => {
+    for (const name of ["llama", "import", "share", "bug", "trust"]) {
+      expect(decideSlashSend(`/${name}`, commands)).toEqual({ kind: "send" });
+      // 带参数、大小写不同也放行。
+      expect(decideSlashSend(`/${name.toUpperCase()} some arg`, commands)).toEqual({ kind: "send" });
+    }
+    // 白名单之外的仍然先提醒。
+    expect(decideSlashSend("/llamas", commands)).toEqual({ kind: "warn", name: "llamas" });
+  });
 });
 
 describe("斜杠菜单不再截断到 8 条", () => {

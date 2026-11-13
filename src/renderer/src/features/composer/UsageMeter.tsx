@@ -109,6 +109,8 @@ function ContextButton({
   const isHigh = context.percent >= 90;
 
   const sessionUsage = task?.sessionUsage ?? null;
+  // 还没拿到用量（会话文件还没写、任务刚起）时显示 `—` 而不是 0：0 是“真的没用”，两者不能混。
+  const noUsage = sessionUsage === null;
   const turns = sessionUsage?.requests ?? 0;
   const inTok = sessionUsage?.tokens.input ?? 0;
   const outTok = sessionUsage?.tokens.output ?? 0;
@@ -163,7 +165,7 @@ function ContextButton({
           <div className="ctx-hover-grid">
             <div className="ctx-hover-item">
               <span className="ctx-hover-label">{zh ? "对话轮数" : "Turns"}</span>
-              <span className="ctx-hover-val">{zh ? `${turns} 轮` : `${turns}`}</span>
+              <span className="ctx-hover-val">{noUsage ? "—" : zh ? `${turns} 轮` : `${turns}`}</span>
             </div>
             <div className="ctx-hover-item">
               <span className="ctx-hover-label">{zh ? "缓存命中率" : "Cache Hit"}</span>
@@ -172,15 +174,21 @@ function ContextButton({
             <div className="ctx-hover-item">
               <span className="ctx-hover-label">{zh ? "Token 用量" : "Tokens"}</span>
               <span className="ctx-hover-val" title={`In ${formatCount(inTok)} · Out ${formatCount(outTok)}`}>
-                {formatCount(totalTok)}
+                {noUsage ? "—" : formatCount(totalTok)}
               </span>
             </div>
             <div className="ctx-hover-item">
               <span className="ctx-hover-label">{zh ? "累计开销" : "Cost"}</span>
               <span className="ctx-hover-val">
-                {formatMoney(cost)}
-                {subagentCost > 0 ? ` (+${formatMoney(subagentCost)})` : ""}
-                {subscription ? " (sub)" : ""}
+                {noUsage ? (
+                  "—"
+                ) : (
+                  <>
+                    {formatMoney(cost)}
+                    {subagentCost > 0 ? ` (+${formatMoney(subagentCost)})` : ""}
+                    {subscription ? " (sub)" : ""}
+                  </>
+                )}
               </span>
             </div>
           </div>

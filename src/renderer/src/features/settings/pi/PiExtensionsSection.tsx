@@ -63,6 +63,7 @@ import {
 } from "../../../ui/controls.tsx";
 import { ConfirmDialog, Dialog } from "../../../ui/Dialog.tsx";
 import { reportError } from "../../../ui/errors.ts";
+import { InfoTip } from "../../../ui/InfoTip.tsx";
 import { pushToast } from "../../dialogs/toast-store.ts";
 import { SkillsCard } from "../SkillsCard.tsx";
 import { piBridge } from "./pi-bridge.ts";
@@ -975,7 +976,17 @@ export function PiExtensionsSection() {
       {/* 5. MCP 服务器 (mcp.json) */}
       <section className="pis-group">
         <SectionHead
-          title={tr("MCP 服务器 (mcp.json)", "MCP servers (mcp.json)")}
+          title={
+            <>
+              <span className="ui-info-lead">{tr("MCP 服务器 (mcp.json)", "MCP servers (mcp.json)")}</span>
+              <InfoTip>
+                {tr(
+                  "Pi 在启动会话时按 mcp.json 连接 MCP；这里只展示当前配置状态，不会主动连接。",
+                  "Pi connects MCP servers from mcp.json when a session starts; this only shows the current config state and never connects.",
+                )}
+              </InfoTip>
+            </>
+          }
           count={visibleMcpServers.length}
           actions={
             <>
@@ -1015,6 +1026,13 @@ export function PiExtensionsSection() {
                 server.transport === "stdio"
                   ? [server.command, ...(server.args ?? [])].filter(Boolean).join(" ")
                   : (server.url ?? "");
+              // 只呈现 mcp.json 里已经读到的信息（不另起子进程、不改写配置）。
+              const metaParts: string[] = [];
+              if (server.description) metaParts.push(server.description);
+              if (endpoint !== "") metaParts.push(endpoint);
+              if (server.timeout !== undefined) metaParts.push(`${tr("超时", "timeout")}: ${server.timeout}s`);
+              if (server.envKeys.length > 0) metaParts.push(`env: ${server.envKeys.length}`);
+              if (server.headerKeys.length > 0) metaParts.push(`headers: ${server.headerKeys.length}`);
               return (
                 <ListRow
                   key={`${server.scope}:${server.name}`}
@@ -1036,7 +1054,7 @@ export function PiExtensionsSection() {
                       )}
                     </>
                   }
-                  meta={server.description ? `${server.description} · ${endpoint}` : endpoint}
+                  meta={metaParts.join(" · ")}
                   actions={
                     <>
                       <Switch

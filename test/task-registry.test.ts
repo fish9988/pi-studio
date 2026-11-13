@@ -140,6 +140,21 @@ describe("TaskRegistry（tasks.json）", () => {
     expect(await readFile(file, "utf8")).toContain('"version":2');
   });
 
+  it("tasks.json 带 UTF-8 BOM 时照常加载（Windows 编辑器可能加 BOM，不算损坏）", async () => {
+    const file = path.join(scratch, "bom.json");
+    const registry = new TaskRegistry(file);
+    await registry.load();
+    const project = await registry.addProject(path.join(scratch, "bom 项目"));
+    const task = await registry.addTask({ ...newTask(project.id), title: "带 BOM" });
+    const text = await readFile(file, "utf8");
+    await writeFile(file, `\uFEFF${text}`);
+
+    const reloaded = new TaskRegistry(file);
+    await reloaded.load();
+    expect(reloaded.listProjects()).toHaveLength(1);
+    expect(reloaded.findTask(task.id)?.title).toBe("带 BOM");
+  });
+
   it("连续保存是串行的，写完后目录里没有残留的临时文件", async () => {
     const dir = path.join(scratch, "d");
     const registry = new TaskRegistry(path.join(dir, "tasks.json"));

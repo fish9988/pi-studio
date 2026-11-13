@@ -2,6 +2,7 @@
 // 防的是：粘贴占位符没换回原文就发给了 omp；删掉芯片后附件还在；图片编号和文字里的占位符对不上。
 import { describe, expect, it } from "vitest";
 import {
+  adoptPersistedDraft,
   appendDraft,
   buildSubmission,
   buildView,
@@ -31,6 +32,7 @@ import {
   type DraftImage,
 } from "../src/renderer/src/features/composer/composer-tokens.ts";
 import { clampFieldHeight, maxFieldHeight } from "../src/renderer/src/features/composer/field-height.ts";
+import type { PersistedDraft } from "../src/shared/ipc.ts";
 
 const image = (width?: number, height?: number, data = "AAAA"): DraftImage => ({
   mimeType: "image/webp",
@@ -303,6 +305,80 @@ describe("文件附件", () => {
       "34 KB",
       "1.5 MB",
     ]);
+  });
+});
+
+describe("落盘的草稿（v2）读回来", () => {
+  const stored = (partial: Partial<PersistedDraft>): PersistedDraft => ({
+    text: "",
+    pastes: {},
+    pasteCounter: 0,
+    images: [],
+    files: [],
+    ...partial,
+  });
+  const record = (id: string, width: number, height: number) => ({
+    id: `${id.repeat(64)}.webp`,
+    name: `image-${width}.webp`,
+    mimeType: "image/webp" as const,
+    width,
+    height,
+  });
+
+  it("附件都在时文字里的占位符不动，粘贴原文和计数器原样回来", () => {
+    const persisted = stored({
+      text: "[Image #1, 8x6] 看 [File #1, a.txt] 和 [Paste #2, +12 lines]",
+      images: [record("a", 8, 6)],
+      files: [{ id: "f1", name: "a.txt", size: 3 }],
+      pastes: { 2: lines(12) },
+      pasteCounter: 2,
+    });
+    const draft = adoptPersistedDraft(
+      persisted,
+      [{ mimeType: "image/webp", data: "AAAA", width: 8, height: 6 }],
+      [{ id: "f1", name: "a.txt", size: 3 }],
+    );
+    expect(draft.text).toBe(persisted.text);
+    expect(draft.images.map((entry) => entry.data)).toEqual(["AAAA"]);
+    expect(draft.files.map((entry) => entry.name)).toEqual(["a.txt"]);
+    expect(draft.pastes).toEqual({ 2: lines(12) });
+    expect(draft.pasteCounter).toBe(2);
+  });
+
+  it("图片内容读不到（文件被回收）：那张图和它的占位符一起去掉，后面的图片往前补号", () => {
+    const persisted = stored({
+      text: "x [Image #1, 10x10] y [Image #2, 20x20] z",
+      images: [record("a", 10, 10), record("b", 20, 20)],
+    });
+    const draft = adoptPersistedDraft(
+      persisted,
+      [null, { mimeType: "image/webp", data: "BB", width: 20, height: 20 }],
+      [],
+    );
+    expect(draft.text).toBe("x y [Image #1, 20x20] z");
+    expect(draft.images.map((entry) => entry.data)).toEqual(["BB"]);
+  });
+
+  it("文件已不在磁盘上（null）：占位符去掉，后面的文件往前补号，图片和粘贴不受影响", () => {
+    const persisted = stored({
+      text: "[Image #1, 8x6] [File #1, a.txt] [File #2, b.txt] [File #3, c.txt] [Paste #1, +12 lines]",
+      images: [record("a", 8, 6)],
+      files: [{ id: "a", name: "a.txt", size: 1 }, null, { id: "c", name: "c.txt", size: 3 }],
+      pastes: { 1: lines(12) },
+      pasteCounter: 1,
+    });
+    const draft = adoptPersistedDraft(
+      persisted,
+      [{ mimeType: "image/webp", data: "AAAA", width: 8, height: 6 }],
+      [{ id: "a", name: "a.txt", size: 1 }, null, { id: "c", name: "c.txt", size: 3 }],
+    );
+    expect(draft.text).toBe("[Image #1, 8x6] [File #1, a.txt] [File #2, c.txt] [Paste #1, +12 lines]");
+    expect(draft.files.map((entry) => entry.name)).toEqual(["a.txt", "c.txt"]);
+  });
+
+  it("附件全丢掉时只剩文字（占位符连同分隔空格一起去掉）", () => {
+    const persisted = stored({ text: "[Image #1, 10x10] 总结", images: [record("a", 10, 10)] });
+    expect(adoptPersistedDraft(persisted, [null], []).text).toBe("总结");
   });
 });
 

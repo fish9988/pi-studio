@@ -1,9 +1,8 @@
 // 代码块（spec 4.10）：头部语言名 + 复制；围栏闭合后才高亮（只改颜色）；全文显示（omp 的 md 节点不限行数）。
 // ```svg 和 ```mermaid 围栏闭合后画成图，头部多一个切回源码的按钮。
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { draftKey, type TaskId } from "../../../shared/ipc.ts";
-import { insertPaste } from "../features/composer/composer-tokens.ts";
-import { getDraft, setDraft, setDraftText } from "../features/composer/draft-store.ts";
+import { draftKey } from "../../../shared/ipc.ts";
+import { quoteToComposer } from "../features/composer/quote.ts";
 import { openInlineArtifact } from "../features/file-preview/index.ts";
 import { useT } from "../i18n/use-t.ts";
 import { Check, Code, CopyIcon, External, Plus } from "../icons.tsx";
@@ -120,19 +119,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
       (error: unknown) => console.error("复制失败", error),
     );
   };
-  const quoteToComposer = () => {
-    const key = (taskId ?? draftKey(null)) as TaskId;
-    const current = getDraft(key);
-    const snippet = lang ? `\`\`\`${lang}\n${code}\n\`\`\`` : code;
-    const pasted = insertPaste(current, snippet, current.text.length);
-    if (pasted !== null) {
-      setDraft(key, pasted.draft);
-    } else {
-      const prefix = current.text.length > 0 && !current.text.endsWith("\n") ? "\n" : "";
-      setDraftText(key, `${current.text}${prefix}${snippet}\n`);
-    }
-    document.querySelector<HTMLTextAreaElement>('[data-testid="composer-input"]')?.focus();
-  };
+  const quote = () => quoteToComposer(taskId, code, { lang });
   const zh = currentLocale() === "zh-CN";
 
   return (
@@ -179,7 +166,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
           <button
             type="button"
             className="md-codebtn"
-            onClick={quoteToComposer}
+            onClick={quote}
             aria-label={zh ? "引用到输入框" : "Quote to composer"}
             title={zh ? "引用到输入框" : "Quote to composer"}
             data-testid="codeblock-quote-composer"

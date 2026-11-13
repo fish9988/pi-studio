@@ -87,6 +87,8 @@ export function ModelBreakdown({ task, load, speed }: { task: TaskState; load: M
     }
     return null;
   })();
+  // 会话用量或者按模型的数据有一份就算“有数据”；都没有（任务刚起）时不画速度 / 命中率那一行。
+  const hasUsage = task.sessionUsage !== null || (load.kind === "ready" && load.data.models.length > 0);
 
   return (
     <div className="mb" data-testid="model-breakdown">
@@ -94,17 +96,18 @@ export function ModelBreakdown({ task, load, speed }: { task: TaskState; load: M
         <strong className="mb-title">{t("composer.breakdown.title")}</strong>
         {task.sessionUsage !== null && <span className="ctx-num">{formatCount(task.sessionUsage.tokens.total)}</span>}
       </div>
-      {(speed !== null || sessionHitRate !== null) && (
+      {/* 有数据就画这一行：缓存命中率算不出来（没有输入、全是新内容）时写 `—`，不写误导的 0%。 */}
+      {(speed !== null || hasUsage) && (
         <div className="mb-meta-row">
           {speed !== null && (
             <p className="ctx-note" data-testid="usage-tps" data-live={speed.live || undefined}>
               {t("composer.usage.tps", { n: speed.text })}
             </p>
           )}
-          {sessionHitRate !== null && (
+          {hasUsage && (
             <p className="ctx-note mb-hit-summary" data-testid="usage-cache-hit">
               <span>{t("composer.usage.cacheHit")}</span>
-              <span className="ctx-num">{sessionHitRate}</span>
+              <span className="ctx-num">{sessionHitRate ?? "—"}</span>
             </p>
           )}
         </div>
@@ -116,7 +119,7 @@ export function ModelBreakdown({ task, load, speed }: { task: TaskState; load: M
       )}
       {load.kind === "ready" &&
         load.data.models.map((row) => {
-          const rowHit = formatCacheHitRate(row.input, row.cacheRead, row.cacheWrite) ?? "0%";
+          const rowHit = formatCacheHitRate(row.input, row.cacheRead, row.cacheWrite) ?? "—";
           return (
             <section key={`${row.provider}/${row.modelId}`} className="mb-model" data-testid="model-usage">
               <div className="mb-model-head">

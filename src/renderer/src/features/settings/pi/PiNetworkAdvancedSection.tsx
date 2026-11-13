@@ -33,15 +33,15 @@ export function PiNetworkAdvancedSection() {
   // 1. 传输协议与代理
   const transport = usePiSetting<TransportMode>("transport", "auto", asTransport);
   const httpProxy = usePiSetting("httpProxy", "", asString);
-  const httpIdleTimeout = usePiSetting("httpIdleTimeoutMs", 60000, asNumber);
-  const wsConnectTimeout = usePiSetting("websocketConnectTimeoutMs", 10000, asNumber);
+  const httpIdleTimeout = usePiSetting("httpIdleTimeoutMs", 300000, asNumber);
+  const wsConnectTimeout = usePiSetting("websocketConnectTimeoutMs", 15000, asNumber);
 
   // 2. 自动重试策略 (retry.*)
   const retryEnabled = usePiSetting("retry.enabled", true, asBoolean);
   const maxRetries = usePiSetting("retry.maxRetries", 3, asNumber);
   const baseDelayMs = usePiSetting("retry.baseDelayMs", 2000, asNumber);
   const maxAgentDelayMs = usePiSetting("retry.maxAgentDelayMs", 60000, asNumber);
-  const providerTimeoutMs = usePiSetting("retry.provider.timeoutMs", 300000, asNumber);
+  const providerTimeoutMs = usePiSetting("retry.provider.timeoutMs", httpIdleTimeout.value, asNumber);
 
   const transportOptions: readonly Option<TransportMode>[] = [
     { value: "auto", label: "auto" },
@@ -103,7 +103,7 @@ export function PiNetworkAdvancedSection() {
           <Row
             label={tr("HTTP 空闲超时", "HTTP idle timeout")}
             modified={httpIdleTimeout.modified}
-            reset={{ tip: "60000 ms", onReset: () => void httpIdleTimeout.reset() }}
+            reset={{ tip: "300000 ms", onReset: () => void httpIdleTimeout.reset() }}
             testId="pi-http-idle-row"
           >
             {(labelId) => (
@@ -122,7 +122,7 @@ export function PiNetworkAdvancedSection() {
           <Row
             label={tr("WebSocket 握手超时", "WebSocket connect timeout")}
             modified={wsConnectTimeout.modified}
-            reset={{ tip: "10000 ms", onReset: () => void wsConnectTimeout.reset() }}
+            reset={{ tip: "15000 ms", onReset: () => void wsConnectTimeout.reset() }}
             testId="pi-ws-timeout-row"
           >
             {(labelId) => (
@@ -219,8 +219,15 @@ export function PiNetworkAdvancedSection() {
 
           <Row
             label={tr("Provider 总请求超时", "Provider request timeout")}
+            info={tr(
+              `未设置时跟随 HTTP 空闲超时（当前 ${httpIdleTimeout.value} ms）。`,
+              `Follows the HTTP idle timeout when unset (currently ${httpIdleTimeout.value} ms).`,
+            )}
             modified={providerTimeoutMs.modified}
-            reset={{ tip: "300000 ms", onReset: () => void providerTimeoutMs.reset() }}
+            reset={{
+              tip: tr("未设置（跟随 HTTP 空闲超时）", "Unset (follows HTTP idle timeout)"),
+              onReset: () => void providerTimeoutMs.reset(),
+            }}
             testId="pi-retry-provider-timeout-row"
           >
             {(labelId) => (

@@ -11,6 +11,7 @@ import {
   lockClipboard,
   openTaskRow,
   testOmp,
+  testPi,
   type LaunchedApp,
 } from "./launch.ts";
 
@@ -23,12 +24,15 @@ interface Started {
   cleanup(): Promise<void>;
 }
 
-async function start(): Promise<Started> {
+async function start(options: { resume?: boolean } = {}): Promise<Started> {
   const work = await mkdtemp(path.join(os.tmpdir(), "omp 剪贴板 e2e-"));
   const project = path.join(work, "项目 目录");
   await mkdir(project);
-  // resume 录制：omp 起来就把整段旧对话（用户消息、工具卡片、回答）画出来，不用先发消息。
-  const launched = await launchApp({ STUDIO_TEST_OMP: testOmp("resume") });
+  // resume 录制：假 omp 起来就把整段旧对话（用户消息、工具卡片、回答）画出来，要断言「恢复出来的回答」的用例用它；
+  // 其余用例只要一个空会话，用假 pi（test/fake-pi/fake-pi.mjs）。
+  const launched = await launchApp(
+    options.resume === true ? { STUDIO_TEST_OMP: testOmp("resume") } : { STUDIO_TEST_PI: testPi() },
+  );
   const unlock = await lockClipboard();
   let saved: string | null = null;
   const cleanup = async () => {
@@ -139,7 +143,7 @@ test("粘贴文件：普通文件变成附件卡片和 #N 芯片，文件夹插�
 });
 
 test("选中即复制：对话里鼠标选中就进剪贴板并提示；输入框里选中不动剪贴板；设置里关掉后不再复制", async () => {
-  const { launched, cleanup } = await start();
+  const { launched, cleanup } = await start({ resume: true });
   try {
     const { page } = launched;
     await launched.app.evaluate(({ clipboard }) => clipboard.writeText("原来的内容"));

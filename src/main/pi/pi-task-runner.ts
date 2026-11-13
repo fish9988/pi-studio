@@ -100,6 +100,52 @@ const execFileAsync = promisify(execFile);
 
 const EXPORT_TIMEOUT_MS = 30_000;
 const STDERR_LINES_IN_ERROR = 8;
+/** `compaction.reserveTokens` 的 schema 默认值：全局、项目级与模型覆盖都没配时用它。 */
+const DEFAULT_COMPACTION_RESERVE_TOKENS = 16_384;
+
+function nonNegativeNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function objectOrNull(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** `compaction.modelOverrides`：键是精确的 `provider/modelId`。 */
+function compactionModelOverrides(compaction: unknown): Record<string, unknown> {
+  return objectOrNull(objectOrNull(compaction)?.["modelOverrides"]) ?? {};
+}
+
+/**
+ * 合并生效的压缩预留 token 数：全局 `compaction` → 项目级 `compaction` 覆盖 →
+ * 命中当前模型的 `modelOverrides["provider/modelId"]` 再覆盖。都是纯函数，方便单测。
+ */
+export function resolveCompactionReserveTokens(
+  globalCompaction: unknown,
+  projectCompaction: unknown,
+  modelKey: ModelKey | null,
+): number {
+  const overrides = { ...compactionModelOverrides(globalCompaction), ...compactionModelOverrides(projectCompaction) };
+  const modelOverride = modelKey === null ? null : overrides[`${modelKey.provider}/${modelKey.modelId}`];
+  return (
+    nonNegativeNumber(objectOrNull(modelOverride)?.["reserveTokens"]) ??
+    nonNegativeNumber(objectOrNull(projectCompaction)?.["reserveTokens"]) ??
+    nonNegativeNumber(objectOrNull(globalCompaction)?.["reserveTokens"]) ??
+    DEFAULT_COMPACTION_RESERVE_TOKENS
+  );
+}
+
+/**
+ * 自动压缩触发点（已用上下文占窗口的百分比）：窗口减掉预留后还剩多少可用比例。
+ * 窗口或预留不可用（非数字、窗口 ≤ 0、预留 < 0 或 ≥ 窗口）时返回 null，不编一个假刻度。
+ */
+export function autoCompactionPercent(contextWindow: number, reserveTokens: number): number | null {
+  if (!Number.isFinite(contextWindow) || !Number.isFinite(reserveTokens)) return null;
+  if (contextWindow <= 0 || reserveTokens < 0 || reserveTokens >= contextWindow) return null;
+  return Math.max(1, Math.min(99, Math.round(((contextWindow - reserveTokens) / contextWindow) * 100)));
+}
 
 export interface PiTaskRunnerHost extends Omit<TspRunnerHost, "buildLaunch" | "session"> {
   buildPiLaunch?(record: TaskRecord, project: Project): Promise<PiLaunch>;
@@ -155,6 +201,8 @@ export class PiTaskRunner {
   #compactionState: "running" | "ready" | null = null;
   #sessionUsage: TaskState["sessionUsage"] = null;
   #autoCompactionEnabled = true;
+  /** readContext 时刷新的合并后预留 token 数（全局 → 项目级 → 当前模型覆盖）；null = 还没算过。 */
+  #compactionReserveTokens: number | null = null;
   #catalog: ModelOption[] = [];
   #newTaskDefault: { model: ModelOption | null; thinkingLevel: ThinkingLevel | null } = {
     model: null,
@@ -330,9 +378,7 @@ export class PiTaskRunner {
       restartable: this.restartable,
       loaderText: null,
       prNumber: null,
-      contextCompaction: this.#autoCompactionEnabled
-        ? { autoAtPercent: 60, summaryStartsAtPercent: null, summary: this.#compactionState }
-        : null,
+      contextCompaction: this.#autoCompactionEnabled ? this.#contextCompactionInfo() : null,
       composerMode: null,
       extStatuses: this.#extStatuses,
       keepAlive: this.keepAlive,
@@ -788,6 +834,16 @@ export class PiTaskRunner {
     }
   }
 
+  /** 自动压缩刻度：按当前模型窗口与合并后的 reserveTokens 算；刻度算不出时仍保留 summary 状态。 */
+  #contextCompactionInfo(): NonNullable<TaskState["contextCompaction"]> | null {
+    const percent = autoCompactionPercent(
+      this.#fallbackContextWindow(),
+      this.#compactionReserveTokens ?? DEFAULT_COMPACTION_RESERVE_TOKENS,
+    );
+    if (percent === null && this.#compactionState === null) return null;
+    return { autoAtPercent: percent, summaryStartsAtPercent: null, summary: this.#compactionState };
+  }
+
   #fallbackContextWindow(): number {
     const explicit =
       this.#contextUsage?.contextWindow ?? this.#model?.contextWindow ?? this.#newTaskDefault.model?.contextWindow ?? 0;
@@ -819,31 +875,39 @@ export class PiTaskRunner {
     let skillsTokens = 0;
     let builtInToolsTokens = 1520;
     let customToolsTokens = 0;
-    let configuredReserve = 16_384;
+    let configuredReserve = DEFAULT_COMPACTION_RESERVE_TOKENS;
 
     try {
-      const [globalSettings, globalAgents, projAgents, globalSys, skills, mcpServers] = await Promise.all([
-        readPiSettingsObject(piSettingsFilePath(agentDir, "global"), false),
-        readPiSystemDoc(agentDir, null, "global", "AGENTS.md"),
-        readPiSystemDoc(agentDir, this.cwd, "project", "AGENTS.md").catch(() => ({ content: "" })),
-        readPiSystemDoc(agentDir, null, "global", "SYSTEM.md"),
-        listPiSkills(agentDir, this.cwd).catch(() => []),
-        listPiMcpServers(agentDir, this.cwd).catch(() => []),
-      ]);
+      const hasProjectDir = this.cwd.trim() !== "";
+      const [globalSettings, projectSettings, globalAgents, projAgents, globalSys, skills, mcpServers] =
+        await Promise.all([
+          readPiSettingsObject(piSettingsFilePath(agentDir, "global"), false),
+          hasProjectDir
+            ? readPiSettingsObject(piSettingsFilePath(agentDir, "project", this.cwd), false).catch(() => ({
+                exists: false,
+                data: {} as Record<string, unknown>,
+              }))
+            : Promise.resolve({ exists: false, data: {} as Record<string, unknown> }),
+          readPiSystemDoc(agentDir, null, "global", "AGENTS.md"),
+          readPiSystemDoc(agentDir, this.cwd, "project", "AGENTS.md").catch(() => ({ content: "" })),
+          readPiSystemDoc(agentDir, null, "global", "SYSTEM.md"),
+          listPiSkills(agentDir, this.cwd).catch(() => []),
+          listPiMcpServers(agentDir, this.cwd).catch(() => []),
+        ]);
       sysTokens += estTokens(globalAgents.content) + estTokens(projAgents.content) + estTokens(globalSys.content);
       const enabledSkills = skills.filter((s) => !s.disabled);
       skillsTokens = enabledSkills.reduce((acc, s) => acc + 24 + estTokens(s.name) + estTokens(s.description ?? ""), 0);
       const enabledMcp = mcpServers.filter((m) => m.enabled && m.exposure !== "hidden");
       customToolsTokens = enabledMcp.length * 260;
-      const compactionObj = globalSettings.data["compaction"];
-      if (
-        typeof compactionObj === "object" &&
-        compactionObj !== null &&
-        typeof (compactionObj as Record<string, unknown>)["reserveTokens"] === "number"
-      ) {
-        const val = (compactionObj as Record<string, number>)["reserveTokens"]!;
-        if (Number.isFinite(val) && val > 0) configuredReserve = val;
-      }
+      // 生效配置：全局 compaction → 项目级 compaction 覆盖 → 当前模型 modelOverrides 再覆盖。
+      const currentModel = this.#model ?? this.#newTaskDefault.model ?? null;
+      const modelKey: ModelKey | null = currentModel?.key ?? this.#record.model ?? null;
+      configuredReserve = resolveCompactionReserveTokens(
+        globalSettings.data["compaction"],
+        projectSettings.data["compaction"],
+        modelKey,
+      );
+      this.#compactionReserveTokens = configuredReserve;
     } catch {
       // ignore config read errors
     }

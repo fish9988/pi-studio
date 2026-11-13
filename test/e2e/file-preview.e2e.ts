@@ -14,6 +14,7 @@ import {
   setLocaleTheme,
   setTheme,
   testOmp,
+  testPi,
   type LaunchedApp,
 } from "./launch.ts";
 
@@ -27,7 +28,10 @@ interface Started {
   cleanup(): Promise<void>;
 }
 
-/** `fixtureFor`：给了就用它造回放录制（返回 `testOmp(...)` 的值），默认回放 slash-status。 */
+/**
+ * `fixtureFor`：给了就用它造回放录制（返回 `testOmp(...)` 的值，测试要断言录制里的内容时用），
+ * 不给就用假 pi（test/fake-pi/fake-pi.mjs）起一个空会话：不看回复内容、只验证文件预览本身的用例走这一条。
+ */
 async function start(fixtureFor?: (work: string, project: string) => Promise<string>): Promise<Started> {
   const work = await mkdtemp(path.join(os.tmpdir(), "omp 预览 e2e-"));
   const project = path.join(work, "项目 目录");
@@ -40,9 +44,9 @@ async function start(fixtureFor?: (work: string, project: string) => Promise<str
   );
   await writeFile(path.join(project, "page.html"), "<h1>hello page</h1>");
   await writeFile(path.join(project, "blob.bin"), Buffer.from([1, 2, 0, 3, 4]));
-  const launched = await launchApp({
-    STUDIO_TEST_OMP: fixtureFor ? await fixtureFor(work, project) : testOmp("slash-status"),
-  });
+  const launched = await launchApp(
+    fixtureFor ? { STUDIO_TEST_OMP: await fixtureFor(work, project) } : { STUDIO_TEST_PI: testPi() },
+  );
   await launched.app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
   }, project);

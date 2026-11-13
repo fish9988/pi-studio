@@ -11,8 +11,9 @@ import {
   type ReactNode,
 } from "react";
 import { ASK_BUTTON_ROLE, ASK_GATE_ROLE } from "../../../../../shared/tsp/ask-gate.ts";
+import type { TaskId } from "../../../../../shared/ipc.ts";
 import type { TspSpace, TspText } from "../../../../../shared/tsp/tsp.generated.ts";
-import { Check, ChevronDown, CopyIcon } from "../../../icons.tsx";
+import { Check, ChevronDown, Comment, CopyIcon } from "../../../icons.tsx";
 import { AskButtonRow, AskGateCol } from "../interactive/AskGate.tsx";
 import { ERROR_CARD_ROLE } from "../../../../../shared/tsp/error-turn.ts";
 import { RetryButton } from "../../session-info/RetryButton.tsx";
@@ -42,6 +43,7 @@ import { useSessionExtras } from "../session-extras-store.ts";
 import { useTaskValue } from "../../../store/index.ts";
 import { formatTurnFooter } from "../turn-footer.ts";
 import { copyText } from "../actions.ts";
+import { quoteToComposer } from "../../composer/quote.ts";
 import { currentLocale } from "../../../store/settings-store.ts";
 import { UserMessageActions } from "../UserMessageActions.tsx";
 const GAPS: ReadonlySet<TspSpace> = new Set(["none", "xs", "sm", "md", "lg"]);
@@ -162,6 +164,27 @@ function AssistantCopyIconBtn({ text }: { text: string }) {
       }}
     >
       {copied ? <Check size={12} /> : <CopyIcon size={12} />}
+    </button>
+  );
+}
+
+/** 助手消息 foot 行里“引用到输入框”：把这条回答接进当前任务的草稿（不新开行，和复制按钮同一个样式）。 */
+function AssistantQuoteIconBtn({ taskId, text }: { taskId: TaskId; text: string }) {
+  const zh = currentLocale() === "zh-CN";
+  if (text === "") return null;
+  return (
+    <button
+      type="button"
+      className="tsp-assistant-copy-btn"
+      data-testid="tsp-assistant-quote"
+      title={zh ? "引用到输入框" : "Quote to composer"}
+      aria-label={zh ? "引用回答到输入框" : "Quote response to composer"}
+      onClick={(event) => {
+        event.stopPropagation();
+        quoteToComposer(taskId, text);
+      }}
+    >
+      <Comment size={12} />
     </button>
   );
 }
@@ -298,6 +321,7 @@ function AssistantCol(props: NodeProps) {
             {answerText !== "" && (
               <>
                 <AssistantCopyIconBtn text={answerText} />
+                <AssistantQuoteIconBtn taskId={taskId} text={answerText} />
                 <span className="tsp-foot-sep" aria-hidden="true">
                   ·
                 </span>
@@ -309,6 +333,7 @@ function AssistantCol(props: NodeProps) {
         {showBareCopyFoot && (
           <div className="tsp-row tsp-assistant-bare-foot" title={zh ? "复制回答" : "Copy response"}>
             <AssistantCopyIconBtn text={answerText} />
+            <AssistantQuoteIconBtn taskId={taskId} text={answerText} />
           </div>
         )}
       </div>
@@ -345,6 +370,7 @@ function UsageRow(props: NodeProps) {
       {showCopy && (
         <>
           <AssistantCopyIconBtn text={answerText} />
+          <AssistantQuoteIconBtn taskId={taskId} text={answerText} />
           <span className="tsp-foot-sep" aria-hidden="true">
             ·
           </span>

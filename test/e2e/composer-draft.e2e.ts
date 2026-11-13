@@ -1,16 +1,16 @@
 // 输入框草稿的端到端：草稿存进主进程（userData/drafts.json），防抖后落盘；刷新页面时防抖中的草稿被立刻冲刷。
-// 任务用假 omp（伪终端里回放 fixtures/tsp/slash-status），项目目录带空格和中文。
+// 任务用假 pi（test/fake-pi/fake-pi.mjs），项目目录带空格和中文。
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { launchApp, openTaskRow, testOmp, type LaunchedApp } from "./launch.ts";
+import { launchApp, openTaskRow, testPi, type LaunchedApp } from "./launch.ts";
 
 async function start(): Promise<{ launched: LaunchedApp; cleanup(): Promise<void> }> {
   const work = await mkdtemp(path.join(os.tmpdir(), "omp 草稿 e2e-"));
   const project = path.join(work, "项目 目录");
   await mkdir(project);
-  const launched = await launchApp({ STUDIO_TEST_OMP: testOmp("slash-status") });
+  const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   await launched.app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
   }, project);

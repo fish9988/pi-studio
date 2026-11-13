@@ -9,6 +9,19 @@ How to write it:
 
 ## [Unreleased]
 
+### Added
+
+- Composer drafts now persist pasted snippets, images, and attached files across task switches and restarts.
+- Added lightweight quoting to the composer from terminal selections (toolbar button and context menu), assistant replies, and page selections (`Ctrl+Shift+Q`).
+- Queued messages, extension widgets, compaction cancellations/errors, and extension error notices now appear cleanly in the conversation dock.
+
+### Fixed
+
+- Fixed "Tools & Terminal" showing default tools as active when all tools were explicitly disabled, which could silently re-enable them on toggle.
+- Aligned prompt cache warming and network timeout defaults with the engine, labeled CLI-only settings, and removed unresponsive legacy buttons on the setup screen.
+- Usage counters now display `—` when usage is unavailable instead of `$0`, and native slash commands (`/llama`, `/import`, `/share`, `/bug`, `/trust`) send without a second confirmation.
+- Stripped UTF-8 BOM when reading config and task registry files, improved Windows process-tree cleanup logging, and derived auto-compaction thresholds from actual model settings.
+
 ## [0.1.6] - 2026-11-13
 
 ### Added

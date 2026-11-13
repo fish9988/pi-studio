@@ -29,9 +29,11 @@ import {
   type PiSystemDocKind,
 } from "../../shared/pi-config-types.ts";
 import { chordFromKbd, STUDIO_RESERVED } from "../../shared/tsp/forward-keys.ts";
+import { stripBom } from "../../shared/strip-bom.ts";
 import type { OmpKeybinding } from "../../shared/tsp/omp-keybindings.ts";
 import { isRecord, nonEmptyString as str } from "../../shared/type-guards.ts";
 import { log } from "../log/log.ts";
+import { killProcessTree } from "../platform/process-tree.ts";
 import { writeFileAtomic } from "../tasks/atomic-write.ts";
 import { stripJsonComments } from "./auth-and-models.ts";
 import {
@@ -47,10 +49,6 @@ const MCP_EXPOSURE_SET = new Set<string>(PI_MCP_EXPOSURES);
 const SYSTEM_DOC_SET = new Set<string>(PI_SYSTEM_DOC_KINDS);
 const FOLDER_UNSAFE = /[/\\<>:"|?*]/;
 const SKILL_FILE = "SKILL.md";
-
-function stripBom(text: string): string {
-  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-}
 
 function hasControlChars(value: string): boolean {
   for (let i = 0; i < value.length; i++) {
@@ -1353,7 +1351,9 @@ export async function runPiPackageCommand(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill();
+      // Windows 上 child.kill() 只结束外壳，结束整个进程树（npm shim 会留孤儿）。
+      if (child.pid === undefined) child.kill();
+      else void killProcessTree(child.pid);
       reject(new Error(`pi ${op} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 

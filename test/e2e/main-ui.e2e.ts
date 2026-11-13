@@ -1,18 +1,16 @@
 // 阶段 2.6 主界面返工的端到端：空状态（最近任务、输入框贴底）、输入框两层布局、模型选择对话框、用量行、侧栏搜索。
-// 用 fixtures/tsp/slash-status 回放（假 omp，不调真实模型）。
+// 用假 pi（test/fake-pi/fake-pi.mjs，确定性的 RPC 服务端，不调真实模型）。
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { launchApp, testOmp, type LaunchedApp } from "./launch.ts";
-
-const fixture = "slash-status";
+import { launchApp, testPi, type LaunchedApp } from "./launch.ts";
 
 async function start(): Promise<{ launched: LaunchedApp; cleanup(): Promise<void> }> {
   const work = await mkdtemp(path.join(os.tmpdir(), "omp 主界面 e2e-"));
   const project = path.join(work, "项目 目录");
   await mkdir(project);
-  const launched = await launchApp({ STUDIO_TEST_OMP: testOmp(fixture) });
+  const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   await launched.app.evaluate(({ dialog }, dir) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
   }, project);
@@ -44,7 +42,7 @@ async function sendFirst(page: Page, text: string): Promise<void> {
 }
 
 test("界面字体是打包的 Anthropic Sans / Serif / Mono：第一帧之前三个主字体栈都读进来了", async () => {
-  const launched = await launchApp({ STUDIO_TEST_OMP: testOmp(fixture) });
+  const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   try {
     const { page } = launched;
     await expect(page.getByTestId("empty-state")).toBeVisible();
@@ -136,7 +134,7 @@ test("窗口放大时对话列和输入框一起变宽：约占主区 78%，最�
 });
 
 test("没有项目时直接发送：在 chats 目录里建项目和任务，侧栏出现这个项目", async () => {
-  const launched = await launchApp({ STUDIO_TEST_OMP: testOmp(fixture) });
+  const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   try {
     const { page, userDataDir } = launched;
     const chats = path.join(userDataDir, "chats");
@@ -171,8 +169,8 @@ test("空状态、对话里的用量", async () => {
     const { page } = launched;
     // 关掉动效：浮层的弹出动画里 boundingBox 在缩放，量到的尺寸不是最终尺寸。
     await page.emulateMedia({ reducedMotion: "reduce" });
-    // 新任务草稿：还没有会话，发送键左边是上下文圆环和 $0.00。STUDIO_TEST_OMP 的假 omp 不回答模型目录，
-    // 草稿拿不到默认模型的窗口，所以这里是不能点的占位圆环（有数据时的 0% 圆环见 model-chip.e2e.ts）。
+    // 新任务草稿：还没有会话，发送键左边是上下文圆环和 $0.00。假 pi 会回答模型目录，草稿也有默认模型的窗口，
+    // 但还没有会话用量时圆环是 0%（有数据时的 0% 圆环见 model-chip.e2e.ts）。
     // 项目不是 git 仓库：输入框下面只有项目标签，顶栏没有草稿的分支胶囊。
     const draft = page.getByTestId("draft-composer");
     await expect(draft.getByTestId("usage-cost")).toHaveText("$0.00");
@@ -181,7 +179,7 @@ test("空状态、对话里的用量", async () => {
     await sendFirst(page, "用一句中文回答：2+2 等于几？不要调用任何工具。");
 
     // 工具行里不再有本会话 token 图标：模型胶囊之后，发送 / 停止键左边依次是上下文圆环
-    // （fixture 上下文不到 1%，没有文字）和费用 $0.00，每日用量和额度在费用的对话框里。
+    // （假 pi 一轮回复的上下文不到 1%，没有文字）和费用 $0.00，每日用量和额度在费用的对话框里。
     const tools = page.locator(".composer-tools");
     await expect(page.getByTestId("usage-tokens")).toHaveCount(0);
     const contextMeter = tools.getByTestId("context-meter");

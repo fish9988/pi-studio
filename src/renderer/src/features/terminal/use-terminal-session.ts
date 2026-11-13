@@ -14,6 +14,12 @@ import { takeFocusRequest } from "./terminal-store.ts";
 export interface TerminalSession {
   shell: string | null;
   cwd: string | null;
+  /** 终端里当前选中的文字（没有选区时是空串），供“引用到输入框”“复制选区”。 */
+  selection: string;
+  /** 清掉选区（复制 / 引用之后）。 */
+  clearSelection(): void;
+  /** 清屏（保留当前行）。 */
+  clear(): void;
   /** 结束当前 shell（如果还活着）并在同一目录新起一个。 */
   restart(): void;
 }
@@ -34,7 +40,9 @@ export function useTerminalSession(
   const latestT = useRef(t);
   latestT.current = t;
   const [info, setInfo] = useState<{ shell: string; cwd: string } | null>(null);
+  const [selection, setSelection] = useState("");
   const restartRef = useRef<() => void>(() => undefined);
+  const termRef = useRef<Terminal | null>(null);
 
   useEffect(() => {
     const el = host.current;
@@ -53,6 +61,7 @@ export function useTerminalSession(
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    termRef.current = term;
 
     // 配色和字体取自设计 token：用一个探针元素让浏览器把 var(--x) 解析成 rgb()。
     const probe = document.createElement("span");
@@ -126,6 +135,7 @@ export function useTerminalSession(
           await window.studio.closeTerminal(terminalKey);
           if (disposed) return;
           term.reset();
+          setSelection("");
           await connect();
           // 点重启按钮时焦点在按钮上；重启后输入应该直接进新 shell。
           if (!disposed) term.focus();
@@ -156,6 +166,9 @@ export function useTerminalSession(
           .catch((error: unknown) => console.error("writeTerminal 失败", error));
       }
     });
+
+    // 选区：头部按钮 / 右键菜单据此判断能不能“复制”和“引用到输入框”。
+    const selected = term.onSelectionChange(() => setSelection(term.getSelection()));
 
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
     const sizes = term.onResize(({ cols, rows }) => {
@@ -212,6 +225,7 @@ export function useTerminalSession(
     return () => {
       disposed = true;
       restartRef.current = () => undefined;
+      termRef.current = null;
       clearTimeout(resizeTimer);
       if (frame !== 0) cancelAnimationFrame(frame);
       offData();
@@ -219,6 +233,7 @@ export function useTerminalSession(
       // 面板不在了：主进程之后的输出只进 backlog，不再发过来。
       void window.studio.unsubscribeTerminal(terminalKey).catch(() => undefined);
       keys.dispose();
+      selected.dispose();
       sizes.dispose();
       observer.disconnect();
       offTheme();
@@ -228,5 +243,12 @@ export function useTerminalSession(
   }, [terminalKey, host, platform]);
 
   const restart = useCallback(() => restartRef.current(), []);
-  return { shell: info?.shell ?? null, cwd: info?.cwd ?? null, restart };
+  const clearSelection = useCallback(() => {
+    termRef.current?.clearSelection();
+    setSelection("");
+  }, []);
+  const clear = useCallback(() => {
+    termRef.current?.clear();
+  }, []);
+  return { shell: info?.shell ?? null, cwd: info?.cwd ?? null, selection, clearSelection, clear, restart };
 }

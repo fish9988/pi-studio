@@ -3,6 +3,12 @@
 // 合并由调用方做；这里只看"两边都没有"。纯函数。
 import type { AvailableSlashCommand } from "../../../../shared/omp-wire/rpc-wire.generated.ts";
 
+/**
+ * Pi 原生的斜杠命令白名单：这些命令由 Pi CLI 自己处理（不在渲染进程的命令表 / 菜单里，数量也不动），
+ * 用户打出来时直接放行，不弹“再按一次回车发送”的提醒。
+ */
+export const PI_NATIVE_PASSTHROUGH: ReadonlySet<string> = new Set(["llama", "import", "share", "bug", "trust"]);
+
 export type SlashGuard =
   /** 照常发送。 */
   | { kind: "send" }
@@ -17,12 +23,13 @@ export function leadingSlashName(text: string): string | null {
 
 /**
  * 命令列表还没载入（空数组）时一律放行：不能因为拿不到列表就拦用户。
- * 名称和别名都按小写比较。
+ * Pi 原生的几条（PI_NATIVE_PASSTHROUGH）也一律放行。名称和别名都按小写比较。
  */
 export function decideSlashSend(text: string, commands: readonly AvailableSlashCommand[]): SlashGuard {
   const name = leadingSlashName(text);
   if (name === null || commands.length === 0) return { kind: "send" };
   const lower = name.toLowerCase();
+  if (PI_NATIVE_PASSTHROUGH.has(lower)) return { kind: "send" };
   const known = commands.some((command) =>
     [command.name, ...(command.aliases ?? [])].some((candidate) => candidate.toLowerCase() === lower),
   );

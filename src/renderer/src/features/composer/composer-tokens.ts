@@ -6,7 +6,7 @@
 // 控制字符都是零宽的，所以文本框里的字符和后面画芯片底色的那一层逐字对应。
 // 显示编号（displayNumber）是所有附件共用的一个计数（图片、文件、粘贴依次 #1..#N），卡片和芯片一致；
 // 草稿文字和发给 omp 的仍是各类自己的编号（omp 的图片 / 粘贴各有一套），发送时的转换不变。
-import type { ComposerFile, PromptImage, RestoredDraft } from "../../../../shared/ipc.ts";
+import type { ComposerFile, PersistedDraft, PromptImage, RestoredDraft } from "../../../../shared/ipc.ts";
 import { fileSlot } from "../../../../shared/composer-files.ts";
 
 export interface DraftImage extends PromptImage {
@@ -295,6 +295,68 @@ export function draftFromRestored(restored: readonly RestoredDraft[]): Draft {
     (draft, item) => appendDraft(draft, { ...EMPTY_DRAFT, text: item.text, images: item.images ?? [] }),
     EMPTY_DRAFT,
   );
+}
+
+/**
+ * 落盘的草稿（v2，drafts.json）→ 可用的草稿：`images` / `files` 是按下标读回来的附件，读不到（图片文件被回收、
+ * 文件已不在磁盘上）是 null。缺的附件连同文字里它的占位符一起去掉（后面的按新位置重新编号）；粘贴原文本来就是整段存着的，不动。
+ */
+export function adoptPersistedDraft(
+  persisted: PersistedDraft,
+  images: readonly (DraftImage | null)[],
+  files: readonly (DraftFile | null)[],
+): Draft {
+  // 扫描用：位置编号齐全（含读不到的那些），这样文字里每个占位符都认得出来，不会把 `[Image #3]` 当成普通文字。
+  const complete: Draft = {
+    text: persisted.text,
+    images: persisted.images.map((record) => ({
+      mimeType: record.mimeType,
+      data: "",
+      ...(record.width !== undefined && record.height !== undefined
+        ? { width: record.width, height: record.height }
+        : {}),
+    })),
+    files: persisted.files.map((file) => file ?? { id: "", name: "", size: 0 }),
+    pastes: persisted.pastes,
+    pasteCounter: persisted.pasteCounter,
+  };
+  const keptImages: DraftImage[] = [];
+  const imageRank = new Map<number, number>();
+  for (let index = 0; index < persisted.images.length; index += 1) {
+    const image = images[index] ?? null;
+    if (image === null) continue;
+    keptImages.push(image);
+    imageRank.set(index + 1, keptImages.length);
+  }
+  const keptFiles: DraftFile[] = [];
+  const fileRank = new Map<number, number>();
+  for (let index = 0; index < persisted.files.length; index += 1) {
+    const file = files[index] ?? null;
+    if (file === null) continue;
+    keptFiles.push(file);
+    fileRank.set(index + 1, keptFiles.length);
+  }
+  const intact = keptImages.length === persisted.images.length && keptFiles.length === persisted.files.length;
+  if (intact) return { ...complete, images: keptImages, files: keptFiles };
+  let text = "";
+  let cursor = 0;
+  for (const span of scanTokens(complete.text, complete)) {
+    text += complete.text.slice(cursor, span.start);
+    cursor = span.end;
+    if (span.kind === "paste") {
+      text += complete.text.slice(span.start, span.end);
+      continue;
+    }
+    const rank = span.kind === "image" ? imageRank.get(span.n) : fileRank.get(span.n);
+    if (rank === undefined) {
+      // 附件没了：连同后面那个分隔空格一起去掉，免得留下两个空格。
+      if (complete.text[cursor] === " ") cursor += 1;
+      continue;
+    }
+    text += span.kind === "image" ? imageMarker(rank, keptImages[rank - 1]) : fileMarker(rank, keptFiles[rank - 1]);
+  }
+  text += complete.text.slice(cursor);
+  return { text, images: keptImages, files: keptFiles, pastes: persisted.pastes, pasteCounter: persisted.pasteCounter };
 }
 
 export interface Submission {

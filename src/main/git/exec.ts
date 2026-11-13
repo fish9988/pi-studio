@@ -1,8 +1,10 @@
 // 运行 git / gh：不经 shell，参数一律用数组；输出按 Buffer 收（文件内容可能不是 UTF-8）。
 // 不 import electron，单元测试直接用真实的临时仓库。
 import { spawn, type ChildProcess } from "node:child_process";
+import { log } from "../log/log.ts";
 import { killProcessTree } from "../platform/process-tree.ts";
 import { spawnsReady } from "../platform/spawn-gate.ts";
+import { assignToOwnJob } from "../platform/win32/job-object.ts";
 
 export interface RunOptions {
   cwd: string;
@@ -86,6 +88,21 @@ function killTree(child: ChildProcess): void {
   else void killProcessTree(child.pid);
 }
 
+/**
+ * Windows：把刚 spawn 的 git 子进程放进独立的 KILL_ON_JOB_CLOSE Job，主进程被强杀时不会留下 git 孤儿。
+ * 其他平台不需要（killTree 已按进程树结束，POSIX 克隆进程不做进程组组长，起看门狗没有意义）。
+ * 放不进 Job 不影响使用，只是少一层兜底，所以失败只记日志。
+ */
+function assignGitJob(child: ChildProcess): () => void {
+  if (process.platform !== "win32" || child.pid === undefined) return () => undefined;
+  try {
+    return assignToOwnJob(child.pid);
+  } catch (error) {
+    log.warn("git: failed to assign child to a job object", { message: String(error) });
+    return () => undefined;
+  }
+}
+
 /** 起子进程之前等启动准备（mac / Linux 补登录 shell 的 PATH，platform/spawn-gate.ts）；不传 env 时用等完之后的 process.env。 */
 export async function runCommand(command: string, args: readonly string[], options: RunOptions): Promise<RunResult> {
   await spawnsReady();
@@ -102,6 +119,8 @@ function spawnCommand(command: string, args: readonly string[], options: RunOpti
     stdio: ["pipe", "pipe", "pipe"],
   });
   const tail = options.keepTailBytes;
+  // 要在 spawn 返回后的同一个同步段里放 Job，缩小孙进程先于 assign 出生的窗口。
+  const releaseJob = assignGitJob(child);
   const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER;
   const out: Buffer[] = [];
   const outTail = new TailBuffer(tail ?? STDERR_CAP);
@@ -115,6 +134,8 @@ function spawnCommand(command: string, args: readonly string[], options: RunOpti
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", onAbort);
     action();
+    // 解开 Job：子进程已经结束（或被 killTree 结束），关句柄不会误杀后续进程。
+    releaseJob();
   };
   const timer = setTimeout(() => {
     killTree(child);

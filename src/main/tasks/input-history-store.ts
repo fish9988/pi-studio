@@ -2,6 +2,7 @@
 // 不 import electron：文件路径由调用方给（可能带空格和中文），单元测试直接实例化。
 import { readFile } from "node:fs/promises";
 import { MAX_HISTORY, pushEntry } from "../../shared/input-history.ts";
+import { stripBom } from "../../shared/strip-bom.ts";
 import { writeFileAtomic } from "./atomic-write.ts";
 
 /** 最多记多少个项目；超过时丢最久没发过消息的那个（对象的插入顺序 = 最近发过消息的在最后）。 */
@@ -19,7 +20,7 @@ export class InputHistoryStore {
   async #load(): Promise<Map<string, string[]>> {
     if (this.#cache) return this.#cache;
     try {
-      const raw: unknown = JSON.parse(await readFile(this.#file, "utf8"));
+      const raw: unknown = JSON.parse(stripBom(await readFile(this.#file, "utf8")));
       const entries = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? Object.entries(raw) : [];
       this.#cache = new Map(
         entries.flatMap(([projectId, list]) =>

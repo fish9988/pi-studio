@@ -48,6 +48,7 @@ import {
   PI_BUILTIN_PROVIDERS,
   PI_SETTINGS_SCHEMA,
   PI_SETTINGS_TABS,
+  resolveActiveToolSet,
 } from "../src/shared/pi-settings-schema.ts";
 
 describe("pi-settings-schema", () => {
@@ -160,6 +161,53 @@ describe("pi-settings-schema", () => {
     expect(findPiBuiltinProvider("anthropic")?.supportsOAuth).toBe(true);
     expect(findPiBuiltinProvider("openai-codex")?.acceptsApiKey).toBe(false);
   });
+
+  it("matches the Pi 1.5.2 kernel SETTINGS_DEFAULTS for the keys it declares a default for", () => {
+    const expectDefault = (key: string, value: unknown) => {
+      const entry = findPiSettingSchema(key);
+      expect(entry?.hasDefault, `${key} should declare a default`).toBe(true);
+      expect(entry?.defaultValue).toEqual(value);
+    };
+    expectDefault("cacheWarming", "idle");
+    expectDefault("showCacheMissNotices", false);
+    expectDefault("hideThinkingBlock", false);
+    expectDefault("httpIdleTimeoutMs", 300000);
+    expectDefault("websocketConnectTimeoutMs", 15000);
+
+    // Pi 只把这两个透传给 SDK，自己没有固定默认（未填时跟随 httpIdleTimeoutMs / 由 SDK 决定）。
+    for (const key of ["retry.provider.timeoutMs", "retry.provider.maxRetries"]) {
+      const entry = findPiSettingSchema(key);
+      expect(entry?.hasDefault, `${key} should not claim a default`).toBe(false);
+      expect(entry?.defaultValue).toBeNull();
+    }
+  });
+});
+
+describe("resolveActiveToolSet", () => {
+  it("falls back to Pi's built-in defaults only when defaultTools is unset", () => {
+    expect([...resolveActiveToolSet([], false)]).toEqual(["read", "bash", "edit", "write"]);
+  });
+
+  it('treats an explicit empty defaultTools as "disabled all tools"', () => {
+    // Pi 语义：显式 [] 是“禁用全部工具”，不是“未设置”。旧实现会在这里回退成 4 个默认工具。
+    const active = resolveActiveToolSet([], true);
+    expect(active.size).toBe(0);
+    // 全部禁用后只打开一个工具，写入的应该就是这一个（不会把默认的 4 个偷偷写活）。
+    active.add("grep");
+    expect([...active]).toEqual(["grep"]);
+  });
+
+  it("applies +name / -name modifiers on top of the defaults", () => {
+    expect([...resolveActiveToolSet(["+grep"], true)]).toEqual(["read", "bash", "edit", "write", "grep"]);
+    expect([...resolveActiveToolSet(["-bash"], true)]).toEqual(["read", "edit", "write"]);
+    expect([...resolveActiveToolSet(["+grep", "-bash"], true)]).toEqual(["read", "edit", "write", "grep"]);
+  });
+
+  it("replaces the defaults with a plain-name list and ignores unknown ids", () => {
+    expect([...resolveActiveToolSet(["ls", "grep"], true)]).toEqual(["ls", "grep"]);
+    expect([...resolveActiveToolSet(["ls", "not-a-tool"], true)]).toEqual(["ls"]);
+    expect([...resolveActiveToolSet(["+not-a-tool"], true)]).toEqual(["read", "bash", "edit", "write"]);
+  });
 });
 
 describe("pi-config backend", () => {
@@ -234,7 +282,8 @@ describe("pi-config backend", () => {
     // Reset nested key retry.provider.timeoutMs -> cleans both provider: {} and retry: {}
     const resetRetry = await resetPiSetting(agentDir, "retry.provider.timeoutMs");
     expect(resetRetry.hasValue).toBe(false);
-    expect(resetRetry.value).toBe(120000);
+    // Pi 内核没有给 retry.provider.timeoutMs 固定默认值（未填时跟随 httpIdleTimeoutMs）。
+    expect(resetRetry.value).toBeNull();
     const raw2 = JSON.parse(await readFile(path.join(agentDir, "settings.json"), "utf8")) as Record<string, unknown>;
     expect("retry" in raw2).toBe(false);
 

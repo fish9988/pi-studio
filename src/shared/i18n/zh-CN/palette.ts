@@ -10,4 +10,5 @@ export const palette = {
   slash: "斜杠命令",
   noResults: "无匹配",
   askNew: "在新任务中提问",
+  quoteSelection: "引用选中文字到输入框",
 } satisfies Record<string, MessageEntry>;

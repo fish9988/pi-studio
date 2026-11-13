@@ -9,6 +9,7 @@ export type StudioCommand =
   | "thinking"
   | "stop"
   | "copyLast"
+  | "quoteSelection"
   | "toggleProcess"
   | "context"
   | "todo"
