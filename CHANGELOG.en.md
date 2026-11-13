@@ -9,6 +9,21 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- Replaced legacy palettes with 6 cohesive dual-mode theme families (Expressive, Glacier Mica, Aurora Mint, Liquid Coral, Titanium Amber, Obsidian Pro — 12 palettes total) blending Material 3 Expressive, Fluent 2, and Liquid Glass surfaces alongside smooth spring transitions and gradient send controls.
+- Redesigned chat Markdown code blocks as high-contrast dark IDE cards (even within light themes) that **collapse by default** with a line-count badge and first-line snippet preview, expanding smoothly on click.
+- Sent user message bubbles now render inline clickable `#N` attachment pill chips and numbered `#N` thumbnail strips instead of raw `[Image #N, WxH]` placeholder text.
+- Added a "Copy all (with attachments)" button next to Prompt Enhance (and enhanced chip selection copy) to write both plain text and rich `<img>` HTML to the clipboard for pasting into external multimodal AI tools.
+- Upgraded Prompt Enhance to pass attached draft images and files as visual/file context to the helper model while replacing only the prompt text and preserving all attachments.
+
+### Changed
+
+- Consolidated topbar workbench toggles into a visible Liquid Glass pill strip, restored `clamp(760px, 78cqi, 1080px)` chat measure, and perched the desktop mascot on the top-right composer rim clear of the scrollbar.
+- Removed the legacy 3-card Process Rows switcher in Settings, unified turn process headers into a single collapsible summary pill and tray, and moved the jump-to-bottom button to the bottom-right corner so it never overlaps tool row filenames or line counts.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added
