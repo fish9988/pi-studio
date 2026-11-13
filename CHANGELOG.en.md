@@ -9,6 +9,20 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-13
+
+### Added
+
+- Refreshed the full UI with Glacier Mica (light) and Abyssal Glass (dark) default palettes, an `18px` rounded floating main canvas, translucent glass topbar pills, and a `22px` floating composer island across all 8 dual-mode theme families.
+- Added independent UI font and chat prose font customization in Settings › General: choose sans-serif or serif separately and pick any installed system font via searchable local font discovery.
+- Added reading-position protection and a left-gutter collapse rail in the conversation process flow so active text selections or focused thinking/tool sections are never collapsed mid-read.
+- Redesigned the right workbench Overview with a 2×2 tinted tile grid (Review / Files / Terminal / Browser) and grouped cards for touched files, subagents, and background tasks.
+- Added deferred progressive mounting for long conversation histories alongside per-level thinking map overrides and live model catalog capability synchronization.
+
+### Changed
+
+- Updated sidebar and settings navigation with left active indicator bars, pill search/segmented controls, and softer tinted thinking blocks distinct from main assistant prose.
+
 ## [0.1.7] - 2026-11-13
 
 ### Added
