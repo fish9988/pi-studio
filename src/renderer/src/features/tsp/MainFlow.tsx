@@ -1359,7 +1359,6 @@ function ProcessGroup({
   durationMs,
   turnIndex,
   ordinal,
-  showDoneBar,
   running,
   settled,
   deliverables,
@@ -1372,7 +1371,6 @@ function ProcessGroup({
   durationMs: number;
   turnIndex: number;
   ordinal: number;
-  showDoneBar: boolean;
   running: boolean;
   settled: boolean;
   deliverables: readonly DeliverableItem[];
@@ -1380,17 +1378,14 @@ function ProcessGroup({
   ctx: TspContext;
 }) {
   const autoCollapseTools = useSettings()?.autoCollapseTools ?? true;
-  const [sectionOpen, setSectionOpen] = useState(true);
   // 折叠状态按 (任务, surface, 轮次, 序号) 记在模块级 store 里：组件即使因外层重建而重挂，状态也不会回初始值。
   // 程序默认值 = 自动收起开关 && 这一轮真的结束了（settled）：运行中先展开给用户看过程，结束时才收起。
   const initialCollapsed = autoCollapseTools && settled;
   const [folded, applyFold] = useGroupFold(groupFoldKey(ctx.taskId, ctx.sf, turnIndex, ordinal), initialCollapsed);
   const bodyRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
-  const layout = useShellValue("processRows") ?? "classic";
   const conversationView = useShellValue("conversationView") ?? "chat";
   const isTrajectory = conversationView === "trajectory";
-  const effectiveSectionOpen = isTrajectory ? true : sectionOpen;
   const effectiveFolded = isTrajectory ? false : folded;
   const zh = currentLocale() === "zh-CN";
   const label = formatProcessSummary(thoughts, tools);
@@ -1400,18 +1395,6 @@ function ProcessGroup({
   );
   // 已结算耗时优先；没有就用本轮用量脚注里的耗时（它只在回合结束后刷新，所以走字的活交给 LiveProcessTime）。
   const baseMs = durationMs > 0 ? durationMs : extraTurnMs;
-  const doneTimeShown = baseMs >= 100;
-  const doneHeaderLabel = running
-    ? zh
-      ? "正在执行…"
-      : "Running…"
-    : doneTimeShown
-      ? zh
-        ? "已完成，用时"
-        : "Completed in"
-      : zh
-        ? "已完成"
-        : "Completed";
 
   const activitiesText = (() => {
     const counts = new Map<ProcessActivityKind, number>();
@@ -1510,114 +1493,74 @@ function ProcessGroup({
   }, [effectiveFolded, isTrajectory, ids.length]);
 
   return (
-    <div
-      className="tsp-process-group"
-      data-layout={layout}
-      data-trajectory={isTrajectory ? "" : undefined}
-      data-testid="tsp-process-group"
-    >
-      {!isTrajectory && showDoneBar && (
+    <div className="tsp-process-group" data-trajectory={isTrajectory ? "" : undefined} data-testid="tsp-process-group">
+      <div className="tsp-process-head-row">
         <button
           type="button"
-          className="tsp-process-done-bar"
+          className="tsp-process-summary"
           data-running={running || undefined}
-          aria-expanded={effectiveSectionOpen}
-          onClick={() => setSectionOpen((v) => !v)}
-          data-testid="tsp-process-done-bar"
+          aria-expanded={!effectiveFolded}
+          onClick={() => {
+            if (!isTrajectory) applyFold("toggle");
+          }}
+          data-testid="tsp-process-summary"
         >
-          {running && <span className="tsp-process-live-dot" aria-hidden="true" />}
-          <span className="tsp-process-done-label">{doneHeaderLabel}</span>
+          {running ? <span className="tsp-process-live-dot" aria-hidden="true" /> : <ProcessCheckIcon />}
+          <span className="tsp-process-summary-text">{label}</span>
+          {effectiveFolded && activitiesText !== "" && (
+            <>
+              <span className="tsp-process-summary-sep" aria-hidden="true">
+                ·
+              </span>
+              <span className="tsp-process-summary-acts">{activitiesText}</span>
+            </>
+          )}
           <LiveProcessTime
-            className="tsp-process-done-time"
+            className="tsp-process-summary-time"
             baseMs={baseMs}
             running={running}
-            prefix={running ? " · " : " "}
-            testId="tsp-process-done-time"
+            prefix=" · "
+            testId="tsp-process-summary-time"
           />
-          <span
-            className="tsp-process-done-chev"
-            data-collapsed={!effectiveSectionOpen || undefined}
-            aria-hidden="true"
-          >
-            <ChevronDown size={13} />
-          </span>
+          {!isTrajectory && (
+            <span className="tsp-process-summary-chev" aria-hidden="true">
+              <ChevronDown size={12} />
+            </span>
+          )}
         </button>
-      )}
-      {effectiveSectionOpen && (
-        <>
-          <div className="tsp-process-head-row">
+      </div>
+      {!effectiveFolded && (
+        <div
+          ref={bodyRef}
+          className="tsp-process-group-body"
+          data-trajectory={isTrajectory ? "" : undefined}
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+          }}
+        >
+          {!isTrajectory && (
             <button
               type="button"
-              className="tsp-process-summary"
-              data-running={running || undefined}
-              aria-expanded={!effectiveFolded}
-              onClick={() => {
-                if (!isTrajectory) applyFold("toggle");
-              }}
-              data-testid="tsp-process-summary"
-            >
-              <ProcessCheckIcon />
-              <span className="tsp-process-summary-text">{label}</span>
-              {effectiveFolded && activitiesText !== "" && (
-                <>
-                  <span className="tsp-process-summary-sep" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="tsp-process-summary-acts">{activitiesText}</span>
-                </>
-              )}
-              {/* 耗时：没有 done bar 的组（同一轮的第 2 个起），收起 / 展开两种状态都直接写在摘要行上。 */}
-              {!showDoneBar && (
-                <LiveProcessTime
-                  className="tsp-process-summary-time"
-                  baseMs={baseMs}
-                  running={running}
-                  prefix=" · "
-                  testId="tsp-process-summary-time"
-                />
-              )}
-              {!isTrajectory && (
-                <span className="tsp-process-summary-chev" aria-hidden="true">
-                  <ChevronDown size={12} />
-                </span>
-              )}
-            </button>
-          </div>
-          {!effectiveFolded && (
-            <div
-              ref={bodyRef}
-              className="tsp-process-group-body"
-              data-layout={layout}
-              data-trajectory={isTrajectory ? "" : undefined}
-              onScroll={(event) => {
-                const el = event.currentTarget;
-                stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-              }}
-            >
-              {!isTrajectory && (
-                <button
-                  type="button"
-                  className="tsp-collapse-rail"
-                  title={zh ? "收起本轮工作过程" : "Collapse process"}
-                  aria-label={zh ? "收起本轮工作过程" : "Collapse process"}
-                  onClick={() => applyFold("toggle")}
-                />
-              )}
-              {renderItems.map((item) =>
-                item.kind === "explore-group" ? (
-                  <ExplorationGroupRow key={item.key} item={item} after={after} ctx={ctx} />
-                ) : (
-                  <Fragment key={item.id}>
-                    <TspNode id={item.id} ctx={ctx} />
-                    {(after.get(item.id) ?? []).map((note, i) => (
-                      <StatusLine key={`s-${item.id}-${i}`} note={note} />
-                    ))}
-                  </Fragment>
-                ),
-              )}
-            </div>
+              className="tsp-collapse-rail"
+              title={zh ? "收起本轮工作过程" : "Collapse process"}
+              aria-label={zh ? "收起本轮工作过程" : "Collapse process"}
+              onClick={() => applyFold("toggle")}
+            />
           )}
-        </>
+          {renderItems.map((item) =>
+            item.kind === "explore-group" ? (
+              <ExplorationGroupRow key={item.key} item={item} after={after} ctx={ctx} />
+            ) : (
+              <Fragment key={item.id}>
+                <TspNode id={item.id} ctx={ctx} />
+                {(after.get(item.id) ?? []).map((note, i) => (
+                  <StatusLine key={`s-${item.id}-${i}`} note={note} />
+                ))}
+              </Fragment>
+            ),
+          )}
+        </div>
       )}
       <DeliverableShelf ctx={ctx} items={deliverables} />
     </div>
@@ -1661,7 +1604,6 @@ export const MainFlow = memo(function MainFlow({
           durationMs={seg.durationMs}
           turnIndex={seg.turnIndex}
           ordinal={seg.ordinal}
-          showDoneBar={seg.showDoneBar}
           running={seg.running}
           settled={seg.settled}
           deliverables={seg.deliverables}

@@ -658,13 +658,19 @@ function StandardCard(props: NodeProps) {
     !hasHead && "nohead",
   ].filter((c): c is string => typeof c === "string");
   const icon = roleIcon(p.role);
+  const rawChildren = node.c.filter((id) => id !== headId);
+  const orderedChildren = isUser
+    ? [...rawChildren].sort((a, b) => {
+        const ra = peekTspNode(props.ctx.taskId, props.ctx.sf, a)?.p.role === "omp.user.images" ? 0 : 1;
+        const rb = peekTspNode(props.ctx.taskId, props.ctx.sf, b)?.p.role === "omp.user.images" ? 0 : 1;
+        return ra - rb;
+      })
+    : rawChildren;
   const innerNodes = (
     <>
-      {node.c
-        .filter((id) => id !== headId)
-        .map((id) => (
-          <TspNode key={id} id={id} ctx={props.ctx} />
-        ))}
+      {orderedChildren.map((id) => (
+        <TspNode key={id} id={id} ctx={props.ctx} />
+      ))}
     </>
   );
   const body: ReactNode = (

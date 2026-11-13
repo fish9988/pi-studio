@@ -382,17 +382,11 @@ html[data-platform="darwin"] .topbar-left {
   box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
-/* 顶栏右侧归位为单个侧栏切换按钮（图2），旧的多面板独立按钮收拢为不可见节点以兼容快捷键与测试 */
+/* 顶栏右侧工具集收进 Liquid Glass 胶囊：Files / Review / Subagents / Browser / Terminal / 设置一键可达 */
 .topbar-legacy-toggles {
-  position: absolute;
-  right: 40px;
-  top: 4px;
   display: inline-flex;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
+  align-items: center;
+  gap: var(--space-0-5);
 }
 
 /* 有中段胶囊时由 topbar-center 的 margin-inline: auto 把工具推到右端 */
@@ -496,7 +490,7 @@ html[data-platform="darwin"] .topbar-left {
 
 .panel {
   /* --content-w 直接在 .panel 上求值，保证拖拽写入 --chat-current 时整条对话列、输入框和左右手柄同步响应 */
-  --content-w: var(--chat-current, clamp(680px, 70cqi, 880px));
+  --content-w: var(--chat-current, clamp(760px, 78cqi, 1080px));
   position: relative;
   display: flex;
   flex: 1;

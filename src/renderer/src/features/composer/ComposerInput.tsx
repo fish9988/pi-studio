@@ -214,15 +214,31 @@ export function ComposerInput(props: ComposerInputProps) {
     props.onEdit(textToViewOffset(buildView(inserted.draft, labels), inserted.caret));
   };
 
-  // 复制 / 剪切选中的芯片：剪贴板里放占位符文字（view 里的零宽字符不外泄）。
+  // 复制 / 剪切选中的芯片：剪贴板里放占位符文字（view 里的零宽字符不外泄），
+  // 若选区包含图片芯片，则同步写入富文本 HTML（含 <img>），方便直接粘贴到其他多模态 AI。
   const onCopyCut = (event: ClipboardEvent<HTMLTextAreaElement>, cut: boolean) => {
     const field = event.currentTarget;
     const { selectionStart: start, selectionEnd: end } = field;
     if (start === end) return;
     const selected = view.text.slice(start, end);
-    if (!view.spans.some((span) => span.viewStart >= start && span.viewEnd <= end)) return;
+    const hitSpans = view.spans.filter((span) => span.viewStart >= start && span.viewEnd <= end);
+    if (hitSpans.length === 0) return;
     event.preventDefault();
-    event.clipboardData.setData("text/plain", viewToText(selected, getDraft(draftKey)));
+    const current = getDraft(draftKey);
+    const plain = viewToText(selected, current);
+    event.clipboardData.setData("text/plain", plain);
+    const hasImages = hitSpans.some((span) => span.kind === "image");
+    if (hasImages && current.images.length > 0) {
+      const esc = (s: string) =>
+        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const html = esc(plain)
+        .replace(/\[Image #([1-9]\d*)(?:,[^\]\n]*)?\]/g, (raw, numStr: string) => {
+          const img = current.images[Number(numStr) - 1];
+          return img ? `<img src="data:${img.mimeType};base64,${img.data}" alt="Image #${numStr}" />` : raw;
+        })
+        .replace(/\r?\n/g, "<br/>");
+      event.clipboardData.setData("text/html", `<div>${html}</div>`);
+    }
     if (cut) replaceView(view.text.slice(0, start) + view.text.slice(end), viewToTextOffset(view, start));
   };
 

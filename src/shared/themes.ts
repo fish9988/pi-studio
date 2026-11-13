@@ -1,6 +1,11 @@
 // 内置配色主题与独立深浅色模式（ColorMode × ThemeFamily → 具体 CSS [data-theme]）。
-// 外观模式（colorMode：跟随系统 / 浅色 / 深色）完全独立于主题风格（theme：默认 / Claude Code / Pi / DeepSeek / Gemini / OpenAI / 樱粉 / 水墨）；
-// 每一套主题都同时提供完整的浅色（light）与深色（dark）色板，主进程用这里的登记同步 BrowserWindow 背景色与系统三键（titleBarOverlay）。
+// 融合 Material 3 Expressive、Microsoft Fluent 2 与 Apple Liquid Glass 三大设计语言：
+// - default（灵动紫晶）：Porcelain 浅瓷云母 / Cosmic 暗夜深空 + Indigo-Violet 渐变高光；
+// - mica（冰川云母）：Windows 11 Fluent 2 天青蓝；
+// - aurora（极光翠雾）：Google Material 3 苍翠极光；
+// - coral（液态珊瑚）：Apple Liquid Glass 珊瑚霓虹；
+// - amber（钛金琥珀）：Pro Titanium 琥珀暖金；
+// - obsidian（曜石深空）：Studio Graphite 极客钴灰。
 
 export const colorModeNames = ["system", "light", "dark"] as const;
 export type ColorMode = (typeof colorModeNames)[number];
@@ -9,7 +14,7 @@ export function isColorMode(value: string): value is ColorMode {
   return (colorModeNames as readonly string[]).includes(value);
 }
 
-export const themeFamilyNames = ["default", "claude", "pi", "deepseek", "gemini", "openai", "sakura", "ink"] as const;
+export const themeFamilyNames = ["default", "mica", "aurora", "coral", "amber", "obsidian"] as const;
 
 export type ThemeFamily = (typeof themeFamilyNames)[number];
 
@@ -20,20 +25,16 @@ export function isThemeFamily(value: string): value is ThemeFamily {
 export const themeNames = [
   "light",
   "dark",
-  "claude-light",
-  "claude-dark",
-  "pi-light",
-  "pi-dark",
-  "deepseek-light",
-  "deepseek-dark",
-  "gemini-light",
-  "gemini-dark",
-  "openai-light",
-  "openai-dark",
-  "sakura",
-  "sakura-dark",
-  "ink",
-  "ink-dark",
+  "mica-light",
+  "mica-dark",
+  "aurora-light",
+  "aurora-dark",
+  "coral-light",
+  "coral-dark",
+  "amber-light",
+  "amber-dark",
+  "obsidian-light",
+  "obsidian-dark",
 ] as const;
 
 export type ThemeName = (typeof themeNames)[number];
@@ -57,143 +58,109 @@ export interface ThemeSpec {
 
 export const themeFamilies = {
   default: { light: "light", dark: "dark" },
-  claude: { light: "claude-light", dark: "claude-dark" },
-  pi: { light: "pi-light", dark: "pi-dark" },
-  deepseek: { light: "deepseek-light", dark: "deepseek-dark" },
-  gemini: { light: "gemini-light", dark: "gemini-dark" },
-  openai: { light: "openai-light", dark: "openai-dark" },
-  sakura: { light: "sakura", dark: "sakura-dark" },
-  ink: { light: "ink", dark: "ink-dark" },
+  mica: { light: "mica-light", dark: "mica-dark" },
+  aurora: { light: "aurora-light", dark: "aurora-dark" },
+  coral: { light: "coral-light", dark: "coral-dark" },
+  amber: { light: "amber-light", dark: "amber-dark" },
+  obsidian: { light: "obsidian-light", dark: "obsidian-dark" },
 } as const satisfies Record<ThemeFamily, { light: ThemeName; dark: ThemeName }>;
 
 export const themes = {
   light: {
     dark: false,
     app: "#ffffff",
-    sidebar: "#ebf1fa",
-    text: "#0f172a",
-    scrim: "rgba(15, 23, 42, 0.34)",
+    sidebar: "#eef1fa",
+    text: "#131629",
+    scrim: "rgba(19, 22, 41, 0.34)",
     art: false,
   },
   dark: {
     dark: true,
-    app: "#151c2a",
-    sidebar: "#0e1420",
+    app: "#121727",
+    sidebar: "#0b0f1b",
+    text: "#f2f4fc",
+    scrim: "rgba(5, 8, 18, 0.62)",
+    art: false,
+  },
+  "mica-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#ebf2fb",
+    text: "#0f172a",
+    scrim: "rgba(15, 23, 42, 0.34)",
+    art: true,
+  },
+  "mica-dark": {
+    dark: true,
+    app: "#121b2b",
+    sidebar: "#0a111d",
     text: "#f1f5f9",
     scrim: "rgba(4, 8, 16, 0.62)",
+    art: true,
+  },
+  "aurora-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#e9f5f1",
+    text: "#0f1f1c",
+    scrim: "rgba(12, 28, 25, 0.34)",
+    art: true,
+  },
+  "aurora-dark": {
+    dark: true,
+    app: "#10201e",
+    sidebar: "#081413",
+    text: "#ecf7f4",
+    scrim: "rgba(4, 10, 9, 0.62)",
+    art: true,
+  },
+  "coral-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#fbeff2",
+    text: "#1e1218",
+    scrim: "rgba(30, 14, 22, 0.34)",
+    art: true,
+  },
+  "coral-dark": {
+    dark: true,
+    app: "#22121b",
+    sidebar: "#170c12",
+    text: "#fcf1f5",
+    scrim: "rgba(10, 4, 8, 0.62)",
+    art: true,
+  },
+  "amber-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#f5f1e8",
+    text: "#1b1610",
+    scrim: "rgba(27, 22, 16, 0.32)",
+    art: true,
+  },
+  "amber-dark": {
+    dark: true,
+    app: "#1e1a13",
+    sidebar: "#14110c",
+    text: "#f8f4ec",
+    scrim: "rgba(8, 7, 4, 0.62)",
+    art: true,
+  },
+  "obsidian-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#eff1f5",
+    text: "#111827",
+    scrim: "rgba(17, 24, 39, 0.34)",
     art: false,
   },
-  "claude-light": {
-    dark: false,
-    app: "#faf9f5",
-    sidebar: "#f0eee6",
-    text: "#141413",
-    scrim: "rgba(20, 20, 19, 0.32)",
+  "obsidian-dark": {
+    dark: true,
+    app: "#13161e",
+    sidebar: "#0b0d12",
+    text: "#f3f4f6",
+    scrim: "rgba(4, 5, 8, 0.62)",
     art: false,
-  },
-  "claude-dark": {
-    dark: true,
-    app: "#1f1e1c",
-    sidebar: "#171716",
-    text: "#f5f3ed",
-    scrim: "rgba(10, 10, 9, 0.56)",
-    art: false,
-  },
-  "pi-light": {
-    dark: false,
-    app: "#fbfafe",
-    sidebar: "#f2eff9",
-    text: "#171326",
-    scrim: "rgba(24, 17, 46, 0.36)",
-    art: true,
-  },
-  "pi-dark": {
-    dark: true,
-    app: "#141219",
-    sidebar: "#100e16",
-    text: "#f0edf7",
-    scrim: "rgba(5, 3, 10, 0.62)",
-    art: true,
-  },
-  "deepseek-light": {
-    dark: false,
-    app: "#fafcfe",
-    sidebar: "#edf2fb",
-    text: "#101725",
-    scrim: "rgba(10, 22, 44, 0.36)",
-    art: true,
-  },
-  "deepseek-dark": {
-    dark: true,
-    app: "#0d151f",
-    sidebar: "#0a1017",
-    text: "#e9f2f9",
-    scrim: "rgba(3, 8, 14, 0.62)",
-    art: true,
-  },
-  "gemini-light": {
-    dark: false,
-    app: "#fbfbfe",
-    sidebar: "#eef1fb",
-    text: "#141824",
-    scrim: "rgba(12, 18, 40, 0.36)",
-    art: true,
-  },
-  "gemini-dark": {
-    dark: true,
-    app: "#131421",
-    sidebar: "#0e0f19",
-    text: "#e9ebf6",
-    scrim: "rgba(4, 5, 12, 0.62)",
-    art: true,
-  },
-  "openai-light": {
-    dark: false,
-    app: "#f9f9f7",
-    sidebar: "#f1f2f0",
-    text: "#16191a",
-    scrim: "rgba(16, 19, 17, 0.34)",
-    art: false,
-  },
-  "openai-dark": {
-    dark: true,
-    app: "#212121",
-    sidebar: "#171717",
-    text: "#ececea",
-    scrim: "rgba(0, 0, 0, 0.62)",
-    art: false,
-  },
-  sakura: {
-    dark: false,
-    app: "#fcfafb",
-    sidebar: "#f3eff0",
-    text: "#1e181b",
-    scrim: "rgba(42, 20, 28, 0.32)",
-    art: true,
-  },
-  "sakura-dark": {
-    dark: true,
-    app: "#1b1519",
-    sidebar: "#141014",
-    text: "#f4e9ef",
-    scrim: "rgba(8, 4, 6, 0.62)",
-    art: true,
-  },
-  ink: {
-    dark: false,
-    app: "#f7f3e9",
-    sidebar: "#efeade",
-    text: "#1c1a15",
-    scrim: "rgba(24, 22, 18, 0.32)",
-    art: true,
-  },
-  "ink-dark": {
-    dark: true,
-    app: "#191713",
-    sidebar: "#131110",
-    text: "#ece6d9",
-    scrim: "rgba(6, 5, 4, 0.62)",
-    art: true,
   },
 } as const satisfies Record<ThemeName, ThemeSpec>;
 
@@ -201,19 +168,30 @@ export function isThemeName(value: string): value is ThemeName {
   return Object.hasOwn(themes, value);
 }
 
-/** 任意主题偏好（家族名、具体色板名或旧配置值）归属的主题家族。 */
+/** 任意主题偏好（家族名、具体色板名或旧版主题名）归属的主题家族。 */
 export function familyOfTheme(preference: string): ThemeFamily {
   if (preference === "system" || preference === "default" || preference === "light" || preference === "dark") {
     return "default";
   }
   if (isThemeFamily(preference)) return preference;
-  if (preference.startsWith("claude-")) return "claude";
-  if (preference.startsWith("pi-")) return "pi";
-  if (preference.startsWith("deepseek-") || preference.startsWith("whale-")) return "deepseek";
-  if (preference.startsWith("gemini-")) return "gemini";
-  if (preference.startsWith("openai-")) return "openai";
-  if (preference.startsWith("sakura") || preference === "night-sakura") return "sakura";
-  if (preference.startsWith("ink")) return "ink";
+  if (preference.startsWith("mica-")) return "mica";
+  if (preference.startsWith("aurora-")) return "aurora";
+  if (preference.startsWith("coral-")) return "coral";
+  if (preference.startsWith("amber-")) return "amber";
+  if (preference.startsWith("obsidian-")) return "obsidian";
+  // 兼容旧版配置迁移
+  if (preference === "deepseek" || preference.startsWith("deepseek-") || preference.startsWith("whale-")) return "mica";
+  if (preference === "openai" || preference.startsWith("openai-")) return "aurora";
+  if (preference === "sakura" || preference.startsWith("sakura-") || preference === "night-sakura") return "coral";
+  if (preference === "claude" || preference.startsWith("claude-")) return "amber";
+  if (preference === "ink" || preference.startsWith("ink-")) return "obsidian";
+  if (
+    preference === "pi" ||
+    preference.startsWith("pi-") ||
+    preference === "gemini" ||
+    preference.startsWith("gemini-")
+  )
+    return "default";
   return "default";
 }
 
@@ -230,7 +208,8 @@ export function resolveTheme(preference: string, systemDark: boolean, colorMode:
     return themeFamilies[preference][dark ? "dark" : "light"];
   }
   if (isThemeName(preference)) {
-    return preference;
+    if (colorMode === "system") return preference;
+    return themeFamilies[familyOfTheme(preference)][dark ? "dark" : "light"];
   }
-  return dark ? "dark" : "light";
+  return themeFamilies[familyOfTheme(preference)][dark ? "dark" : "light"];
 }

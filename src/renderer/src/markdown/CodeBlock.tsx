@@ -5,7 +5,7 @@ import { draftKey } from "../../../shared/ipc.ts";
 import { quoteToComposer } from "../features/composer/quote.ts";
 import { openInlineArtifact } from "../features/file-preview/index.ts";
 import { useT } from "../i18n/use-t.ts";
-import { Check, Code, CopyIcon, External, Plus } from "../icons.tsx";
+import { Check, ChevronDown, Code, CopyIcon, External, Plus } from "../icons.tsx";
 import { useSelectedTaskId } from "../store/index.ts";
 import { currentLocale } from "../store/settings-store.ts";
 import { onThemeChange } from "../ui/theme-change.ts";
@@ -44,6 +44,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
   const t = useT();
   const taskId = useSelectedTaskId();
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(() => Boolean(standalone || focusLine !== undefined));
   const preRef = useRef<HTMLPreElement>(null);
   /** 代码块自己的贴底跟随：用户手动上滑就放开，围栏闭合后也不再接管。 */
   const follow = useRef(true);
@@ -73,9 +74,18 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
   );
   const ready = figure && !failed && (kind === "svg" || mermaidSvg !== null);
   const drawing = ready && !showSource;
-  const tokens = useHighlighted(code, closed && !drawing ? lang : null);
+  const isCollapsed = !drawing && !standalone && !expanded;
+  const tokens = useHighlighted(code, closed && !drawing && !isCollapsed ? lang : null);
   const lines = code.split("\n");
   const isDiff = resolveLanguage(lang) === "diff";
+  const previewSnippet = useMemo(() => {
+    const first = lines.find((line) => line.trim() !== "")?.trim() ?? "";
+    return first.length > 72 ? `${first.slice(0, 71)}…` : first;
+  }, [lines]);
+
+  useEffect(() => {
+    if (focusLine !== undefined) setExpanded(true);
+  }, [focusLine]);
 
   useEffect(() => {
     if (!copied) return;
@@ -123,9 +133,52 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
   const zh = currentLocale() === "zh-CN";
 
   return (
-    <div className="md-codeblock" data-anchor data-testid="codeblock" data-figure={drawing || undefined}>
-      <div className="md-codehead">
-        <span className="md-codelang">{lang === "" ? "text" : lang}</span>
+    <div
+      className="md-codeblock"
+      data-anchor
+      data-testid="codeblock"
+      data-figure={drawing || undefined}
+      data-code-dark={!drawing ? "" : undefined}
+      data-collapsed={isCollapsed || undefined}
+    >
+      <div
+        className="md-codehead"
+        role={!drawing && !standalone ? "button" : undefined}
+        tabIndex={!drawing && !standalone ? 0 : undefined}
+        aria-expanded={!drawing && !standalone ? !isCollapsed : undefined}
+        onClick={
+          !drawing && !standalone
+            ? (event) => {
+                if ((event.target as Element | null)?.closest(".md-codeactions")) return;
+                setExpanded((value) => !value);
+              }
+            : undefined
+        }
+        onKeyDown={
+          !drawing && !standalone
+            ? (event) => {
+                if ((event.target as Element | null)?.closest(".md-codeactions")) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setExpanded((value) => !value);
+                }
+              }
+            : undefined
+        }
+      >
+        <span className="md-code-title">
+          <span className="md-code-dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <span className="md-codelang">{lang === "" ? "text" : lang}</span>
+          <span className="md-codelines">
+            {zh ? `${lines.length} 行` : `${lines.length} lines`}
+            {!closed ? (zh ? " · 输出中…" : " · streaming…") : ""}
+          </span>
+          {isCollapsed && previewSnippet !== "" && <span className="md-code-preview">{previewSnippet}</span>}
+        </span>
         <span className="md-codeactions">
           {previewableExt !== null && (kind !== "mermaid" || mermaidSvg !== null) && (
             <button
@@ -182,6 +235,19 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
           >
             {copied ? <Check size={14} /> : <CopyIcon size={14} />}
           </button>
+          {!drawing && !standalone && (
+            <button
+              type="button"
+              className="md-codebtn md-code-toggle"
+              aria-expanded={!isCollapsed}
+              aria-label={isCollapsed ? (zh ? "展开代码" : "Expand code") : zh ? "折叠代码" : "Collapse code"}
+              title={isCollapsed ? (zh ? "展开代码" : "Expand code") : zh ? "折叠代码" : "Collapse code"}
+              data-testid="codeblock-toggle"
+              onClick={() => setExpanded((value) => !value)}
+            >
+              <ChevronDown size={14} />
+            </button>
+          )}
         </span>
         <span className="md-sr" aria-live="polite">
           {copied ? t("common.copied") : ""}
@@ -189,7 +255,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
       </div>
       {drawing ? (
         <FigureImage prepare={prepare} alt={t("code.figure")} onFail={() => setImageFailed(true)} />
-      ) : (
+      ) : isCollapsed ? null : (
         <>
           {failed && <p className="md-figure-note">{t("code.figureFailed")}</p>}
           <pre ref={preRef} className="md-codebody" style={standalone ? { maxHeight: "none" } : undefined}>

@@ -18,6 +18,7 @@ import {
   IpcValidationError,
   parseBlobId,
   parseBoolean,
+  parseDraftAttachmentsPayload,
   parseModelKey,
   parseOneOf,
   parseInteger,
@@ -283,8 +284,11 @@ export const taskHandlers: HandlerGroup<
 
   renameTask: async (taskId, title) => (await getTaskPool()).renameTask(parseTaskId(taskId), parseTitle(title)),
   smartRenameTask: async (taskId) => smartRenameTask(parseTaskId(taskId)),
-  enhancePrompt: async (text, taskId) =>
-    enhancePrompt(parseString(text, "text", 100_000), taskId === null ? null : parseTaskId(taskId)),
+  enhancePrompt: async (input, taskId) => {
+    const payload =
+      typeof input === "string" ? parseString(input, "text", 100_000) : parseDraftAttachmentsPayload(input);
+    return enhancePrompt(payload, taskId === null ? null : parseTaskId(taskId));
+  },
   setTaskKeepAlive: async (taskId, on) =>
     (await getTaskPool()).setTaskKeepAlive(parseTaskId(taskId), parseBoolean(on, "on")),
 

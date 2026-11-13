@@ -64,25 +64,30 @@
   z-index: 2;
   pointer-events: none;
   translate: var(--mascot-dx, 0px) var(--mascot-dy, 0px);
+  transform: scale(0.84);
+  transform-origin: bottom right;
 }
 .composer-mascot[data-dragging] {
   transition: none;
 }
 .composer-mascot-clawd {
-  left: calc(100% - 36px);
-  bottom: 4px;
+  left: auto;
+  right: 14px;
+  bottom: calc(100% - 4px);
   width: 104px;
   height: 72px;
 }
 .composer-mascot-deepy {
-  left: calc(100% - 12px);
-  bottom: 0;
+  left: auto;
+  right: 10px;
+  bottom: calc(100% - 8px);
   width: 104px;
   height: 104px;
 }
 .composer-mascot-whalegirl {
-  left: calc(100% - 14px);
-  bottom: -4px;
+  left: auto;
+  right: 8px;
+  bottom: calc(100% - 10px);
   width: 138px;
   height: 132px;
 }
@@ -1152,30 +1157,32 @@ button.usage-context:hover,
   height: var(--control-h-md);
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-pill);
+  border-radius: 11px;
   cursor: pointer;
   transition:
     background var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring),
     box-shadow var(--dur-fast) var(--ease-out);
 }
 .send:active:not(:disabled) {
-  transform: scale(0.93);
+  transform: scale(0.92);
 }
 .send[data-kind="send"] {
-  background: var(--primary);
-  color: var(--text-on-primary);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 24%, transparent);
+  background: var(--accent-gradient);
+  color: #ffffff;
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 .send[data-kind="send"]:hover:not(:disabled) {
-  background: var(--primary-hover);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 32%, transparent);
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 .send[data-kind="send"]:disabled {
   background: var(--bg-active);
   color: var(--text-disabled);
+  box-shadow: none;
   cursor: default;
 }
 .send[data-kind="stop"] {

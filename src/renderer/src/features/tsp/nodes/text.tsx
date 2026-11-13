@@ -147,12 +147,30 @@ export function Md(props: NodeProps) {
   const p = props.node.p;
   const text = typeof p.text === "string" ? cleanGlyphs(p.text) : "";
   const marks = useMemo(() => textMarks(p.marks), [p.marks]);
-  const { taskId } = props.ctx;
+  const { taskId, sf } = props.ctx;
+  const parentId = props.node.parent;
+  const isUserMessage = parentId !== null && peekTspNode(taskId, sf, parentId)?.p.role === "omp.user";
   // 文件链接（`file://`、相对路径）和工具卡上的路径一样在右侧预览打开；终端版 omp 也只把这两种画成可点的链接。
   const openFile = useCallback((href: string) => openHref(href, { taskId }), [taskId]);
+  const onAttachmentClick = useCallback(
+    (kind: "image" | "paste" | "file", n: number) => {
+      if (kind !== "image" || parentId === null) return;
+      const card = document.querySelector(`[data-id="${CSS.escape(parentId)}"]`);
+      const target = card?.querySelectorAll<HTMLElement>('.tsp-row[data-role="omp.user.images"] .tsp-image')[n - 1];
+      target?.click();
+    },
+    [parentId],
+  );
   return (
     <div {...nodeDomProps(props, "tsp-md")}>
-      <Markdown source={text} streaming={p.stream === true} marks={marks} openFile={openFile} />
+      <Markdown
+        source={text}
+        streaming={p.stream === true}
+        marks={marks}
+        openFile={openFile}
+        attachmentChips={isUserMessage}
+        onAttachmentClick={isUserMessage ? onAttachmentClick : undefined}
+      />
     </div>
   );
 }

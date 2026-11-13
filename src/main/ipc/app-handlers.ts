@@ -1,5 +1,6 @@
 // 应用和设置：读写走 settings-store（userData/settings.json）；外壳状态走 window-state。
-import { app, shell } from "electron";
+import { app, clipboard, ClipboardItem, nativeImage, shell } from "electron";
+import path from "node:path";
 import {
   brandStyles,
   conversationViews,
@@ -21,6 +22,7 @@ import { exportDiagnostics } from "../log/diagnostics.ts";
 import { openLogsFolder } from "../log/instance.ts";
 import { getSettings, resolveLocale, updateSettings } from "../settings/settings-store.ts";
 import { chooseBackdropImage } from "../settings/backdrop-image.ts";
+import { composerFilePath } from "../files/composer-files.ts";
 import { getShellState, setShellState, sidebarWidthRange } from "../window/window-state.ts";
 import {
   getMainWindow,
@@ -39,6 +41,7 @@ import {
   parseBackdropStrength,
   parseBoolean,
   parseColorMode,
+  parseDraftAttachmentsPayload,
   parseExternalUrl,
   parseFontSize,
   parseInteger,
@@ -74,6 +77,7 @@ export const appHandlers: HandlerGroup<
   | "windowReady"
   | "editField"
   | "openSettingsWindow"
+  | "copyDraftToClipboard"
 > = {
   getAppInfo: async () => {
     const locale = resolveLocale();
@@ -193,5 +197,62 @@ export const appHandlers: HandlerGroup<
     const parsedSection =
       section === undefined || section === null ? undefined : parseString(section, "section", 64, { allowEmpty: true });
     openSettingsWindow(parsedSection);
+  },
+  copyDraftToClipboard: async (value) => {
+    const payload = parseDraftAttachmentsPayload(value);
+    const images = payload.images ?? [];
+    const fileIds = payload.fileIds ?? [];
+    const resolvedPaths = fileIds.map((id) => composerFilePath(id));
+    const fileNames = resolvedPaths.map((p, i) => (p ? path.basename(p) : `file-${i + 1}`));
+    // 把 `\uE000file:N\uE001` 替换为可读的文件引用；图片占位符在 HTML 中转成 <img>，纯文本中保留清晰标注。
+    const plainText = payload.text
+      .replace(/\uE000file:([1-9]\d*)\uE001/g, (_, idxStr: string) => {
+        const idx = Number(idxStr) - 1;
+        const p = resolvedPaths[idx];
+        return p ? `@${p}` : `@${fileNames[idx] ?? `file-${idx + 1}`}`;
+      })
+      .trim();
+    const escapeHtml = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const imageTag = (idx: number): string => {
+      const img = images[idx];
+      if (!img) return "";
+      return `<img src="data:${img.mimeType};base64,${img.data}" alt="Image #${idx + 1}" />`;
+    };
+    const referencedImages = new Set<number>();
+    const htmlBody = escapeHtml(
+      payload.text.replace(/\uE000file:([1-9]\d*)\uE001/g, (_, idxStr: string) => {
+        const idx = Number(idxStr) - 1;
+        return `@${fileNames[idx] ?? `file-${idx + 1}`}`;
+      }),
+    )
+      .replace(/\[Image #([1-9]\d*)(?:,[^\]\n]*)?\]/g, (_, numStr: string) => {
+        const idx = Number(numStr) - 1;
+        if (idx >= 0 && idx < images.length) {
+          referencedImages.add(idx);
+          return imageTag(idx);
+        }
+        return `[Image #${numStr}]`;
+      })
+      .replace(/\r?\n/g, "<br/>");
+    const trailingImages = images
+      .map((_, idx) => (referencedImages.has(idx) ? "" : imageTag(idx)))
+      .filter((tag) => tag !== "")
+      .join("");
+    const html = `<div>${htmlBody}${trailingImages ? `<div>${trailingImages}</div>` : ""}</div>`;
+    const textValue = plainText || images.map((_, i) => `[Image #${i + 1}]`).join(" ");
+    if (images.length > 0) {
+      const items: Record<string, string | Blob> = {
+        "text/plain": textValue,
+        "text/html": html,
+      };
+      if (images.length === 1) {
+        const png = nativeImage.createFromBuffer(Buffer.from(images[0]!.data, "base64")).toPNG();
+        items["image/png"] = new Blob([new Uint8Array(png)], { type: "image/png" });
+      }
+      await clipboard.write([new ClipboardItem(items)]);
+    } else {
+      await clipboard.writeText(plainText);
+    }
   },
 };

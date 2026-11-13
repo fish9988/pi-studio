@@ -366,12 +366,18 @@
   transition:
     border-color var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
 }
 
 .dsh-ov-tile:hover {
   border-color: var(--border-strong);
   background: var(--bg-hover);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+.dsh-ov-tile:active {
+  transform: scale(0.98);
 }
 
 .dsh-ov-tile-top {

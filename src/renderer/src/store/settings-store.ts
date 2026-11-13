@@ -138,7 +138,7 @@ export async function setAppearanceColorMode(colorMode: ColorMode): Promise<void
     }
   }
   // 旧主进程未重启时：借用旧版已有的主题通道同步 Electron nativeTheme 的深浅状态
-  const legacySync: ThemePreference = colorMode === "dark" ? "pi" : colorMode === "light" ? "openai" : "system";
+  const legacySync: ThemePreference = colorMode === "dark" ? "dark" : colorMode === "light" ? "light" : "system";
   await window.studio.setTheme(legacySync as ThemePreference).catch(() => {});
   const after = settingsStore.get();
   if (after.settings !== null) {

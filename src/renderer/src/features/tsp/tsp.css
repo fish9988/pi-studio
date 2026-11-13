@@ -209,32 +209,36 @@
 
 .tsp-jump {
   position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
+  right: 24px;
+  bottom: 14px;
   z-index: var(--z-sticky);
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-rim);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-overlay) 88%, transparent);
-  backdrop-filter: blur(8px);
-  color: var(--text-2);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(16px) saturate(160%);
+  color: var(--text);
   font: inherit;
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-float);
   cursor: pointer;
   transition:
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
 }
 .tsp-jump:hover {
   background: var(--bg-overlay);
-  border-color: var(--border-strong);
-  color: var(--text);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
+}
+.tsp-jump:active {
+  transform: scale(0.94);
 }
 .tsp-jump:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -2395,6 +2399,8 @@
   align-items: center;
   gap: var(--space-1);
   flex: none;
+  margin-left: var(--space-1);
+  padding-left: var(--space-1);
 }
 .tsp-tool-head:hover .tsp-tool-acts,
 .tsp-tool-head:focus-within .tsp-tool-acts {
@@ -3010,7 +3016,14 @@
 
 /* ───────────────────────── omp 的区块（按 role；omp 自己的命名，不在规范里） ───────────────────────── */
 
-/* 用户消息：靠右 M3 Expressive 圆润气泡（无边框），使用对话正文字体 */
+@keyframes tsp-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* 用户消息：靠右 M3 Expressive 渐变柔光气泡（无边框），使用对话正文字体 */
 .tsp-card[data-role="omp.user"] {
   position: relative;
   align-self: flex-end;
@@ -3018,10 +3031,11 @@
   margin-top: var(--space-3);
   margin-bottom: var(--space-6);
   background: var(--bg-bubble);
-  border: none;
-  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: var(--shadow-1);
   border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-sm) var(--radius-bubble);
   font-family: var(--font-display);
+  animation: tsp-msg-in var(--dur-base) var(--ease-out);
 }
 .tsp-card[data-role="omp.user"] .tsp-card-body {
   padding: var(--space-2-5) var(--space-3-5);
@@ -3031,12 +3045,34 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+.tsp-row[data-role="omp.user.images"] .tsp-image {
+  position: relative;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  padding: 2px;
+}
 .tsp-row[data-role="omp.user.images"] .tsp-img-frame {
   width: auto;
   height: auto;
-  max-width: 120px;
-  max-height: 120px;
+  max-width: 112px;
+  max-height: 92px;
+  border-radius: calc(var(--radius-md) - 2px);
   object-fit: cover;
+}
+.tsp-user-img-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  background: rgba(15, 23, 42, 0.72);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--fw-strong);
+  line-height: 1.3;
+  pointer-events: none;
 }
 /* 彻底隐藏旧版气泡上方的重复按钮行，仅保留气泡右下角的复制与撤回 */
 .tsp-row[data-role="omp.user.tools"] {
@@ -3356,82 +3392,35 @@
   display: none;
 }
 
-/* ───────── DSH 风格三层无外框思考与工具调用流（去盒子化重构） ───────── */
+/* ───────── PI-Desktop 风格统一回合过程栏（Turn Process Pill + 展开托盘） ───────── */
 .tsp-process-group {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  margin-bottom: var(--space-1-5);
-}
-/* 第一层：回合耗时状态头 `已完成，用时 X分X秒 ⌄`（M3 胶囊造型） */
-.tsp-process-done-bar {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 2px 10px;
-  margin-left: -4px;
-  margin-bottom: 4px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-3);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: var(--fw-regular);
-  cursor: pointer;
-  transition:
-    color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
-}
-.tsp-process-done-bar[data-running] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.tsp-process-done-bar:hover {
-  color: var(--text-2);
-  background: var(--bg-tool);
-  border-color: var(--border-subtle);
+  margin-bottom: var(--space-2);
 }
 .tsp-process-live-dot {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
+  flex: none;
   border-radius: var(--radius-pill);
   background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
   animation: tsp-pulse var(--dur-breathe) var(--tick-breathe) infinite;
   animation-play-state: var(--play-state);
 }
-/* done bar 上的实时耗时数字：和摘要行里的那一份同一套字体，不抢标签的色 */
-.tsp-process-done-time {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.tsp-process-done-chev {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-3);
-  transform: rotate(0deg);
-  transition: transform var(--dur-fast) var(--ease-out);
-}
-.tsp-process-done-chev[data-collapsed] {
-  transform: rotate(-90deg);
-}
-/* 第二层：过程聚合摘要行（胶囊化轻触感） */
+/* 过程摘要胶囊：`[●/✓] 执行 X 次思考，调用 Y 次工具 · 4.2s ⌄` */
 .tsp-process-summary {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-height: 28px;
-  padding: 2px 10px;
-  margin-left: -4px;
-  border: 1px solid transparent;
+  padding: 2px 12px;
+  margin-left: -2px;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: color-mix(in srgb, var(--bg-tool) 78%, transparent);
   color: var(--text-2);
   font: inherit;
   font-size: 13px;
@@ -3440,17 +3429,26 @@
   transition:
     color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.tsp-process-summary[data-running] {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--accent);
 }
 .tsp-process-summary:hover {
   color: var(--text);
   background: var(--bg-tool);
-  border-color: var(--border-subtle);
+  border-color: var(--border);
+}
+.tsp-process-summary:active {
+  transform: scale(0.985);
 }
 .tsp-process-summary-icon {
   display: inline-flex;
   flex: none;
-  color: var(--text-3);
+  color: var(--st-done);
 }
 .tsp-process-summary-sep {
   color: var(--text-3);
@@ -3475,25 +3473,28 @@
 .tsp-process-summary[aria-expanded="false"] .tsp-process-summary-chev {
   transform: rotate(-90deg);
 }
-/* 第三层：展开后的子步骤列表 —— 保持左阅读轴与正文对齐，左侧外沿挂 PI-Desktop 快捷折叠轨 */
+/* 展开后的统一过程托盘 —— 保持左阅读轴与正文对齐（margin-inline 与 padding-inline 对冲），左缘挂快捷折叠轨 */
 .tsp-process-group-body {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  max-width: 100%;
-  margin-top: 4px;
-  padding-left: 0;
-  background: transparent;
-  box-shadow: none;
-  border: 0;
+  max-width: calc(100% + 16px);
+  margin-top: 6px;
+  margin-inline: -8px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--bg-tool) 76%, transparent);
+  box-shadow: var(--shadow-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
 .tsp-collapse-rail {
   position: absolute;
-  left: -14px;
-  top: 4px;
-  bottom: 4px;
+  left: -10px;
+  top: 6px;
+  bottom: 6px;
   width: 10px;
   padding: 0;
   border: 0;
@@ -3519,65 +3520,6 @@
   max-height: min(440px, 54vh);
   overflow-x: hidden;
   overflow-y: auto;
-}
-/* 过程行的三种排布（设置 › 通用 › 过程行）：
-   经典（默认）＝ 现在这个样子：每步一行、无外框、无分隔线、2px 行距、左侧微缩进；
-   平铺 ＝ 去掉左侧缩进和行距，每步之间一条极淡分隔线，图标保留（不分层、不包框）；
-   单列 ＝ 整个步骤列表装进一个带边框的盒子，一行一条 24px、行间极淡分隔线。
-   以前 data-layout 只写到 DOM 上、CSS 里没人用它，所以那个设置点了和没点一样（只剩设置页里的预览）。 */
-.tsp-process-group[data-layout="flat"] .tsp-process-group-body {
-  gap: 0;
-  padding-left: 0;
-}
-.tsp-process-group[data-layout="flat"] .tsp-process-group-body > * + * {
-  border-top: 1px solid var(--border-subtle);
-}
-.tsp-process-group[data-layout="flat"] .tsp-tool.card,
-.tsp-process-group[data-layout="flat"] .tsp-tool.card.st-running,
-.tsp-process-group[data-layout="flat"] .tsp-tool.card.st-error {
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-}
-.tsp-process-group[data-layout="flat"] .tsp-tool > .tsp-tool-head {
-  padding-inline: var(--space-1-5);
-}
-.tsp-process-group[data-layout="flat"] .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
-  margin: 2px 0 4px;
-  padding: 0 0 0 var(--space-2);
-  border-left: 0;
-}
-
-/* 单列：整份步骤装进一个框，一行一条、行间分隔线；行内不要再畳卡片框。 */
-.tsp-process-group[data-layout="column"] .tsp-process-group-body {
-  gap: 0;
-  padding: 2px 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-app);
-}
-.tsp-process-group[data-layout="column"] .tsp-process-group-body > * + * {
-  border-top: 1px solid var(--border-subtle);
-}
-.tsp-process-group[data-layout="column"] .tsp-tool.card,
-.tsp-process-group[data-layout="column"] .tsp-tool.card.st-running,
-.tsp-process-group[data-layout="column"] .tsp-tool.card.st-error {
-  background: transparent;
-  border-radius: 0;
-  box-shadow: none;
-}
-.tsp-process-group[data-layout="column"] .tsp-tool > .tsp-tool-head {
-  min-height: 24px;
-  padding-inline: var(--space-2);
-}
-.tsp-process-group[data-layout="column"] .tsp-section[data-role^="omp.thinking"] > .tsp-section-head {
-  min-height: 24px;
-  padding-inline: var(--space-2);
-}
-.tsp-process-group[data-layout="column"] .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
-  margin: 0 0 4px;
-  padding: 0 var(--space-2) 0 var(--space-4);
-  border-left: 0;
 }
 .tsp-process-group-body:hover::-webkit-scrollbar-thumb,
 .tsp-section[data-role^="omp.thinking"] > .tsp-section-body:hover::-webkit-scrollbar-thumb {
@@ -3629,13 +3571,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-.tsp-process-group-body[data-layout="column"],
-.tsp-process-group-body[data-layout="flat"] {
-  background: transparent;
-  box-shadow: none;
-  border-radius: 0;
-  border: 0;
 }
 :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
   > .tsp-section[data-role^="omp.thinking"]

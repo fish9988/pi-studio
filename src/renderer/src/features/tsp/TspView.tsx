@@ -9,6 +9,7 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type React
 import type { TaskId } from "../../../../shared/ipc.ts";
 import { useT } from "../../i18n/use-t.ts";
 import { ArrowDown } from "../../icons.tsx";
+import { Markdown } from "../../markdown/index.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
 import { OverlayScrollbar } from "../../ui/OverlayScrollbar.tsx";
 import { noteProgrammaticTop } from "../conversation/scroll-intent.ts";
@@ -286,11 +287,7 @@ function PendingUser({ text }: { text: string }) {
       <div className="tsp-card nohead" data-role="omp.user" data-pending="" data-testid="tsp-pending-user">
         <div className="tsp-card-body">
           <div className="tsp-md">
-            <div className="md">
-              <div className="md-block">
-                <p>{text}</p>
-              </div>
-            </div>
+            <Markdown source={text} attachmentChips />
           </div>
         </div>
       </div>

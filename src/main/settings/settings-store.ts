@@ -53,7 +53,7 @@ function parseBackdropFile(value: unknown): string | null {
 /** nativeTheme 只认 system / light / dark：显式色板名按它的深浅给，主题家族则直接跟独立的 colorMode 走。 */
 function themeSource(): "system" | "light" | "dark" {
   const { theme, colorMode = "system" } = settings;
-  if (isThemeName(theme) && theme !== "sakura" && theme !== "ink") {
+  if (isThemeName(theme)) {
     return themes[theme].dark ? "dark" : "light";
   }
   return colorMode;
@@ -96,15 +96,39 @@ function sanitize(raw: unknown): StudioSettings {
   } else if (rawTheme === "dark") {
     migratedTheme = "default";
     if (rawColorMode === undefined) inferredColorMode = "dark";
-  } else if (rawTheme === "whale-dark") {
-    migratedTheme = "deepseek";
+  } else if (rawTheme === "whale-dark" || rawTheme === "deepseek-dark") {
+    migratedTheme = "mica";
     if (rawColorMode === undefined) inferredColorMode = "dark";
-  } else if (rawTheme === "whale-light") {
-    migratedTheme = "deepseek";
-    if (rawColorMode === undefined) inferredColorMode = "light";
-  } else if (rawTheme === "night-sakura") {
-    migratedTheme = "sakura";
+  } else if (rawTheme === "whale-light" || rawTheme === "deepseek-light" || rawTheme === "deepseek") {
+    migratedTheme = "mica";
+    if (rawColorMode === undefined && rawTheme !== "deepseek") inferredColorMode = "light";
+  } else if (rawTheme === "night-sakura" || rawTheme === "sakura-dark") {
+    migratedTheme = "coral";
     if (rawColorMode === undefined) inferredColorMode = "dark";
+  } else if (rawTheme === "sakura") {
+    migratedTheme = "coral";
+  } else if (rawTheme === "claude" || rawTheme === "claude-light" || rawTheme === "claude-dark") {
+    migratedTheme = "amber";
+    if (rawColorMode === undefined && rawTheme !== "claude")
+      inferredColorMode = rawTheme.endsWith("-dark") ? "dark" : "light";
+  } else if (rawTheme === "openai" || rawTheme === "openai-light" || rawTheme === "openai-dark") {
+    migratedTheme = "aurora";
+    if (rawColorMode === undefined && rawTheme !== "openai")
+      inferredColorMode = rawTheme.endsWith("-dark") ? "dark" : "light";
+  } else if (rawTheme === "ink" || rawTheme === "ink-dark") {
+    migratedTheme = "obsidian";
+    if (rawColorMode === undefined && rawTheme === "ink-dark") inferredColorMode = "dark";
+  } else if (
+    rawTheme === "pi" ||
+    rawTheme === "pi-light" ||
+    rawTheme === "pi-dark" ||
+    rawTheme === "gemini" ||
+    rawTheme === "gemini-light" ||
+    rawTheme === "gemini-dark"
+  ) {
+    migratedTheme = "default";
+    if (rawColorMode === undefined && (rawTheme.endsWith("-light") || rawTheme.endsWith("-dark")))
+      inferredColorMode = rawTheme.endsWith("-dark") ? "dark" : "light";
   }
   return {
     locale: field(parseLocalePreference, record["locale"], defaults.locale),

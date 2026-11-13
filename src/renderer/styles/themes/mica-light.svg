@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".6" stop-color="#f5f9ff"/>
+      <stop offset="1" stop-color="#eaf2fd"/>
+    </linearGradient>
+    <radialGradient id="g1" cx="1300" cy="820" r="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity=".35"/>
+      <stop offset=".55" stop-color="#0f6cbd" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#eaf2fd" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="g2" cx="1480" cy="240" r="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#818cf8" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="meshFade" x1="1040" y1="0" x2="1520" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f6cbd" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0f6cbd" stop-opacity=".28"/>
+    </linearGradient>
+    <linearGradient id="fadeL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".48" stop-color="#ffffff" stop-opacity=".86"/>
+      <stop offset=".78" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect width="1600" height="1000" fill="url(#g1)"/>
+  <rect width="1600" height="1000" fill="url(#g2)"/>
+  <g fill="none" stroke="url(#meshFade)" stroke-width="1">
+    <path d="M1080 560V1000M1120 560V1000M1160 560V1000M1200 560V1000M1240 560V1000M1280 560V1000M1320 560V1000M1360 560V1000M1400 560V1000M1440 560V1000M1480 560V1000M1520 560V1000M1560 560V1000"/>
+    <path d="M1080 560H1600M1080 600H1600M1080 640H1600M1080 680H1600M1080 720H1600M1080 760H1600M1080 800H1600M1080 840H1600M1080 880H1600M1080 920H1600M1080 960H1600"/>
+    <circle cx="1400" cy="840" r="120" stroke-opacity=".45"/>
+    <circle cx="1400" cy="840" r="190" stroke-opacity=".35"/>
+    <circle cx="1400" cy="840" r="260" stroke-opacity=".28"/>
+    <circle cx="1400" cy="840" r="330" stroke-opacity=".2"/>
+    <circle cx="1400" cy="840" r="400" stroke-opacity=".14"/>
+    <circle cx="1400" cy="840" r="470" stroke-opacity=".1"/>
+    <path d="M1120 880C1220 790 1320 930 1440 820C1510 755 1560 770 1600 790" stroke-opacity=".35"/>
+    <path d="M1080 930C1190 830 1310 960 1450 850C1520 795 1565 815 1600 835" stroke-opacity=".28"/>
+    <path d="M1160 830C1250 750 1340 880 1460 775C1520 725 1565 735 1600 750" stroke-opacity=".24"/>
+  </g>
+  <g fill="#0f6cbd" fill-opacity=".16">
+    <circle cx="1200" cy="760" r="3"/><circle cx="1280" cy="720" r="3"/><circle cx="1360" cy="680" r="3"/><circle cx="1440" cy="640" r="3"/>
+    <circle cx="1240" cy="840" r="3"/><circle cx="1320" cy="800" r="3"/><circle cx="1400" cy="760" r="3"/><circle cx="1480" cy="720" r="3"/>
+    <circle cx="1280" cy="920" r="3"/><circle cx="1360" cy="880" r="3"/><circle cx="1440" cy="840" r="3"/><circle cx="1520" cy="800" r="3"/>
+    <circle cx="1320" cy="960" r="3"/><circle cx="1400" cy="920" r="3"/><circle cx="1480" cy="880" r="3"/><circle cx="1560" cy="840" r="3"/>
+    <circle cx="1160" cy="880" r="3"/><circle cx="1200" cy="920" r="3"/><circle cx="1240" cy="960" r="3"/><circle cx="1480" cy="960" r="3"/>
+    <circle cx="1360" cy="600" r="3"/><circle cx="1440" cy="600" r="3"/><circle cx="1520" cy="640" r="3"/><circle cx="1560" cy="680" r="3"/>
+    <circle cx="1120" cy="760" r="2.5"/><circle cx="1160" cy="720" r="2.5"/><circle cx="1200" cy="680" r="2.5"/><circle cx="1240" cy="640" r="2.5"/>
+    <circle cx="1120" cy="840" r="2.5"/><circle cx="1160" cy="800" r="2.5"/><circle cx="1240" cy="760" r="2.5"/><circle cx="1320" cy="720" r="2.5"/>
+    <circle cx="1360" cy="760" r="2.5"/><circle cx="1440" cy="720" r="2.5"/><circle cx="1520" cy="680" r="2.5"/><circle cx="1560" cy="720" r="2.5"/>
+    <circle cx="1320" cy="880" r="2.5"/><circle cx="1400" cy="840" r="2.5"/><circle cx="1480" cy="800" r="2.5"/><circle cx="1560" cy="760" r="2.5"/>
+    <circle cx="1360" cy="960" r="2.5"/><circle cx="1440" cy="920" r="2.5"/><circle cx="1520" cy="880" r="2.5"/><circle cx="1560" cy="920" r="2.5"/>
+    <circle cx="1120" cy="960" r="2.5"/><circle cx="1160" cy="960" r="2.5"/><circle cx="1200" cy="840" r="2.5"/><circle cx="1280" cy="800" r="2.5"/>
+    <circle cx="1280" cy="640" r="2.5"/><circle cx="1320" cy="600" r="2.5"/><circle cx="1400" cy="640" r="2.5"/><circle cx="1480" cy="600" r="2.5"/>
+    <circle cx="1400" cy="680" r="2"/><circle cx="1440" cy="680" r="2"/><circle cx="1480" cy="680" r="2"/><circle cx="1520" cy="720" r="2"/>
+    <circle cx="1400" cy="720" r="2"/><circle cx="1440" cy="760" r="2"/><circle cx="1480" cy="760" r="2"/><circle cx="1520" cy="760" r="2"/>
+    <circle cx="1400" cy="800" r="2"/><circle cx="1440" cy="800" r="2"/><circle cx="1480" cy="840" r="2"/><circle cx="1520" cy="840" r="2"/>
+    <circle cx="1400" cy="880" r="2"/><circle cx="1440" cy="880" r="2"/><circle cx="1480" cy="920" r="2"/><circle cx="1520" cy="920" r="2"/>
+    <circle cx="1400" cy="960" r="2"/><circle cx="1440" cy="960" r="2"/><circle cx="1520" cy="960" r="2"/><circle cx="1560" cy="960" r="2"/>
+  </g>
+  <rect width="1600" height="1000" fill="url(#fadeL)"/>
+</svg>

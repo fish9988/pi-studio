@@ -177,134 +177,6 @@
 .snav-compact .ui-field {
   width: 100%;
 }
-/* ───────── 过程行可视化三卡选择器（复刻 process-column.css） ───────── */
-.st-process-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-  width: min(760px, 100%);
-}
-.st-process-card {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-2);
-  min-width: 0;
-  overflow: hidden;
-  padding: var(--space-2-5);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-app);
-  color: var(--text-2);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
-}
-.st-process-card:hover {
-  border-color: var(--border);
-}
-/* 选中：强调色描边 + 淡底 + 标签前一个勾号（不只靠颜色） */
-.st-process-card[data-active] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-app));
-  color: var(--text);
-}
-.st-process-card[data-active] .st-process-card-label::before {
-  content: "✓" / "";
-  margin-right: var(--space-1);
-  color: var(--accent);
-}
-.st-process-card-label {
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  text-align: center;
-}
-.st-process-sample {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  color: var(--text-2);
-  font-size: var(--fs-2xs);
-  line-height: 16px;
-}
-.st-process-sample-head {
-  color: var(--text-3);
-  font-weight: var(--fw-medium);
-}
-.st-process-sample-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.st-process-sample[data-layout="column"] .st-process-sample-body {
-  gap: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-app);
-}
-/* 平铺：行距收紧，每行之间一条极淡分隔线（和对话里一致） */
-.st-process-sample[data-layout="flat"] .st-process-sample-body {
-  gap: 0;
-}
-.st-process-sample[data-layout="flat"] .st-process-sample-row {
-  min-height: 20px;
-}
-.st-process-sample[data-layout="flat"] .st-process-sample-row + .st-process-sample-row {
-  border-top: 0.5px solid var(--border);
-}
-/* 经典：就是现在对话里的样子——无框、无分隔线、2px 行距、图标 + 「标题 · 文本」 */
-.st-process-sample[data-layout="classic"] .st-process-sample-body {
-  gap: 2px;
-}
-.st-process-sample-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  white-space: nowrap;
-}
-.st-process-sample[data-layout="column"] .st-process-sample-row {
-  min-height: 24px;
-  padding-inline: var(--space-2);
-}
-.st-process-sample[data-layout="column"] .st-process-sample-row + .st-process-sample-row {
-  border-top: 0.5px solid var(--border);
-}
-.st-process-sample-icon {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  margin-right: 6px;
-  border: 1px solid currentColor;
-  border-radius: var(--radius-pill);
-}
-.st-process-sample[data-layout="column"] .st-process-sample-icon {
-  display: none;
-}
-.st-process-sample[data-layout="column"] .st-process-sample-row[data-kind="thought"] .st-process-sample-title,
-.st-process-sample[data-layout="column"] .st-process-sample-row[data-kind="thought"] .st-process-sample-sep {
-  display: none;
-}
-.st-process-sample-title {
-  flex: none;
-}
-.st-process-sample-sep {
-  flex: none;
-  width: 2px;
-  height: 2px;
-  margin-inline: 5px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-}
-.st-process-sample-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 /* ───────── 内容 ───────── */
 
 .settings {
@@ -557,9 +429,6 @@
 }
 .st-cells .ui-row-control {
   max-width: 100%;
-}
-.st-cells .ui-row-control:has(> .st-process-cards) {
-  width: min(760px, 100%);
 }
 .st-cells .ui-row-control > .ui-seg {
   flex-wrap: wrap;
@@ -867,12 +736,16 @@
   border-radius: var(--radius-lg);
   transition:
     border-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 .st-theme-card:hover {
   color: var(--text);
   border-color: var(--border);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-1);
 }
 
 .st-theme-card:focus-visible {
@@ -1264,8 +1137,7 @@
 /* 系统会清掉 box-shadow、重写作者色：选中态一律靠 border / outline + 勾号，不靠发光 */
 @media (forced-colors: active) {
   .snav-item[aria-current="page"],
-  .st-theme-card[aria-pressed="true"],
-  .st-process-card[data-active] {
+  .st-theme-card[aria-pressed="true"] {
     border-color: Highlight;
     outline: 2px solid Highlight;
     outline-offset: -2px;

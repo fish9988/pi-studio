@@ -52,7 +52,7 @@ async function openGalleryFromPalette(page: Page): Promise<void> {
   await expect(page.getByTestId("theme-gallery")).toBeVisible();
 }
 
-test("独立外观模式（跟随系统 / 浅色 / 深色）+ 全系双模式主题画廊（含 Claude Code）：深浅切换与每个主题实时正交联动", async () => {
+test("独立外观模式（跟随系统 / 浅色 / 深色）+ 全系双模式主题画廊：深浅切换与每个主题实时正交联动", async () => {
   const launched = await launchApp();
   try {
     const { app, page } = launched;
@@ -78,30 +78,30 @@ test("独立外观模式（跟随系统 / 浅色 / 深色）+ 全系双模式主
       await expect(halves.nth(1)).toHaveCSS("background-color", rgb(await cssBgApp(pair.dark)));
     }
 
-    // 切到独立「浅色」模式：选中 Claude Code -> claude-light (#ffffff)
+    // 切到独立「浅色」模式：选中 Glacier Mica -> mica-light
     await page.getByTestId("setting-color-mode-light").click();
-    const claudeCard = page.getByTestId("theme-card-claude");
-    await claudeCard.click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "claude-light");
-    await expect(claudeCard).toHaveAttribute("aria-pressed", "true");
-    expect(await rootBgApp(page)).toBe(await cssBgApp("claude-light"));
+    const micaCard = page.getByTestId("theme-card-mica");
+    await micaCard.click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "mica-light");
+    await expect(micaCard).toHaveAttribute("aria-pressed", "true");
+    expect(await rootBgApp(page)).toBe(await cssBgApp("mica-light"));
     await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)).toBe(false);
 
-    // 保持 Claude Code 不变，仅切「深色」外观模式 -> 自动切换为 claude-dark (#191919)！
+    // 保持 Glacier Mica 不变，仅切「深色」外观模式 -> 自动切换为 mica-dark
     await page.getByTestId("setting-color-mode-dark").click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "claude-dark");
-    await expect(claudeCard).toHaveAttribute("aria-pressed", "true");
-    expect(await rootBgApp(page)).toBe(await cssBgApp("claude-dark"));
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "mica-dark");
+    await expect(micaCard).toHaveAttribute("aria-pressed", "true");
+    expect(await rootBgApp(page)).toBe(await cssBgApp("mica-dark"));
     await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.shouldUseDarkColors)).toBe(true);
 
-    // 在深色模式下点 DeepSeek -> deepseek-dark；再切浅色模式 -> deepseek-light！
-    await page.getByTestId("theme-card-deepseek").click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "deepseek-dark");
-    expect(await rootBgApp(page)).toBe(await cssBgApp("deepseek-dark"));
+    // 在深色模式下点 Aurora -> aurora-dark；再切浅色模式 -> aurora-light！
+    await page.getByTestId("theme-card-aurora").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "aurora-dark");
+    expect(await rootBgApp(page)).toBe(await cssBgApp("aurora-dark"));
 
     await page.getByTestId("setting-color-mode-light").click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "deepseek-light");
-    expect(await rootBgApp(page)).toBe(await cssBgApp("deepseek-light"));
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "aurora-light");
+    expect(await rootBgApp(page)).toBe(await cssBgApp("aurora-light"));
 
     // 默认主题 + 跟随系统 = <html> 上移除 data-theme
     await page.getByTestId("setting-color-mode-system").click();
@@ -192,11 +192,9 @@ test("系统三键跟着网页换主题：网页换之前不先变，和网页�
   try {
     const { app, page } = launched;
     await expect(page.getByTestId("app-root")).toBeVisible();
-    await setLocaleTheme(page, "zh-CN", "claude-light");
+    await setLocaleTheme(page, "zh-CN", "mica-light");
     await spyOverlay(app);
-    await expect
-      .poll(async () => (await lastSymbol(app)) ?? themes["claude-light"].text)
-      .toBe(themes["claude-light"].text);
+    await expect.poll(async () => (await lastSymbol(app)) ?? themes["mica-light"].text).toBe(themes["mica-light"].text);
     await app.evaluate(() => {
       (globalThis as unknown as { overlayCalls: unknown[] }).overlayCalls.length = 0;
     });
@@ -212,37 +210,37 @@ test("系统三键跟着网页换主题：网页换之前不先变，和网页�
         attributeFilter: ["data-theme"],
       });
     });
-    await setTheme(page, "claude-dark");
-    await expect.poll(() => lastSymbol(app)).toBe(themes["claude-dark"].text);
+    await setTheme(page, "mica-dark");
+    await expect.poll(() => lastSymbol(app)).toBe(themes["mica-dark"].text);
     const changedAt = await page.evaluate(() => (globalThis as unknown as { themeChangedAt: number }).themeChangedAt);
     const calls = await overlayCalls(app);
+    expect(calls.filter((call) => call.t < changedAt).every((call) => call.symbol === themes["mica-light"].text)).toBe(
+      true,
+    );
     expect(
-      calls.filter((call) => call.t < changedAt).every((call) => call.symbol === themes["claude-light"].text),
-    ).toBe(true);
-    expect(
-      calls.some((call) => call.symbol !== themes["claude-light"].text && call.symbol !== themes["claude-dark"].text),
+      calls.some((call) => call.symbol !== themes["mica-light"].text && call.symbol !== themes["mica-dark"].text),
     ).toBe(true);
 
     await page.keyboard.press("Control+k");
     await expect(page.getByTestId("command-palette")).toBeVisible();
-    await expect.poll(() => lastSymbol(app)).toBe(dimmedSymbol("claude-dark"));
-    await setTheme(page, "pi-dark");
-    await expect.poll(() => lastSymbol(app)).toBe(dimmedSymbol("pi-dark"));
+    await expect.poll(() => lastSymbol(app)).toBe(dimmedSymbol("mica-dark"));
+    await setTheme(page, "aurora-dark");
+    await expect.poll(() => lastSymbol(app)).toBe(dimmedSymbol("aurora-dark"));
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("command-palette")).toBeHidden();
-    await expect.poll(() => lastSymbol(app)).toBe(themes["pi-dark"].text);
+    await expect.poll(() => lastSymbol(app)).toBe(themes["aurora-dark"].text);
 
     await page.evaluate(() => globalThis.studio.setReduceMotion(true));
     await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
     await app.evaluate(() => {
       (globalThis as unknown as { overlayCalls: unknown[] }).overlayCalls.length = 0;
     });
-    const ends = new Set<string>([themes["pi-dark"].text, dimmedSymbol("pi-dark")]);
+    const ends = new Set<string>([themes["aurora-dark"].text, dimmedSymbol("aurora-dark")]);
     await page.keyboard.press("Control+k");
-    await expect.poll(() => lastSymbol(app)).toBe(dimmedSymbol("pi-dark"));
+    await expect.poll(() => lastSymbol(app)).toBe(dimmedSymbol("aurora-dark"));
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("command-palette")).toBeHidden();
-    await expect.poll(() => lastSymbol(app)).toBe(themes["pi-dark"].text);
+    await expect.poll(() => lastSymbol(app)).toBe(themes["aurora-dark"].text);
     expect((await overlayCalls(app)).filter((call) => !ends.has(call.symbol))).toEqual([]);
   } finally {
     await launched.close();

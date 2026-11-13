@@ -1,6 +1,6 @@
 // 助手消息的 Markdown：按顶层块渲染，已闭合的块按原文 memo，流式时只有最后一个块在变（spec 5.4）。
 // 流式时增量解析（parse.ts 的 parseStreaming）：前面不会再变的块直接复用，只重解析尾巴；结束（streaming=false）时整篇重解析一次。
-import { memo, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type Katex from "katex";
 import type { TFunction } from "../../../shared/i18n/index.ts";
 import { useT } from "../i18n/use-t.ts";
@@ -55,19 +55,75 @@ function useKatex(needed: boolean, t: TFunction): KatexApi | null {
 
 // ───────── 渲染 ─────────
 
+const USER_ATTACHMENT_TOKEN = /(\[(?:Image|Paste|File) #[1-9]\d*(?:,[^\]\n]*)?\])/g;
+const USER_ATTACHMENT_PARSE = /^\[(Image|Paste|File) #([1-9]\d*)(?:,\s*([^\]\n]+))?\]$/;
+
+function renderAttachmentText(
+  text: string,
+  marks: readonly TextMark[] | undefined,
+  onAttachmentClick: ((kind: "image" | "paste" | "file", n: number) => void) | undefined,
+): ReactNode {
+  const parts = text.split(USER_ATTACHMENT_TOKEN);
+  const renderPlain = (chunk: string, keyPrefix: string) =>
+    marks === undefined || marks.length === 0
+      ? chunk
+      : splitMarks(chunk, marks).map((piece, index) =>
+          piece.className === undefined ? (
+            piece.text
+          ) : (
+            <span key={`${keyPrefix}-${index}`} className={piece.className}>
+              {piece.text}
+            </span>
+          ),
+        );
+  return parts.map((part, idx) => {
+    if (part === "") return null;
+    const match = idx % 2 === 1 ? USER_ATTACHMENT_PARSE.exec(part) : null;
+    if (!match) return <Fragment key={idx}>{renderPlain(part, String(idx))}</Fragment>;
+    const rawKind = match[1]!;
+    const kind = rawKind.toLowerCase() as "image" | "paste" | "file";
+    const num = Number(match[2]!);
+    const meta = match[3]?.trim() ?? "";
+    const label = kind === "image" ? `#${num}` : meta !== "" ? `#${num} · ${meta}` : `#${num}`;
+    if (kind === "image" && onAttachmentClick !== undefined) {
+      return (
+        <button
+          key={idx}
+          type="button"
+          className="md-attach-chip"
+          data-kind={kind}
+          data-n={num}
+          title={part}
+          onClick={() => onAttachmentClick(kind, num)}
+        >
+          {label}
+        </button>
+      );
+    }
+    return (
+      <span key={idx} className="md-attach-chip" data-kind={kind} data-n={num} title={part}>
+        {label}
+      </span>
+    );
+  });
+}
+
 function createContext(
   t: TFunction,
   marks: readonly TextMark[] | undefined,
   katex: KatexApi | null,
   openFile: ((href: string) => void) | undefined,
+  attachmentChips: boolean,
+  onAttachmentClick: ((kind: "image" | "paste" | "file", n: number) => void) | undefined,
 ): RenderContext {
   return {
     openLink: (href) => {
       window.studio.openExternal(href).catch((error: unknown) => reportError(t, error));
     },
     renderCode: ({ code, lang, closed }): ReactNode => <CodeBlock code={code} lang={lang} closed={closed} />,
-    renderText:
-      marks === undefined || marks.length === 0
+    renderText: attachmentChips
+      ? (text) => renderAttachmentText(text, marks, onAttachmentClick)
+      : marks === undefined || marks.length === 0
         ? undefined
         : (text) =>
             splitMarks(text, marks).map((piece, index) =>
@@ -91,14 +147,21 @@ const Block = memo(
     marks,
     katex,
     openFile,
+    attachmentChips,
+    onAttachmentClick,
   }: {
     block: MarkdownBlock;
     t: TFunction;
     marks: readonly TextMark[] | undefined;
     katex: KatexApi | null;
     openFile: ((href: string) => void) | undefined;
+    attachmentChips: boolean;
+    onAttachmentClick: ((kind: "image" | "paste" | "file", n: number) => void) | undefined;
   }) {
-    const context = useMemo(() => createContext(t, marks, katex, openFile), [t, marks, katex, openFile]);
+    const context = useMemo(
+      () => createContext(t, marks, katex, openFile, attachmentChips, onAttachmentClick),
+      [t, marks, katex, openFile, attachmentChips, onAttachmentClick],
+    );
     return (
       <div className="md-block" data-anchor>
         {renderBlock(block, context)}
@@ -110,6 +173,8 @@ const Block = memo(
     prev.t === next.t &&
     prev.marks === next.marks &&
     prev.openFile === next.openFile &&
+    prev.attachmentChips === next.attachmentChips &&
+    prev.onAttachmentClick === next.onAttachmentClick &&
     prev.block.src === next.block.src &&
     prev.block.closed === next.block.closed &&
     (prev.katex === next.katex || !next.block.math),
@@ -124,11 +189,15 @@ export function Markdown({
   streaming = false,
   marks,
   openFile,
+  attachmentChips = false,
+  onAttachmentClick,
 }: {
   source: string;
   streaming?: boolean;
   marks?: readonly TextMark[] | undefined;
   openFile?: ((href: string) => void) | undefined;
+  attachmentChips?: boolean | undefined;
+  onAttachmentClick?: ((kind: "image" | "paste" | "file", n: number) => void) | undefined;
 }) {
   const t = useT();
   // 上一次流式解析的结果，给下一次增量解析复用；不在流式时清掉。
@@ -168,6 +237,8 @@ export function Markdown({
             marks={marks}
             katex={katex}
             openFile={openFile}
+            attachmentChips={attachmentChips}
+            onAttachmentClick={onAttachmentClick}
           />
         );
       })}

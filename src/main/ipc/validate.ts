@@ -6,6 +6,7 @@ import {
   limits,
   type BackdropMode,
   type BackdropStrength,
+  type DraftAttachmentsPayload,
   type IdleClose,
   type LocalePreference,
   type ModelKey,
@@ -184,6 +185,22 @@ export function parsePromptInput(value: unknown): PromptInput {
   return {
     text,
     whenBusy: parseOneOf(record["whenBusy"], "input.whenBusy", ["steer", "followUp"]),
+    ...(images && { images }),
+    ...(fileIds && { fileIds }),
+  };
+}
+
+/** 提示词优化 / 全量复制：校验文本与可选的图片、文件 id 列表。 */
+export function parseDraftAttachmentsPayload(value: unknown): DraftAttachmentsPayload {
+  const record = parseRecord(value, "input");
+  const text = parseString(record["text"], "input.text", 100_000, { allowEmpty: true });
+  const images = record["images"] === undefined ? undefined : parseImages(record["images"]);
+  const fileIds = record["fileIds"] === undefined ? undefined : parseFileIds(record["fileIds"]);
+  if (text.trim().length === 0 && !images?.length && !fileIds?.length) {
+    throw new IpcValidationError("内容不能为空");
+  }
+  return {
+    text,
     ...(images && { images }),
     ...(fileIds && { fileIds }),
   };

@@ -1,10 +1,13 @@
 // AI 辅助服务：智能会话重命名（smartRenameTask）与输入框提示词优化（enhancePrompt）。
 // 复用 pi 的 `-p --no-session --no-tools --no-extensions --no-mcp --no-skills --no-prompt-templates --no-themes --no-context-files` 无状态单次推理模式，
 // 直接共享用户已配置的全部模型与订阅凭据；模型与思考强度由外壳设置（ShellState.helperModel / helperThinking）控制。
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { app } from "electron";
 import { stripAnsi } from "../../shared/ansi.ts";
-import type { HelperThinking, TaskId } from "../../shared/ipc.ts";
+import type { DraftAttachmentsPayload, HelperThinking, TaskId } from "../../shared/ipc.ts";
+import { composerFilePath } from "../files/composer-files.ts";
 import { restoreDocument } from "../../shared/tsp/document.ts";
 import { lastAnswerText } from "../../shared/tsp/last-answer.ts";
 import { userMessages } from "../../shared/tsp/user-messages.ts";
@@ -169,6 +172,7 @@ async function runHelperLlm(options: {
   userPrompt: string;
   cwd: string;
   taskModel?: string | null;
+  attachFiles?: readonly string[];
 }): Promise<string | null> {
   if (!app.isPackaged && (process.env["STUDIO_TEST_PI"] || process.env["STUDIO_TEST_OMP"])) {
     return null;
@@ -206,7 +210,8 @@ async function runHelperLlm(options: {
         }
       }
 
-      args.push("--", options.userPrompt);
+      const attachArgs = (options.attachFiles ?? []).map((p) => `@${p}`);
+      args.push("--", ...attachArgs, options.userPrompt);
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), HELPER_TIMEOUT_MS);
@@ -310,9 +315,20 @@ export async function smartRenameTask(taskId: TaskId): Promise<string> {
   return title;
 }
 
-export async function enhancePrompt(text: string, taskId: TaskId | null): Promise<string> {
-  const trimmed = text.trim();
-  if (!trimmed) return text;
+function imageExt(mimeType: string): string {
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/webp") return "webp";
+  if (mimeType === "image/gif") return "gif";
+  return "png";
+}
+
+export async function enhancePrompt(input: string | DraftAttachmentsPayload, taskId: TaskId | null): Promise<string> {
+  const payload: DraftAttachmentsPayload = typeof input === "string" ? { text: input } : input;
+  const trimmed = payload.text.trim();
+  const images = payload.images ?? [];
+  const fileIds = payload.fileIds ?? [];
+  if (!trimmed && images.length === 0 && fileIds.length === 0) return payload.text;
+
   const pool = await getTaskPool();
   const zh = resolveLocale() === "zh-CN";
   let cwd = chatsDir();
@@ -334,19 +350,60 @@ export async function enhancePrompt(text: string, taskId: TaskId | null): Promis
     }
   }
 
-  const systemPrompt = zh
-    ? "你是一位资深软件工程提示词优化专家。请将用户输入的草稿重写为清晰、具体、结构化的编程 Agent 提示词。保持用户的原始意图与语言（中文或英文），补全必要的工程约束（如先定位代码、保持风格一致、验证结果），但不要虚构用户未提及的业务需求。只输出优化后的提示词正文，不要包含任何前缀、解释或代码块包裹。"
-    : "You are an expert software engineering prompt optimizer. Rewrite the user's draft into a clear, specific, well-structured prompt for an AI coding agent. Preserve the user's original intent and language, clarify technical constraints and verification expectations, and output ONLY the improved prompt text with no preamble or wrapper.";
+  let tempDir: string | null = null;
+  const attachFiles: string[] = [];
+  const resolvedFiles: string[] = [];
 
-  const generated = await runHelperLlm({
-    systemPrompt,
-    userPrompt: `Draft prompt to enhance:\n${trimmed}${contextLine}`,
-    cwd,
-    taskModel,
-  });
+  try {
+    if (images.length > 0) {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "pi-enhance-"));
+      for (const [idx, img] of images.entries()) {
+        const filePath = path.join(tempDir, `image-${idx + 1}.${imageExt(img.mimeType)}`);
+        await writeFile(filePath, Buffer.from(img.data, "base64"));
+        attachFiles.push(filePath);
+      }
+    }
+    for (const id of fileIds) {
+      const p = composerFilePath(id);
+      if (p) {
+        resolvedFiles.push(path.basename(p));
+        attachFiles.push(p);
+      }
+    }
 
-  if (generated) {
-    return generated.replace(/^```[\w-]*\r?\n|\r?\n```$/g, "").trim() || trimmed;
+    const attachmentNote =
+      images.length > 0 || resolvedFiles.length > 0
+        ? zh
+          ? `\n附加附件说明：共有 ${images.length} 张图片${resolvedFiles.length > 0 ? `，以及文件：${resolvedFiles.join("、")}` : ""}。请结合图片/文件里的真实内容来精准优化提示词；如草稿里已有 [Image #N…] 或 [File #N…] 占位符请尽量原样保留，不要自行编造未附加的文件。`
+          : `\nAttached context: ${images.length} image(s)${resolvedFiles.length > 0 ? ` and file(s): ${resolvedFiles.join(", ")}` : ""}. Use the attached visual/file context to make the prompt precise, preserve any existing [Image #N...] or [File #N...] tokens, and do not invent unattached files.`
+        : "";
+
+    const systemPrompt = zh
+      ? "你是一位资深软件工程提示词优化专家。请结合用户的文字草稿与随附的图片/文件内容，将提示词重写为清晰、具体、结构化的编程 Agent 提示词。保持用户的原始意图与语言（中文或英文），补全必要的工程约束（如先定位代码、保持风格一致、验证结果），但不要虚构用户未提及的业务需求。只输出优化后的提示词正文，不要包含任何前缀、解释或代码块包裹。"
+      : "You are an expert software engineering prompt optimizer. Given the user's draft and any attached images or files, rewrite the draft into a clear, specific, well-structured prompt for an AI coding agent. Preserve the user's original intent and language, clarify technical constraints and verification expectations, and output ONLY the improved prompt text with no preamble or wrapper.";
+
+    const draftBody =
+      trimmed !== ""
+        ? trimmed
+        : zh
+          ? "请结合附加图片或文件给出清晰的具体需求与排查/修改要求。"
+          : "Analyze the attached images/files and carry out the required engineering task clearly.";
+
+    const generated = await runHelperLlm({
+      systemPrompt,
+      userPrompt: `Draft prompt to enhance:\n${draftBody}${attachmentNote}${contextLine}`,
+      cwd,
+      taskModel,
+      attachFiles,
+    });
+
+    if (generated) {
+      return generated.replace(/^```[\w-]*\r?\n|\r?\n```$/g, "").trim() || trimmed || draftBody;
+    }
+    return fallbackEnhancePrompt(trimmed || draftBody, zh);
+  } finally {
+    if (tempDir !== null) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
-  return fallbackEnhancePrompt(trimmed, zh);
 }

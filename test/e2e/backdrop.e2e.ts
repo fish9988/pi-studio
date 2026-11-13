@@ -78,18 +78,18 @@ test("主题插图：有插图的主题画在主区面板上，浅色主题不�
     const panel = page.getByTestId("main-panel");
     await expect(panel).not.toHaveAttribute("data-backdrop");
 
-    await setTheme(page, "deepseek");
+    await setTheme(page, "mica");
     await expect(panel).toHaveAttribute("data-backdrop", "theme");
     await expect(panel).toHaveAttribute("data-backdrop-strength", "medium");
-    // 构建后插图名带哈希（deepseek-<hash>.svg）；地址要真的取得到，不只是写进了样式。
-    const art = /url\("([^"]*deepseek[^"]*\.svg)"\)/.exec(await panelBackground(page))?.[1];
-    expect(art, "background-image 里没有 deepseek 的插图").toBeDefined();
+    // 构建后插图名带哈希（mica-<hash>.svg）；地址要真的取得到，不只是写进了样式。
+    const art = /url\("([^"]*mica[^"]*\.svg)"\)/.exec(await panelBackground(page))?.[1];
+    expect(art, "background-image 里没有 mica 的插图").toBeDefined();
     expect((await fetchInPage(page, art ?? "")).status).toBe(200);
 
     await page.evaluate(() => globalThis.studio.setBackdropStrength("high"));
     await expect(panel).toHaveAttribute("data-backdrop-strength", "high");
 
-    await setTheme(page, "openai");
+    await setTheme(page, "obsidian");
     await expect(panel).not.toHaveAttribute("data-backdrop");
     await expect(panel).not.toHaveAttribute("data-backdrop-strength");
     expect(await panelBackground(page)).toBe("none");

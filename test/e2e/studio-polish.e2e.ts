@@ -180,7 +180,7 @@ test("六大核心体验端到端验收：撤回弹窗、文件胶囊区分、�
     await page.setViewportSize({ width: 1440, height: 900 });
     await setLocale(page, "zh-CN");
     await setColorMode(page, "light");
-    await setTheme(page, "claude");
+    await setTheme(page, "amber");
 
     await launched.app.evaluate(({ dialog }, dir) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
@@ -280,17 +280,17 @@ test("六大核心体验端到端验收：撤回弹窗、文件胶囊区分、�
     await expect(wb.getByTestId("wb-tab-terminal")).toBeVisible();
     await expect(wb.getByTestId("wb-tab-files")).toBeVisible();
 
-    // 6. 切换 Claude Code / Gemini / OpenAI / Pi 主题在深色与浅色外观模式下正常响应，并验证自动收缩双开关
+    // 6. 切换新主题家族在深色与浅色外观模式下正常响应，并验证自动收缩双开关
     await setColorMode(page, "dark");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "claude-dark");
-    await setTheme(page, "gemini");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "gemini-dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "amber-dark");
+    await setTheme(page, "aurora");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "aurora-dark");
     await setColorMode(page, "light");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "gemini-light");
-    await setTheme(page, "pi");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "pi-light");
-    await setTheme(page, "openai");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "openai-light");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "aurora-light");
+    await setTheme(page, "coral");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "coral-light");
+    await setTheme(page, "mica");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "mica-light");
 
     // 测试设置里的两个自动收缩开关实时联动对话区
     await page.evaluate(async () => {

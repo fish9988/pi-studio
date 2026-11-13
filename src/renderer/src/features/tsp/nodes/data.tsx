@@ -320,6 +320,8 @@ export function Image(props: NodeProps) {
     openZoom(index >= 0 ? items : [{ src, alt, id: node.id }], Math.max(index, 0), reduced);
   };
 
+  const parentRole = node.parent === null ? undefined : peekTspNode(ctx.taskId, ctx.sf, node.parent)?.p.role;
+  const userImageMatch = parentRole === "omp.user.images" ? /^Image\s+(\d+)$/i.exec(alt.trim()) : null;
   const dom = nodeDomProps(props, "tsp-image", {
     className: p.builtin === "omp" ? "builtin" : missing ? "missing" : "zoom",
     style: { overflow: "visible" },
@@ -356,16 +358,23 @@ export function Image(props: NodeProps) {
     );
   } else {
     picture = (
-      <img
-        className="tsp-img-frame"
-        data-testid="tsp-img-frame"
-        src={src ?? undefined}
-        alt={alt}
-        width={w}
-        height={h}
-        style={{ maxHeight: maxH }}
-        draggable={false}
-      />
+      <>
+        <img
+          className="tsp-img-frame"
+          data-testid="tsp-img-frame"
+          src={src ?? undefined}
+          alt={alt}
+          width={w}
+          height={h}
+          style={{ maxHeight: maxH }}
+          draggable={false}
+        />
+        {userImageMatch !== null && (
+          <span className="tsp-user-img-badge" aria-hidden="true">
+            #{userImageMatch[1]}
+          </span>
+        )}
+      </>
     );
   }
   return (

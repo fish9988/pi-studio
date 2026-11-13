@@ -552,6 +552,13 @@ export interface PromptInput {
   whenBusy: "steer" | "followUp";
 }
 
+/** 提示词优化 / 全量复制到剪贴板时传入的草稿正文 + 图片与文件附件。 */
+export interface DraftAttachmentsPayload {
+  text: string;
+  images?: PromptImage[];
+  fileIds?: string[];
+}
+
 /** 放回输入框的一条消息：`text` 里用 `[Image #k]` 标出 `images[k-1]` 的位置。 */
 export interface RestoredDraft {
   text: string;
@@ -1263,8 +1270,10 @@ export interface StudioInvokeApi {
   renameTask(taskId: TaskId, title: string): Promise<void>;
   /** 用配置的辅助 LLM 根据对话内容生成精炼标题并重命名任务，返回新标题。 */
   smartRenameTask(taskId: TaskId): Promise<string>;
-  /** 用配置的辅助 LLM 优化输入框里的草稿提示词，返回优化后的文本。 */
-  enhancePrompt(text: string, taskId: TaskId | null): Promise<string>;
+  /** 用配置的辅助 LLM 优化输入框里的草稿提示词（可附带当前草稿图片与文件作为上下文），只返回优化后的文本。 */
+  enhancePrompt(input: string | DraftAttachmentsPayload, taskId: TaskId | null): Promise<string>;
+  /** 将输入框文本连同已附加的图片与文件一并写入系统剪贴板（支持富文本图文与纯文本兜底）。 */
+  copyDraftToClipboard(input: DraftAttachmentsPayload): Promise<void>;
   /** 保持运行：空闲多久都不关这个任务的 omp 进程，进程数到上限时也不先关它。存进任务记录，重启应用后照旧。 */
   setTaskKeepAlive(taskId: TaskId, on: boolean): Promise<void>;
   /** 关掉进程并从侧栏移除；会话文件不动。 */
@@ -1868,6 +1877,7 @@ export const invokeNames = {
   renameTask: true,
   smartRenameTask: true,
   enhancePrompt: true,
+  copyDraftToClipboard: true,
   setTaskKeepAlive: true,
   archiveTask: true,
   listTaskModels: true,

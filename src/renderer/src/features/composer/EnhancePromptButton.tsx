@@ -1,14 +1,18 @@
-// 输入框工具栏的「✨ 优化提示词」按钮：调用主进程 enhancePrompt（复用配置的辅助 LLM 与思考强度），
-// 将口语化草稿重写为结构化工程提示词，并支持一键还原原草稿。
-import { useState } from "react";
+// 输入框工具栏的「复制全部（含图片/附件）」与「✨ 优化提示词」按钮组：
+// - 复制全部：将输入框文本与附带图片/文件（含富文本 <img>）一并写入剪贴板，可直接粘贴到其他多模态 AI；
+// - 优化提示词：调用主进程 enhancePrompt（支持将草稿里的图片和文件作为上下文传入辅助 LLM），并只替换文字部分，完整保留附件与支持一键还原。
+import { useEffect, useState } from "react";
 import type { TaskId } from "../../../../shared/ipc.ts";
 import { useT } from "../../i18n/use-t.ts";
+import { Check, CopyIcon } from "../../icons.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { pushToast } from "../dialogs/toast-store.ts";
-import { reconcileDraft, type Draft } from "./composer-tokens.ts";
-import { getDraft, setDraft } from "./draft-store.ts";
+import { buildSubmission, reconcileDraft, type Draft } from "./composer-tokens.ts";
+import { getDraft, setDraft, useDraft } from "./draft-store.ts";
 
 const ATTACHMENT_TOKEN_RE = /\[(Image|Paste|File) #[1-9]\d*(?:,[^\]\n]*)?\]/g;
+const FILE_SLOT_RE = /\uE000file:([1-9]\d*)\uE001/g;
+
 function SparkleIcon({ spinning }: { spinning: boolean }) {
   return (
     <svg
@@ -43,22 +47,73 @@ export function EnhancePromptButton({
   onFocusField?: () => void;
 }) {
   const t = useT();
+  const draft = useDraft(draftKey);
   const [busy, setBusy] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
   const [backup, setBackup] = useState<{ originalDraft: Draft; enhancedText: string } | null>(null);
 
+  useEffect(() => {
+    if (!copiedAll) return;
+    const timer = setTimeout(() => setCopiedAll(false), 1400);
+    return () => clearTimeout(timer);
+  }, [copiedAll]);
+
   const strippedText = text.replace(ATTACHMENT_TOKEN_RE, "").trim();
-  const hasText = strippedText.length > 0;
+  const hasAttachments = draft.images.length > 0 || draft.files.length > 0 || Object.keys(draft.pastes).length > 0;
+  const hasContent = strippedText.length > 0 || hasAttachments;
   const canUndo = backup !== null && text === backup.enhancedText;
 
-  const onEnhance = async () => {
-    if (busy || !hasText || disabled) return;
+  const onCopyAll = async () => {
+    if (!hasContent) return;
     const currentDraft = getDraft(draftKey);
-    const tokens = [...currentDraft.text.matchAll(ATTACHMENT_TOKEN_RE)].map((m) => m[0]);
+    const submission = buildSubmission(currentDraft);
+    const missingImages = currentDraft.images.filter((img) => !submission.images.includes(img));
+    const missingFiles = currentDraft.files.filter((file) => !submission.files.includes(file));
+    const allImages = [...submission.images, ...missingImages];
+    const allFiles = [...submission.files, ...missingFiles];
+    try {
+      await window.studio.copyDraftToClipboard({
+        text: submission.text,
+        images: allImages.map(({ mimeType, data }) => ({ mimeType, data })),
+        fileIds: allFiles.map((file) => file.id).filter((id) => id !== ""),
+      });
+      setCopiedAll(true);
+      pushToast({ level: "info", message: t("composer.copyAllDone") });
+    } catch (error) {
+      reportError(t, error);
+    }
+  };
+
+  const onEnhance = async () => {
+    if (busy || !hasContent || disabled) return;
+    const currentDraft = getDraft(draftKey);
+    const allTokens = [...currentDraft.text.matchAll(ATTACHMENT_TOKEN_RE)].map((m) => m[0]);
+    const submission = buildSubmission(currentDraft);
+    // 包含未被文本内引用的图片/文件，确保优化器能看到全部附加上下文
+    const missingImages = currentDraft.images.filter((img) => !submission.images.includes(img));
+    const missingFiles = currentDraft.files.filter((file) => !submission.files.includes(file));
+    const allImages = [...submission.images, ...missingImages];
+    const allFiles = [...submission.files, ...missingFiles];
+    // 把提交文本里的 \uE000file:N\uE001 还原成 [File #N, name]，避免辅助模型输出私有控制字符
+    const optimizerText = submission.text.replace(FILE_SLOT_RE, (_, numStr: string) => {
+      const idx = Number(numStr) - 1;
+      const name = allFiles[idx]?.name ?? `file-${numStr}`;
+      return `[File #${numStr}, ${name}]`;
+    });
+
     setBusy(true);
     try {
-      const enhanced = await window.studio.enhancePrompt(strippedText, taskId);
+      const enhanced = await window.studio.enhancePrompt(
+        {
+          text: optimizerText,
+          images: allImages.map(({ mimeType, data }) => ({ mimeType, data })),
+          fileIds: allFiles.map((file) => file.id).filter((id) => id !== ""),
+        },
+        taskId,
+      );
       if (enhanced && enhanced.trim() !== "") {
-        const missingTokens = tokens.filter((tok) => !enhanced.includes(tok));
+        // 优化结果只替换文本：原附件标记（图片、文件、粘贴片段）必须全部保留，不能因为模型重写文字而丢掉附件。
+        const missingTokens = allTokens.filter((tok) => !enhanced.includes(tok));
         const finalText = missingTokens.length > 0 ? `${missingTokens.join(" ")} ${enhanced.trim()}` : enhanced.trim();
         const nextDraft = reconcileDraft({ ...currentDraft, text: finalText });
         setDraft(draftKey, nextDraft);
@@ -95,7 +150,18 @@ export function EnhancePromptButton({
       <button
         type="button"
         className="ui-chip enhance-prompt-btn"
-        disabled={busy || !hasText || disabled}
+        disabled={!hasContent}
+        title={t("composer.copyAllTip")}
+        aria-label={t("composer.copyAll")}
+        onClick={() => void onCopyAll()}
+        data-testid="composer-copy-all"
+      >
+        {copiedAll ? <Check size={14} /> : <CopyIcon size={14} />}
+      </button>
+      <button
+        type="button"
+        className="ui-chip enhance-prompt-btn"
+        disabled={busy || !hasContent || disabled}
         title={t("composer.enhanceTip")}
         aria-label={t("composer.enhance")}
         onClick={() => void onEnhance()}

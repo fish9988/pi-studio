@@ -361,32 +361,107 @@
   animation-play-state: var(--play-state);
 }
 
-/* 代码块：圆润卡片 + 极淡表头分隔 */
+/* 代码块：M3 × Apple Liquid Glass 深靛蓝终端卡片（浅色主题下也保留高对比暗色代码块），默认折叠点击展开 */
 .md-codeblock {
   position: relative;
   margin: var(--space-3-5) 0;
   border-radius: var(--radius-lg);
-  background: var(--bg-tool);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-code);
+  color: var(--fg-code);
+  border: 1px solid var(--border-code);
+  box-shadow: var(--shadow-1);
   overflow: hidden;
+}
+.md-codeblock[data-figure] {
+  background: var(--bg-tool);
+  color: var(--text);
+  border-color: var(--border-subtle);
 }
 .md-codehead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 32px;
-  padding: var(--space-1-5) var(--space-3) var(--space-1-5) var(--space-4);
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: var(--space-1-5) var(--space-2-5) var(--space-1-5) var(--space-3-5);
+  background: var(--bg-code-head);
+  border-bottom: 1px solid var(--border-code);
+}
+.md-codeblock[data-collapsed] .md-codehead {
+  border-bottom-color: transparent;
+}
+.md-codehead[role="button"] {
+  cursor: pointer;
+}
+.md-codehead[role="button"]:hover {
+  background: color-mix(in srgb, var(--bg-code-head) 82%, rgba(255, 255, 255, 0.08));
+}
+.md-codeblock[data-figure] .md-codehead {
   background: color-mix(in srgb, var(--text) 3%, transparent);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom-color: var(--border-subtle);
+}
+.md-code-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.md-code-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+.md-code-dots > i {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  opacity: 0.78;
+}
+.md-code-dots > i:nth-child(1) {
+  background: #ff5f56;
+}
+.md-code-dots > i:nth-child(2) {
+  background: #ffbd2e;
+}
+.md-code-dots > i:nth-child(3) {
+  background: #27c93f;
+}
+.md-codeblock[data-figure] .md-code-dots {
+  display: none;
 }
 .md-codelang {
+  flex: none;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: var(--lh-xs);
-  color: var(--text-3);
+  font-weight: var(--fw-medium);
+  color: var(--fg-code);
+}
+.md-codeblock[data-figure] .md-codelang {
+  color: var(--text-2);
+}
+.md-codelines {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-code-muted);
+}
+.md-code-preview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-code-muted);
+  opacity: 0.72;
 }
 .md-codeactions {
   display: flex;
+  flex: none;
   gap: var(--space-1);
 }
 .md-codebtn {
@@ -398,21 +473,38 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-3);
-  opacity: 0.7;
+  color: var(--fg-code-muted);
+  opacity: 0.8;
   cursor: pointer;
   transition:
     opacity var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out),
     background var(--dur-instant);
 }
+.md-codeblock[data-figure] .md-codebtn {
+  color: var(--text-3);
+}
 .md-codeblock:hover .md-codebtn,
 .md-codeblock:focus-within .md-codebtn {
   opacity: 1;
+  color: var(--fg-code);
+}
+.md-codeblock[data-figure]:hover .md-codebtn,
+.md-codeblock[data-figure]:focus-within .md-codebtn {
   color: var(--text-2);
 }
 .md-codebtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.md-codeblock[data-figure] .md-codebtn:hover {
   background: var(--bg-hover);
+}
+.md-code-toggle svg {
+  transform: rotate(0deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.md-codeblock[data-collapsed] .md-code-toggle svg {
+  transform: rotate(-90deg);
 }
 .md-codebtn:active,
 .md-codebtn[aria-pressed="true"] {
@@ -450,16 +542,18 @@
 .md-codebody {
   margin: 0;
   max-height: min(440px, 55vh);
-  padding: var(--space-1-5) var(--space-4) var(--space-3-5);
+  padding: var(--space-2-5) var(--space-4) var(--space-3-5);
   overflow-y: auto;
   font-family: var(--font-mono);
   font-size: calc(1em - 1px);
   font-weight: var(--fw-medium);
   line-height: 23px;
+  color: var(--fg-code);
   tab-size: 2;
   /* 长行折行，不出横向滚动条（2026-10-20） */
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  animation: view-in var(--dur-fast) var(--ease-out);
 }
 .md-codebody:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb);
@@ -484,4 +578,36 @@
 }
 .md-diff-del {
   color: var(--diff-del-fg);
+}
+
+/* 用户发送消息里的行内附件引用胶囊（如 #1、#2 · file.txt），对应输入框里的蓝色芯片，避免显示原始 [Image #6, 1568x507] */
+.md-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  margin: 0 2px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: var(--fw-medium);
+  line-height: 1.45;
+  vertical-align: baseline;
+}
+button.md-attach-chip {
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
+}
+button.md-attach-chip:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+}
+button.md-attach-chip:active {
+  transform: scale(0.95);
 }

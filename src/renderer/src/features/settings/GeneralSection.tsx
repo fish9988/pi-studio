@@ -25,7 +25,6 @@ import {
   setHomeRipple,
   setMascotCharacter,
   setPreferredShell,
-  setProcessRowsLayout,
   setUiFontFamily,
   setUiFontStyle,
   useShellValue,
@@ -107,7 +106,6 @@ export function GeneralSection() {
     label: t(`settings.mascot.${value}`),
   }));
   const homeRipple = useShellValue("homeRipple") ?? true;
-  const processRows = useShellValue("processRows") ?? "classic";
   const backdrop = settings?.backdrop ?? "theme";
   const backdropOptions = (["theme", "custom", "none"] as const).map((value) => ({
     value,
@@ -196,57 +194,6 @@ export function GeneralSection() {
               onChange={(next) => setMascotCharacter(next)}
               testId="setting-mascot"
             />
-          )}
-        </Row>
-        <Row label={t("settings.processRows")}>
-          {(labelId) => (
-            <div
-              className="st-process-cards"
-              role="radiogroup"
-              aria-labelledby={labelId}
-              data-testid="setting-process-rows"
-            >
-              {(["flat", "column", "classic"] as const).map((layout) => {
-                const active = processRows === layout;
-                return (
-                  <button
-                    key={layout}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className="st-process-card"
-                    data-active={active ? "" : undefined}
-                    onClick={() => setProcessRowsLayout(layout)}
-                    data-testid={`setting-process-rows-${layout}`}
-                  >
-                    <span className="st-process-sample" data-layout={layout} aria-hidden="true">
-                      <span className="st-process-sample-head">{t("settings.processRows.sampleHead")}</span>
-                      <span className="st-process-sample-body">
-                        <span className="st-process-sample-row" data-kind="thought">
-                          <span className="st-process-sample-icon" />
-                          <span className="st-process-sample-title">{t("settings.processRows.sampleThought")}</span>
-                          <span className="st-process-sample-sep" />
-                          <span className="st-process-sample-text">{t("settings.processRows.sampleThought1")}</span>
-                        </span>
-                        <span className="st-process-sample-row" data-kind="tool">
-                          <span className="st-process-sample-icon" />
-                          <span className="st-process-sample-title">{t("settings.processRows.sampleTool")}</span>
-                          <span className="st-process-sample-sep" />
-                          <span className="st-process-sample-text">*.md</span>
-                        </span>
-                        <span className="st-process-sample-row" data-kind="thought">
-                          <span className="st-process-sample-icon" />
-                          <span className="st-process-sample-title">{t("settings.processRows.sampleThought")}</span>
-                          <span className="st-process-sample-sep" />
-                          <span className="st-process-sample-text">{t("settings.processRows.sampleThought2")}</span>
-                        </span>
-                      </span>
-                    </span>
-                    <span className="st-process-card-label">{t(`settings.processRows.${layout}`)}</span>
-                  </button>
-                );
-              })}
-            </div>
           )}
         </Row>
         <Row label={t("settings.backdrop")}>
