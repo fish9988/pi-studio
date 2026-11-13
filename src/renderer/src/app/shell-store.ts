@@ -3,6 +3,7 @@
 import {
   limits,
   type BrandStyle,
+  type CodeBlockStyle,
   type ConversationView,
   type FontStyle,
   type HelperThinking,
@@ -11,6 +12,7 @@ import {
   type PreferredShell,
   type ProcessRowsLayout,
   type ShellState,
+  type UiStyle,
 } from "../../../shared/ipc.ts";
 import { defaultTerminalHeight } from "../../../shared/ui/terminal-model.ts";
 import { createStore, useStoreValue } from "../store/create-store.ts";
@@ -31,6 +33,8 @@ const shellStore = createStore<ShellUiState>({
   historyOrder: "folder",
   chatWidth: 0,
   brandStyle: "pi",
+  uiStyle: "expressive",
+  codeBlockStyle: "auto",
   mascot: "clawd",
   processRows: "classic",
   helperModel: "smol",
@@ -106,6 +110,16 @@ export function setHistoryOrder(historyOrder: HistoryOrder): void {
 export function setBrandStyle(brandStyle: BrandStyle): void {
   update({ brandStyle });
   persist({ brandStyle });
+}
+
+export function setUiStyle(uiStyle: UiStyle): void {
+  update({ uiStyle });
+  persist({ uiStyle });
+}
+
+export function setCodeBlockStyle(codeBlockStyle: CodeBlockStyle): void {
+  update({ codeBlockStyle });
+  persist({ codeBlockStyle });
 }
 
 export function setMascotCharacter(mascot: MascotCharacter): void {

@@ -365,7 +365,10 @@ export function ClawdMascot({
       const pRect = panelEl.getBoundingClientRect();
       const cRect = composerEl.getBoundingClientRect();
       const rightSpace = pRect.right - cRect.right;
-      setNarrowGutter(rightSpace < 68);
+      // 阈值按角色宽度算（缩放后 clawd 约 79px、whalegirl 约 105px，再加外沿 6px 与一点余量）：
+      // 留白刚好够放下整个角色但要贴着正文时，早一步切到 [data-narrow]（贴右外沿），不要等真被裁掉才切
+      const narrowThreshold = character === "whalegirl" ? 116 : 90;
+      setNarrowGutter(rightSpace < narrowThreshold);
     };
     measure();
     const ro = new ResizeObserver(measure);

@@ -104,8 +104,9 @@ test("浏览器面板：用户打开网页，omp 连上同一个页面，面板�
   const { launched, browserFile, cleanup } = await start();
   const { page } = launched;
   try {
-    // 打开面板，在地址栏输入地址：页面视图盖在占位区上。
-    await page.getByTestId("topbar-browser").click();
+    // 打开面板（顶栏唯一的切换按钮 → Overview 里的「Browser · 浏览」磁贴），在地址栏输入地址：页面视图盖在占位区上。
+    await page.getByTestId("topbar-files").click();
+    await page.getByTestId("dsh-start-browser").click();
     const panel = page.getByTestId("browser-panel");
     await expect(panel).toBeVisible();
     const address = page.getByTestId("browser-address");
@@ -214,7 +215,8 @@ test("浏览器面板：窄窗口、中英文下头部不越界", async () => {
   const { page } = launched;
   try {
     await page.setViewportSize({ width: 900, height: 700 });
-    await page.getByTestId("topbar-browser").click();
+    await page.getByTestId("topbar-files").click();
+    await page.getByTestId("dsh-start-browser").click();
     const panel = page.getByTestId("browser-panel");
     for (const locale of ["zh-CN", "en"] as const) {
       await setLocaleTheme(page, locale, "light");

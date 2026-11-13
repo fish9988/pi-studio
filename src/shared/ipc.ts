@@ -1095,6 +1095,10 @@ export interface ShellState {
   chatWidth?: number;
   /** 顶栏与新任务页的品牌标志风格（Claude / DeepSeek / OMP）。 */
   brandStyle?: BrandStyle;
+  /** 界面设计风格（Fluent 云母 / M3 灵动 / Liquid 液态），映射到根节点的 data-ui-style。 */
+  uiStyle?: UiStyle;
+  /** 代码块配色（随设计风格 / 深色终端 / 冷灰浅色），映射到根节点的 data-code-block-style。 */
+  codeBlockStyle?: CodeBlockStyle;
   /** 输入框右上角的桌面宠物形象（Claude 像素蟹 / DeepSeek 小鲸鱼 / DeepSeek 鲸鱼娘 / OMP 像素 π / 关闭）。 */
   mascot?: MascotCharacter;
   /** 对话过程行排版（单列卡片 column / 平铺极简 flat）。 */
@@ -1129,6 +1133,12 @@ export const conversationViews: readonly ConversationView[] = ["chat", "trajecto
 
 export type BrandStyle = "pi" | "claude" | "deepseek" | "omp";
 export const brandStyles: readonly BrandStyle[] = ["pi", "claude", "deepseek", "omp"];
+
+export type UiStyle = "fluent" | "expressive" | "liquid";
+export const uiStyles: readonly UiStyle[] = ["fluent", "expressive", "liquid"];
+
+export type CodeBlockStyle = "auto" | "dark" | "light";
+export const codeBlockStyles: readonly CodeBlockStyle[] = ["auto", "dark", "light"];
 
 export type MascotCharacter = "clawd" | "deepy" | "whalegirl" | "omp" | "off";
 export const mascotCharacters: readonly MascotCharacter[] = ["clawd", "deepy", "whalegirl", "omp", "off"];

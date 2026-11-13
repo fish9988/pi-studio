@@ -129,6 +129,13 @@ export function App() {
   const uiFontFamily = useShellValue("uiFontFamily") ?? "";
   const chatFontStyle = useShellValue("chatFontStyle") ?? "sans";
   const chatFontFamily = useShellValue("chatFontFamily") ?? "";
+  const uiStyle = useShellValue("uiStyle") ?? "expressive";
+  const codeBlockStyle = useShellValue("codeBlockStyle") ?? "auto";
+
+  useEffect(() => {
+    document.documentElement.dataset["uiStyle"] = uiStyle;
+    document.documentElement.dataset["codeBlockStyle"] = codeBlockStyle;
+  }, [uiStyle, codeBlockStyle]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;

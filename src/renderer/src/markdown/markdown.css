@@ -377,6 +377,83 @@
   color: var(--text);
   border-color: var(--border-subtle);
 }
+/* 冷灰浅色代码卡（Fluent 云母原型的 #F2F5FA）：不铺深色底、不画红黄绿三个窗口点，语法色用 tokens.css 的 [data-code-light] 一套 */
+.md-codeblock[data-code-light] {
+  background: var(--bg-code-light);
+  color: var(--fg-code-light);
+  border-color: var(--border-code-light);
+  box-shadow: none;
+}
+.md-codeblock[data-code-light] .md-codehead {
+  background: var(--bg-code-light-head);
+  border-bottom-color: var(--border-code-light);
+}
+.md-codeblock[data-code-light][data-collapsed] .md-codehead {
+  border-bottom-color: transparent;
+}
+.md-codeblock[data-code-light] .md-codehead[role="button"]:hover {
+  background: color-mix(in srgb, var(--bg-code-light-head) 82%, var(--text) 6%);
+}
+.md-codeblock[data-code-light] .md-code-dots {
+  display: none;
+}
+.md-codeblock[data-code-light] .md-codelang {
+  color: var(--fg-code-light);
+}
+.md-codeblock[data-code-light] .md-codelines,
+.md-codeblock[data-code-light] .md-code-preview {
+  color: color-mix(in srgb, var(--fg-code-light) 62%, var(--bg-code-light));
+}
+.md-codeblock[data-code-light] .md-codebtn {
+  color: color-mix(in srgb, var(--fg-code-light) 62%, var(--bg-code-light));
+}
+.md-codeblock[data-code-light]:hover .md-codebtn,
+.md-codeblock[data-code-light]:focus-within .md-codebtn {
+  color: var(--fg-code-light);
+}
+.md-codeblock[data-code-light] .md-codebtn:hover {
+  background: color-mix(in srgb, var(--fg-code-light) 9%, transparent);
+}
+.md-codeblock[data-code-light] .md-codebody {
+  color: var(--fg-code-light);
+}
+/* 用户气泡本身已经是浅底，里面的浅色代码卡再抬一档对比，边界要看得出 */
+.tsp-card[data-role="omp.user"] .md-codeblock[data-code-light] {
+  background: var(--bg-raised);
+  border-color: rgba(15, 23, 42, 0.16);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+/* 自己发出去的代码块不给「引用到输入框」按钮：引用自己刚说的话没意义 */
+.tsp-card[data-role="omp.user"] [data-testid="codeblock-quote-composer"] {
+  display: none;
+}
+/* Liquid 设计风格：代码卡也是玻璃浮层（顶部一道镜面高光，头部磨砂） */
+:root[data-ui-style="liquid"] .md-codeblock {
+  border-radius: var(--radius-lg);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(22px) saturate(165%);
+  border-color: var(--glass-rim);
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+:root[data-ui-style="liquid"] .md-codeblock[data-code-dark] {
+  background: color-mix(in srgb, #080c17 92%, transparent);
+}
+:root[data-ui-style="liquid"] .md-codeblock[data-code-dark] .md-codehead {
+  background: color-mix(in srgb, var(--bg-code-head) 82%, transparent);
+}
+:root[data-ui-style="liquid"] .md-codeblock[data-code-light] {
+  background: color-mix(in srgb, var(--bg-code-light) 82%, transparent);
+  border-color: var(--border-code-light);
+}
+:root[data-ui-style="liquid"] .md-codeblock .md-codehead {
+  background: color-mix(in srgb, var(--bg-code-head) 72%, transparent);
+  backdrop-filter: blur(14px) saturate(150%);
+}
+:root[data-ui-style="liquid"] .md-codeblock[data-code-light] .md-codehead {
+  background: color-mix(in srgb, var(--bg-code-light-head) 76%, transparent);
+}
 .md-codehead {
   display: flex;
   align-items: center;
@@ -474,7 +551,7 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--fg-code-muted);
-  opacity: 0.8;
+  opacity: 0.55;
   cursor: pointer;
   transition:
     opacity var(--dur-fast) var(--ease-out),

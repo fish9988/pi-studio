@@ -366,7 +366,9 @@ html[data-platform="darwin"] .topbar-left {
   }
 }
 
-/* 任务工具（分支、评审、终端）贴任务条右端，收进 Liquid Glass 胶囊 */
+/* 任务工具（分支、评审、终端）贴任务条右端，收进 Liquid Glass 胶囊。
+   右侧只留 FilesToggle（+ 有仓库时的 Git 分支胶囊），所以内边距按最小态收紧到 2px，胶囊不虚胖。
+   高 28px 与左侧路径胶囊（.crumb）对齐成一条基线，里面图标按钮压到 24px，否则 28px 的按钮会溢出胶囊。 */
 .topbar-tools {
   display: flex;
   flex: none;
@@ -374,7 +376,7 @@ html[data-platform="darwin"] .topbar-left {
   gap: var(--space-0-5);
   height: 28px;
   margin-left: auto;
-  padding: 0 var(--space-1-5);
+  padding: 0 2px;
   border-radius: var(--radius-pill);
   background: var(--bg-glass);
   backdrop-filter: blur(16px) saturate(150%);
@@ -382,11 +384,23 @@ html[data-platform="darwin"] .topbar-left {
   box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 4%, transparent);
 }
 
-/* 顶栏右侧工具集收进 Liquid Glass 胶囊：Files / Review / Subagents / Browser / Terminal / 设置一键可达 */
+.topbar-tools > .ui-icon-btn {
+  --btn-h: 24px;
+  border-radius: var(--radius-pill);
+}
+
+/* 旧的子面板独立按钮（Changes / Agents / Browser / Terminal）收拢成不可见节点：
+   右侧视觉上只有一个工作台切换图标，这些节点留在 DOM 里兼容快捷键与 E2E 的 aria-pressed 断言。 */
 .topbar-legacy-toggles {
+  position: absolute;
+  right: 40px;
+  top: 4px;
   display: inline-flex;
-  align-items: center;
-  gap: var(--space-0-5);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 有中段胶囊时由 topbar-center 的 margin-inline: auto 把工具推到右端 */
@@ -474,7 +488,7 @@ html[data-platform="darwin"] .topbar-left {
   bottom: var(--space-3);
   left: var(--space-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-2);
   visibility: visible;
   transform: none;
@@ -503,7 +517,7 @@ html[data-platform="darwin"] .topbar-left {
   container-type: inline-size;
   background: var(--bg-app);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-1);
 }
 
@@ -795,7 +809,8 @@ html[data-platform="darwin"] .topbar-left {
 
 .settings-win[data-mode="modal"] {
   width: min(880px, 90vw);
-  height: min(640px, 85vh);
+  height: min(740px, 100%);
+  max-height: 100%;
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   box-shadow: var(--shadow-2);
@@ -940,4 +955,117 @@ html[data-platform="darwin"] .topbar-left {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+/* ───────── 三套界面设计风格下的主区面板与顶栏工具组 ─────────
+   圆角随 --radius-panel 走（tokens.css 的 data-ui-style 覆盖），这里只调质感：
+   Fluent 2 靠亮度分层（细描边 + 去阴影），Liquid Glass 靠浮起阴影与内缘高光。 */
+:root[data-ui-style="fluent"] .panel {
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+/* Fluent 2：顶栏的路径胶囊与工具组不做玻璃浮层，回到纯亮面分层（实底 + 细描边 + 方正小圆角）。 */
+:root[data-ui-style="fluent"] .crumb {
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  backdrop-filter: none;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+:root[data-ui-style="fluent"] .topbar-tools > .ui-icon-btn {
+  border-radius: var(--radius-sm);
+}
+
+:root[data-ui-style="fluent"] .topbar-tools {
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  backdrop-filter: none;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* 深色下 4% 的浅色投影完全看不见，顶栏两个胶囊的边界就跟着消失：换成黑投影把胶囊托起来。
+   放在 Liquid 段落之前：Liquid 的深色规则特异性更高（多一个 data-ui-style），会整体覆盖这里的阴影。 */
+:is([data-theme$="dark"], [data-theme="dark"]) .crumb,
+:is([data-theme$="dark"], [data-theme="dark"]) .topbar-tools {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]):not([data-ui-style="fluent"]) .crumb,
+  :root:not([data-theme]):not([data-ui-style="fluent"]) .topbar-tools {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
+}
+
+/* Liquid 路径胶囊：与工具组同一层磨砂 + 内缘高光，两个胶囊才像一个系统 */
+:root[data-ui-style="liquid"] .crumb {
+  backdrop-filter: blur(26px) saturate(185%);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+:root[data-ui-style="liquid"][data-theme$="dark"] .crumb {
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="liquid"]:not([data-theme]) .crumb {
+    box-shadow:
+      var(--shadow-1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* Liquid Glass：主区面板垫一层极淡的环境色晕，磨砂层折射时才有深浅可看（纯平底色下玻璃等于没有）。 */
+:root[data-ui-style="liquid"] .panel:not([data-backdrop]) {
+  background:
+    radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 46%),
+    radial-gradient(circle at 86% 84%, color-mix(in srgb, var(--chart-2) 8%, transparent), transparent 44%),
+    var(--bg-app);
+}
+
+:root[data-ui-style="liquid"] .panel {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+:root[data-ui-style="liquid"] .topbar-tools {
+  backdrop-filter: blur(26px) saturate(185%);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* 深色里内缘高光只留一点白：0.45 的白在深底上会变成一道死白描边 */
+:root[data-ui-style="liquid"][data-theme$="dark"] .panel {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+:root[data-ui-style="liquid"][data-theme$="dark"] .topbar-tools {
+  box-shadow:
+    var(--shadow-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="liquid"]:not([data-theme]) .panel {
+    box-shadow:
+      var(--shadow-float),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  :root[data-ui-style="liquid"]:not([data-theme]) .topbar-tools {
+    box-shadow:
+      var(--shadow-1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
 }

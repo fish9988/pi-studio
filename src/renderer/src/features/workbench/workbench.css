@@ -14,7 +14,7 @@
   overflow: hidden;
   background: var(--bg-app);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-1);
   animation: none;
   transition: none;
@@ -204,6 +204,8 @@
   padding: var(--space-4) var(--space-4) var(--space-6);
   background: var(--bg-app);
   overflow-y: auto;
+  /* 窄右栏里用容器查询收掉磁贴快捷键，免得溢出 */
+  container-type: inline-size;
 }
 
 .dsh-ov-container {
@@ -415,6 +417,7 @@
 }
 
 .dsh-ov-tile-kbd {
+  min-width: 0;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
   background: var(--bg-sunken);
@@ -422,6 +425,14 @@
   font-family: var(--font-mono);
   font-size: 10px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container (max-width: 340px) {
+  .dsh-ov-tile-kbd {
+    display: none;
+  }
 }
 
 .dsh-ov-tile-foot {
@@ -470,7 +481,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: 0 var(--space-2);
+  padding: 0;
   color: var(--text-3);
   font-size: 11px;
   font-weight: var(--fw-medium);
@@ -576,6 +587,14 @@
   color: var(--text-3);
   font-size: var(--fs-xs);
   text-align: center;
+}
+
+/* 卡片内已经是块面，空状态不再套一层虚线框（双重描边），按正文左对齐 */
+.dsh-ov-card .dsh-ov-empty {
+  padding: var(--space-2) 0 var(--space-1);
+  border: 0;
+  background: transparent;
+  text-align: left;
 }
 
 .dsh-ov-live-title {
@@ -1054,4 +1073,14 @@
 .wb-line-code {
   padding-right: var(--space-3);
   white-space: pre;
+}
+
+/* ───────── 三套界面设计风格下的工作台质感 ───────── */
+:root[data-ui-style="liquid"] .dsh-wb-header {
+  backdrop-filter: blur(24px) saturate(180%);
+}
+
+:root[data-ui-style="fluent"] .dsh-wb {
+  box-shadow: none;
+  border-color: var(--border);
 }

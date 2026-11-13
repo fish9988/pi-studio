@@ -10,10 +10,9 @@ import { DraftGitTools, GitTools } from "../features/git/index.ts";
 import { TerminalToggle, useDraftTerminalKey } from "../features/terminal/index.ts";
 import { ChangesToggle } from "../features/workbench/index.ts";
 import { useT } from "../i18n/use-t.ts";
-import { showView, useSelectedTaskId, useTask } from "../store/index.ts";
+import { useSelectedTaskId, useTask } from "../store/index.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { PixelLogo } from "../ui/PixelLogo.tsx";
-import { GearIcon } from "../features/sidebar/icons.tsx";
 import { SidebarIcon } from "./icons.tsx";
 import { withShortcut } from "./platform-keys.ts";
 import { TaskCrumb } from "./TaskCrumb.tsx";
@@ -24,7 +23,6 @@ interface TopBarProps {
 }
 
 function TaskTools() {
-  const t = useT();
   const taskId = useSelectedTaskId();
   const task = useTask(taskId);
   const draftKey = useDraftTerminalKey();
@@ -41,14 +39,6 @@ function TaskTools() {
         {taskId !== null && <BrowserToggle taskId={taskId} />}
         <TerminalToggle terminalKey={taskId ?? draftKey} />
       </span>
-      <IconButton
-        label={t("sidebar.settings")}
-        tip={withShortcut(t("sidebar.settings"), "Ctrl ,")}
-        testId="topbar-settings"
-        onClick={() => showView("settings")}
-      >
-        <GearIcon />
-      </IconButton>
       <span className="topbar-divider" aria-hidden="true" />
     </div>
   );

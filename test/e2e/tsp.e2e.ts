@@ -106,6 +106,16 @@ async function sendFirst(page: Page, text: string): Promise<void> {
 
 const role = (page: Page, name: string) => page.locator(`[data-testid="tsp-view"] [data-role="${name}"]`);
 
+/** 顶栏右侧只剩一个工作台切换按钮（子代理图标收进 Overview）：从命令面板开关子代理面板，和用户实际走的路一致。 */
+async function toggleAgentsFromPalette(page: Page): Promise<void> {
+  await page.keyboard.press("Control+k");
+  const palette = page.getByTestId("command-palette");
+  await expect(palette).toBeVisible();
+  await palette.getByRole("combobox").fill("Subagent");
+  await page.keyboard.press("Enter");
+  await expect(palette).toHaveCount(0);
+}
+
 /** 页面里 getComputedStyle 用到的最小类型(e2e 的类型检查没有 DOM 类型)。 */
 type PageStyle = {
   getComputedStyle(
@@ -1537,7 +1547,7 @@ test("待办浮层:/todo 打开,输入框里按 Esc 关掉并被消耗(不是停
   }
 });
 
-test('输入框上方(照 Tern):药丸 [👥 N | ⚡ N] 每段个数大于 0 才出现、各自点各自的;状态行 = 运行图标 + 翻牌计时 + 活动文字 + 右端待办板;omp 自己的 HUD(▷ N、运行状态行)和旧的"后台任务"按钮都不画;顶栏的子代理按钮一直在', async () => {
+test('输入框上方(照 Tern):药丸 [👥 N | ⚡ N] 每段个数大于 0 才出现、各自点各自的;状态行 = 运行图标 + 翻牌计时 + 活动文字 + 右端待办板;omp 自己的 HUD(▷ N、运行状态行)和旧的"后台任务"按钮都不画;顶栏只留一个右栏切换按钮(子代理面板从命令面板开)', async () => {
   test.setTimeout(120_000);
   const jobs = await start("jobs-chart");
   try {
@@ -1557,19 +1567,16 @@ test('输入框上方(照 Tern):药丸 [👥 N | ⚡ N] 每段个数大于 0 才
     // 点右半段 = 直接让 omp 打开它的作业弹窗（点 hud 的作业胶囊：动作 jobs.open），studio 不再有中间的列表弹层。
     await pill.click();
     await expect.poll(async () => (await jobs.received()).some((event) => event["act"] === "jobs.open")).toBe(true);
-    // 没有子代理时药丸没有左半段,顶栏的子代理按钮仍在:点开是空状态;和文件面板共用右栏,开一个就关另一个。
-    const agentsToggle = page.getByTestId("topbar-agents");
-    await agentsToggle.click();
+    // 没有子代理时药丸没有左半段;顶栏不再画子代理图标,子代理面板从命令面板打开,空状态照旧;和文件面板共用右栏的页签,一次只画一个。
+    await toggleAgentsFromPalette(page);
     await expect(page.getByTestId("agents-empty")).toBeVisible();
-    await expect(agentsToggle).toHaveAttribute("aria-pressed", "true");
-    await page.getByTestId("topbar-files").click();
+    await page.keyboard.press("Control+Shift+E");
     await expect(page.getByTestId("file-preview")).toBeVisible();
     await expect(page.getByTestId("agents-panel")).toHaveCount(0);
-    await expect(agentsToggle).toHaveAttribute("aria-pressed", "false");
-    await agentsToggle.click();
+    await page.getByTestId("wb-tab-agents").click();
     await expect(page.getByTestId("agents-panel")).toBeVisible();
     await expect(page.getByTestId("file-preview")).toHaveCount(0);
-    await agentsToggle.click();
+    await toggleAgentsFromPalette(page);
     await expect(page.getByTestId("agents-panel")).toHaveCount(0);
   } finally {
     await jobs.cleanup();
@@ -1586,7 +1593,7 @@ test('输入框上方(照 Tern):药丸 [👥 N | ⚡ N] 每段个数大于 0 才
     await pill.click();
     await expect(page.getByTestId("agents-panel")).toBeVisible();
     expect((await hub.received()).some((event) => event["act"] === "agents.open")).toBe(false);
-    // 从药丸打开的也是同一个面板:顶栏按钮跟着显示为按下。
+    // 从药丸打开的也是同一个面板:顶栏的子代理图标收进 Overview 后仍反映面板开关状态。
     await expect(page.getByTestId("topbar-agents")).toHaveAttribute("aria-pressed", "true");
   } finally {
     await hub.cleanup();
@@ -1991,11 +1998,11 @@ test("子代理面板:点行只显示详情、不进入对话;点进入对话才
     await page.getByTestId("composer-input").press("Enter");
     await expect.poll(async () => (await received()).at(-1)?.["text"], { timeout: 30_000 }).toBe(steerText);
     // 聚焦中再打开面板:列表看不到(omp 画的是 Beta 的会话);原因输入框上方的聚焦提示已经写着,面板里不再写一遍。
-    await page.getByTestId("topbar-agents").click();
+    await toggleAgentsFromPalette(page);
     await expect(page.getByTestId("agents-panel")).toBeVisible();
     await expect(page.getByTestId("agents-list")).toHaveCount(0);
     await expect(page.getByTestId("agents-empty")).toHaveCount(0);
-    await page.getByTestId("topbar-agents").click();
+    await toggleAgentsFromPalette(page);
     await expect(page.getByTestId("agents-panel")).toHaveCount(0);
 
     await page.getByTestId("run-focus-back").click();

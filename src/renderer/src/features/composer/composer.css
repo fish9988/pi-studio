@@ -26,6 +26,10 @@
 .panel[data-backdrop] .composer-stack::before {
   display: none;
 }
+/* 首页草稿区不用这条淡出带：它上面没有滚动内容，只会在卡片与输入框之间多一道实色横条。 */
+.empty-draft .composer-stack::before {
+  display: none;
+}
 /* Liquid Glass 悬浮输入浮岛 */
 .composer {
   position: relative;
@@ -58,13 +62,63 @@
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 4%, var(--bg-raised));
 }
+/* ── 三套界面设计风格下的输入浮岛（圆角 / 玻璃 / 阴影来自 tokens.css 的 data-ui-style 覆盖） ── */
+:root[data-ui-style="fluent"] .composer {
+  backdrop-filter: blur(16px);
+  border-color: var(--border);
+  box-shadow: var(--shadow-1);
+}
+:root[data-ui-style="fluent"] .composer:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 3px var(--accent-soft);
+}
+:root[data-ui-style="liquid"] .composer {
+  backdrop-filter: blur(28px) saturate(185%);
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+:root[data-ui-style="liquid"] .composer:focus-within {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 0 3px var(--accent-soft);
+}
+/* 深色主题里的镜面高光只留一点白：0.55 的白在深底上会变成一道死白杠（与 .eu、.topbar-tools 同一档 0.13） */
+:root[data-ui-style="liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .composer {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+/* 聚焦时仍要保留 3px 强调色外环：只把镜面高光调低，不能把整条 box-shadow 换掉 */
+:root[data-ui-style="liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .composer:focus-within {
+  box-shadow:
+    var(--shadow-float),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 0 0 3px var(--accent-soft);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="liquid"]:not([data-theme]) .composer {
+    box-shadow:
+      var(--shadow-float),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  }
+  :root[data-ui-style="liquid"]:not([data-theme]) .composer:focus-within {
+    box-shadow:
+      var(--shadow-float),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13),
+      0 0 0 3px var(--accent-soft);
+  }
+}
 /* ── 桌面宠物精灵表窗口与防遮挡侧边锚点（默认停靠在输入框外侧留白区，支持自由拖拽记忆；不再半透明避让） ── */
 .composer-mascot {
   position: absolute;
   z-index: 2;
   pointer-events: none;
   translate: var(--mascot-dx, 0px) var(--mascot-dy, 0px);
-  transform: scale(0.84);
+  transform: scale(0.76);
   transform-origin: bottom right;
 }
 .composer-mascot[data-dragging] {
@@ -72,39 +126,46 @@
 }
 .composer-mascot-clawd {
   left: auto;
-  right: 14px;
+  right: 16px;
   bottom: calc(100% - 4px);
   width: 104px;
   height: 72px;
 }
 .composer-mascot-deepy {
   left: auto;
-  right: 10px;
+  right: 16px;
   bottom: calc(100% - 8px);
   width: 104px;
   height: 104px;
 }
 .composer-mascot-whalegirl {
   left: auto;
-  right: 8px;
+  right: 16px;
   bottom: calc(100% - 10px);
   width: 138px;
   height: 132px;
 }
 .composer-mascot-clawd[data-narrow] {
   left: auto;
-  right: -6px;
+  right: 8px;
   bottom: calc(100% - 2px);
 }
 .composer-mascot-deepy[data-narrow] {
   left: auto;
-  right: 2px;
+  right: 8px;
   bottom: calc(100% - 6px);
 }
 .composer-mascot-whalegirl[data-narrow] {
   left: auto;
-  right: 2px;
+  right: 8px;
   bottom: calc(100% - 12px);
+}
+/* 右侧留白够宽时（没有 data-narrow）干净地停靠在输入框外沿：不压正文，也不和 .composer-top、.tsp-jump 抢位置 */
+.composer-mascot:not([data-narrow]) {
+  left: calc(100% + 6px);
+  right: auto;
+  bottom: 2px;
+  transform-origin: bottom left;
 }
 .composer-mascot-sprite {
   position: absolute;
@@ -508,8 +569,9 @@ button.usage-context:hover,
   width: 3em;
 }
 @container (max-width: 520px) {
-  .chip-text {
-    max-width: 18ch;
+  /* 项目名先让位（缩到约 9 个字符），不去截断模型名：模型名比路径更重要 */
+  .composer .empty-project-name {
+    max-width: 9ch;
   }
 }
 /* 工具行放不下时的让位顺序：先是项目路径（缩到只剩文件夹图标），模型名最后。 */
@@ -1166,6 +1228,20 @@ button.usage-context:hover,
     transform var(--dur-fast) var(--ease-spring),
     box-shadow var(--dur-fast) var(--ease-out);
 }
+/* 发送键跟界面风格的几何：Fluent 方正、M3 与液态玻璃是圆胶囊 */
+:root[data-ui-style="fluent"] .composer .send {
+  border-radius: var(--radius-md);
+}
+:root[data-ui-style="expressive"] .composer .send,
+:root[data-ui-style="liquid"] .composer .send {
+  border-radius: var(--radius-pill);
+}
+.send:disabled {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-disabled);
+  box-shadow: none;
+  cursor: default;
+}
 .send:active:not(:disabled) {
   transform: scale(0.92);
 }
@@ -1174,13 +1250,20 @@ button.usage-context:hover,
   color: #ffffff;
   box-shadow: 0 3px 12px color-mix(in srgb, var(--accent) 34%, transparent);
 }
+/* M3 灵动风格：渐变胶囊更饱满一点，按下有回弹 */
+:root[data-ui-style="expressive"] .composer .send[data-kind="send"]:not(:disabled) {
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+:root[data-ui-style="expressive"] .composer .send[data-kind="send"]:hover:not(:disabled) {
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 48%, transparent);
+}
 .send[data-kind="send"]:hover:not(:disabled) {
   filter: brightness(1.06);
   transform: translateY(-1px);
   box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 44%, transparent);
 }
 .send[data-kind="send"]:disabled {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text-disabled);
   box-shadow: none;
   cursor: default;
@@ -1190,7 +1273,7 @@ button.usage-context:hover,
   color: var(--bg-app);
 }
 .send[data-kind="stop"]:disabled {
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text-disabled);
   cursor: default;
 }

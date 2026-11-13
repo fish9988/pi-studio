@@ -146,7 +146,7 @@
 .tsp-column {
   width: min(100% - 2 * var(--gutter), var(--content-w));
   margin: 0 auto;
-  padding: var(--space-6) 0 var(--space-10);
+  padding: var(--space-3) 0 var(--space-10);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -3036,6 +3036,10 @@
   border-radius: var(--radius-bubble) var(--radius-bubble) var(--radius-sm) var(--radius-bubble);
   font-family: var(--font-display);
   animation: tsp-msg-in var(--dur-base) var(--ease-out);
+}
+/* 标题条下面紧接用户第一句时不要再叠一层上边距：标题条自带下内边距，气泡再留 --space-3 会空出近 92px。 */
+.empty-hero[data-compact] + .tsp-card[data-role="omp.user"] {
+  margin-top: 0;
 }
 .tsp-card[data-role="omp.user"] .tsp-card-body {
   padding: var(--space-2-5) var(--space-3-5);

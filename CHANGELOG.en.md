@@ -9,6 +9,23 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-14
+
+### Added
+
+- Added three live-switchable UI design styles (`Fluent Mica`, `M3 Expressive`, `Liquid Glass`) in Settings › General › Appearance, combining Microsoft Fluent 2 luminance layering, Material 3 Expressive focal geometry, and Apple Liquid Glass translucent surfaces across radii, borders, shadows, Bento tiles, and the floating composer.
+- Added a Code Block Style preference (`Auto`, `Dark terminal`, `Cool light`), rendering clean `#F2F5FA` light code cards in Fluent Mica light mode while keeping high-contrast dark terminal cards in Expressive and Liquid modes.
+
+### Fixed
+
+- Restored the topbar right side to a single right-workbench toggle button (plus the Git branch pill), removing redundant topbar icons and routing all tool panels through the right `Overview` launcher.
+- Fixed the home page brand mark mismatch and legacy `omp` placeholder copy, improved segmented control active-pill contrast in light themes, balanced the 6-theme gallery into a symmetric 3×2 grid with skeleton previews, and fixed Liquid dark-mode glass rim glow and composer focus rings.
+
+### Changed
+
+- Redesigned the sidebar Sessions header into a clean two-row sticky layout, aligned the home Bento usage card width with the composer, softened the background ripple field, and compacted the conversation top header.
+- Improved mascot gutter docking thresholds, unified right workbench labels, and eliminated premature model-chip truncation at narrower pane widths.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

@@ -4,6 +4,7 @@ import { app, screen, type BrowserWindow, type Rectangle } from "electron";
 import path from "node:path";
 import {
   brandStyles,
+  codeBlockStyles,
   conversationViews,
   fontStyles,
   helperThinkingLevels,
@@ -12,6 +13,7 @@ import {
   mascotCharacters,
   preferredShells,
   processRowsLayouts,
+  uiStyles,
   type ShellState,
 } from "../../shared/ipc.ts";
 import { parseBoolean, parseInteger, parseOneOf, parseRecord, parseString } from "../ipc/validate.ts";
@@ -27,6 +29,8 @@ const defaultShellState: ShellState = {
   historyOrder: "folder",
   chatWidth: 0,
   brandStyle: "pi",
+  uiStyle: "expressive",
+  codeBlockStyle: "auto",
   mascot: "clawd",
   processRows: "classic",
   helperModel: "smol",
@@ -132,6 +136,20 @@ function load(): PersistedState {
   try {
     if (raw["brandStyle"] !== undefined) {
       shell.brandStyle = parseOneOf(raw["brandStyle"], "brandStyle", brandStyles);
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["uiStyle"] !== undefined) {
+      shell.uiStyle = parseOneOf(raw["uiStyle"], "uiStyle", uiStyles);
+    }
+  } catch {
+    // 保留默认值。
+  }
+  try {
+    if (raw["codeBlockStyle"] !== undefined) {
+      shell.codeBlockStyle = parseOneOf(raw["codeBlockStyle"], "codeBlockStyle", codeBlockStyles);
     }
   } catch {
     // 保留默认值。

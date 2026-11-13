@@ -36,6 +36,12 @@ function MiniUi({ theme }: { theme: ThemeName }) {
       <span className="st-theme-main" style={thumb === undefined ? undefined : { backgroundImage: `url("${thumb}")` }}>
         <span className="st-theme-bubble" />
         <span className="st-theme-dot" />
+        {thumb === undefined && (
+          <span className="st-theme-skeleton" aria-hidden="true">
+            <span className="st-theme-skeleton-line" />
+            <span className="st-theme-skeleton-code" />
+          </span>
+        )}
       </span>
     </span>
   );

@@ -599,12 +599,20 @@ test("首页 Bento 仪表盘、顶栏对话/轨迹切换与原地改名、右侧
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("topbar-open-menu")).toHaveCount(0);
 
-    // 右栏工作台：点顶栏变更按钮打开变更面板，再通过工作台切换条切到文件面板，Esc 关闭。
-    await page.getByTestId("topbar-changes").click();
+    // 右栏工作台：顶栏唯一的切换按钮打开 Overview，点「Review · 变更」磁贴进变更面板；再用切换条和文件页签互切，Esc 关闭。
+    await page.getByTestId("topbar-files").click();
+    await expect(page.getByTestId("dsh-start-launcher")).toBeVisible();
+    await page.getByTestId("dsh-start-changes").click();
     const changesPanel = page.getByTestId("git-changes-panel");
     await expect(changesPanel).toBeVisible();
-    await expect(changesPanel.getByTestId("workbench-strip")).toBeVisible();
-    await changesPanel.getByTestId("wb-tab-files").click();
+    await expect(page.getByTestId("workbench-strip")).toBeVisible();
+    // 文件页签从文件面板快捷键打开（顶栏不再有独立的文件 / 变更图标），之后切换条上两个页签就能直接互切。
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+Shift+E" : "Control+Shift+E");
+    await expect(page.getByTestId("file-preview")).toBeVisible();
+    await expect(page.getByTestId("wb-tab-changes")).toBeVisible();
+    await page.getByTestId("wb-tab-changes").click();
+    await expect(page.getByTestId("git-changes-panel")).toBeVisible();
+    await page.getByTestId("wb-tab-files").click();
     await expect(page.getByTestId("git-changes-panel")).toHaveCount(0);
     await expect(page.getByTestId("file-preview")).toBeVisible();
     await page.keyboard.press("Escape");

@@ -494,7 +494,8 @@
   gap: var(--space-0-5);
   height: var(--seg-h);
   padding: var(--space-0-5);
-  background: var(--bg-active);
+  background: color-mix(in srgb, var(--text) 6%, var(--bg-sunken));
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
 }
 .ui-seg[data-size="sm"] {
@@ -531,8 +532,18 @@
 }
 .ui-seg > button[aria-checked="true"] {
   color: var(--text);
-  background: var(--control-on);
-  box-shadow: var(--shadow-1);
+  font-weight: var(--fw-strong);
+  background: color-mix(in srgb, var(--accent) 10%, var(--control-on));
+  box-shadow:
+    var(--shadow-1),
+    0 0 0 1px color-mix(in srgb, var(--accent) 32%, var(--border));
+}
+
+/* Fluent 2：分段控件与胶囊按钮去满圆，改方正小圆角，贴合 Fluent 的几何语言 */
+:root[data-ui-style="fluent"] .ui-seg,
+:root[data-ui-style="fluent"] .ui-seg > button,
+:root[data-ui-style="fluent"] .ui-chip {
+  border-radius: var(--radius-md);
 }
 
 .ui-tabs {

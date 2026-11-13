@@ -3,6 +3,7 @@ import { app, clipboard, ClipboardItem, nativeImage, shell } from "electron";
 import path from "node:path";
 import {
   brandStyles,
+  codeBlockStyles,
   conversationViews,
   editCommands,
   fontStyles,
@@ -13,6 +14,7 @@ import {
   preferredShells,
   processRowsLayouts,
   titleBarFades,
+  uiStyles,
   type AppInfo,
   type HandlerGroup,
   type ShellState,
@@ -137,6 +139,12 @@ export const appHandlers: HandlerGroup<
       }),
       ...(record["brandStyle"] !== undefined && {
         brandStyle: parseOneOf(record["brandStyle"], "brandStyle", brandStyles),
+      }),
+      ...(record["uiStyle"] !== undefined && {
+        uiStyle: parseOneOf(record["uiStyle"], "uiStyle", uiStyles),
+      }),
+      ...(record["codeBlockStyle"] !== undefined && {
+        codeBlockStyle: parseOneOf(record["codeBlockStyle"], "codeBlockStyle", codeBlockStyles),
       }),
       ...(record["mascot"] !== undefined && {
         mascot: parseOneOf(record["mascot"], "mascot", mascotCharacters),

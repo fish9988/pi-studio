@@ -158,7 +158,7 @@ export function PixelLogo({
     <span
       className="claude-brand-lockup"
       role="img"
-      aria-label="omp studio"
+      aria-label="pi studio"
       data-testid="pixel-logo"
       data-brand="claude"
     >

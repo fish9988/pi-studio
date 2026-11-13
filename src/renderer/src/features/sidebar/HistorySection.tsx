@@ -55,32 +55,36 @@ export function HistorySection(props: HistorySectionProps) {
   return (
     <section className="sb-group sb-history" aria-label={t("sidebar.searchHistory")} data-testid="sidebar-history">
       <div className="sb-history-head">
-        <p className="sb-group-title">{t("sidebar.searchHistory")}</p>
-        <div className="sb-history-controls">
-          <button
-            type="button"
-            className="sb-active-filter"
-            data-active={activeOnly || undefined}
-            data-has-active={props.activeCount > 0 || undefined}
-            aria-pressed={activeOnly}
-            data-testid="sidebar-filter-active"
-            title={locale === "zh-CN" ? "仅显示进行中或待确认的活跃会话" : "Show active sessions only"}
-            onClick={() => props.onToggleActiveOnly?.(!activeOnly)}
-          >
-            <RunningFourDots size="sm" active={props.activeCount > 0} />
-            <span>{locale === "zh-CN" ? "进行中" : "Active"}</span>
-            {props.activeCount > 0 && <span className="sb-active-filter-count">{props.activeCount}</span>}
-          </button>
-          {canToggleAll && (
-            <IconButton
-              className="sb-toggle-all"
-              testId="sidebar-toggle-all-folders"
-              label={t(anyOpen ? "sidebar.collapseAll" : "sidebar.expandAll")}
-              onClick={() => props.onSetAllOpen?.(!anyOpen)}
+        <div className="sb-history-top">
+          <p className="sb-group-title">{t("sidebar.searchHistory")}</p>
+          <div className="sb-history-meta">
+            <button
+              type="button"
+              className="sb-active-filter"
+              data-active={activeOnly || undefined}
+              data-has-active={props.activeCount > 0 || undefined}
+              aria-pressed={activeOnly}
+              data-testid="sidebar-filter-active"
+              title={locale === "zh-CN" ? "仅显示进行中或待确认的活跃会话" : "Show active sessions only"}
+              onClick={() => props.onToggleActiveOnly?.(!activeOnly)}
             >
-              <ChevronDown size={12} />
-            </IconButton>
-          )}
+              <RunningFourDots size="sm" active={props.activeCount > 0} />
+              <span>{locale === "zh-CN" ? "进行中" : "Active"}</span>
+              {props.activeCount > 0 && <span className="sb-active-filter-count">{props.activeCount}</span>}
+            </button>
+            {canToggleAll && (
+              <IconButton
+                className="sb-toggle-all"
+                testId="sidebar-toggle-all-folders"
+                label={t(anyOpen ? "sidebar.collapseAll" : "sidebar.expandAll")}
+                onClick={() => props.onSetAllOpen?.(!anyOpen)}
+              >
+                <ChevronDown size={12} />
+              </IconButton>
+            )}
+          </div>
+        </div>
+        <div className="sb-history-order-row">
           <Segmented
             size="sm"
             label={t("sidebar.historyOrder")}

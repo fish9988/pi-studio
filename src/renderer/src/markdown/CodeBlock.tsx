@@ -1,15 +1,18 @@
 // 代码块（spec 4.10）：头部语言名 + 复制；围栏闭合后才高亮（只改颜色）；全文显示（omp 的 md 节点不限行数）。
 // ```svg 和 ```mermaid 围栏闭合后画成图，头部多一个切回源码的按钮。
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { draftKey } from "../../../shared/ipc.ts";
+import { resolveTheme, themes } from "../../../shared/themes.ts";
+import { useShellValue } from "../app/shell-store.ts";
 import { quoteToComposer } from "../features/composer/quote.ts";
 import { openInlineArtifact } from "../features/file-preview/index.ts";
 import { useT } from "../i18n/use-t.ts";
 import { Check, ChevronDown, Code, CopyIcon, External, Plus } from "../icons.tsx";
-import { useSelectedTaskId } from "../store/index.ts";
+import { useSelectedTaskId, useSettings } from "../store/index.ts";
 import { currentLocale } from "../store/settings-store.ts";
 import { onThemeChange } from "../ui/theme-change.ts";
 import { useHighlighted } from "./highlight.ts";
+import { codeBlockUsesDark } from "./code-block-theme.ts";
 import { resolveLanguage } from "./highlight-languages.ts";
 import { tokenProps, type HighlightToken } from "./highlight-tokens.ts";
 import { useMermaid } from "./mermaid.ts";
@@ -32,6 +35,15 @@ function lineTokens(tokens: HighlightToken[][] | null, index: number, line: stri
   return hit !== undefined && hit.length > 0 ? hit : [{ text: line, italic: false, bold: false }];
 }
 
+/** 系统深浅色（主题设置为“跟随系统”时要跟着变）。 */
+function subscribeSystemDark(listener: () => void): () => void {
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+
+const systemDarkNow = (): boolean => window.matchMedia("(prefers-color-scheme: dark)").matches;
+
 interface CodeBlockProps {
   code: string;
   lang: string;
@@ -43,6 +55,12 @@ interface CodeBlockProps {
 export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine, standalone }: CodeBlockProps) {
   const t = useT();
   const taskId = useSelectedTaskId();
+  const settings = useSettings();
+  const uiStyle = useShellValue("uiStyle") ?? "expressive";
+  const codeBlockStyle = useShellValue("codeBlockStyle") ?? "auto";
+  const systemDark = useSyncExternalStore(subscribeSystemDark, systemDarkNow);
+  const isDarkTheme =
+    themes[resolveTheme(settings?.theme ?? "default", systemDark, settings?.colorMode ?? "system")].dark;
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(() => Boolean(standalone || focusLine !== undefined));
   const preRef = useRef<HTMLPreElement>(null);
@@ -131,6 +149,8 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
   };
   const quote = () => quoteToComposer(taskId, code, { lang });
   const zh = currentLocale() === "zh-CN";
+  // 代码卡配色：图（svg / mermaid）不铺底色；深色终端卡与冷灰浅色卡的取舍见 code-block-theme.ts。
+  const useDarkCode = codeBlockUsesDark({ uiStyle, codeBlockStyle, darkTheme: isDarkTheme, drawing });
 
   return (
     <div
@@ -138,7 +158,8 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
       data-anchor
       data-testid="codeblock"
       data-figure={drawing || undefined}
-      data-code-dark={!drawing ? "" : undefined}
+      data-code-dark={!drawing && useDarkCode ? "" : undefined}
+      data-code-light={!drawing && !useDarkCode ? "" : undefined}
       data-collapsed={isCollapsed || undefined}
     >
       <div

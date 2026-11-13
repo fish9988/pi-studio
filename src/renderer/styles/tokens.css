@@ -164,12 +164,18 @@
   --radius-bubble: 18px; /* 用户消息气泡圆角 */
   --radius-composer: 22px; /* 悬浮输入浮岛圆角 */
   --radius-pill: 999px;
+  --radius-panel: var(--radius-xl); /* 主区面板 / Bento 卡片；界面风格切换时跟着 --radius-xl 一起变 */
   --bg-glass: color-mix(in srgb, var(--bg-raised) 78%, transparent);
   --bg-glass-strong: color-mix(in srgb, var(--bg-raised) 90%, transparent);
   --glass-rim: color-mix(in srgb, var(--border-strong) 72%, rgba(255, 255, 255, 0.24));
   --shadow-float:
     0 12px 32px color-mix(in srgb, var(--text) 9%, transparent),
     0 2px 6px color-mix(in srgb, var(--text) 4%, transparent);
+  /* 冷灰浅色代码卡（Fluent 云母原型的 #F2F5FA 底色）＋头部、描边与正文色；浅色卡不跟随主题色，深浅主题下都能读 */
+  --bg-code-light: #f2f5fa;
+  --bg-code-light-head: #e8eef7;
+  --border-code-light: rgba(15, 23, 42, 0.1);
+  --fg-code-light: #1f2937;
 
   /* 控件 / 行高 / 图标 */
   --control-h-xs: 24px; /* 一行里的小控件：工作区目录胶囊、输入框上方状态行的药丸和文字按钮、终端头的图标按钮 */
@@ -289,6 +295,51 @@
   --shiki-token-link: var(--link);
 }
 
+/* ───────────────────────── 界面设计风格（<html data-ui-style>） ─────────────────────────
+   三套骨架：fluent（Fluent 2 方正分层）、expressive（M3 灵动，默认，用上面 :root 的值）、liquid（液态玻璃）。
+   只改圆角、玻璃层与浮动阴影，颜色始终由主题决定；specificity 高于 :root，位置在主题色块之前也不影响。 */
+:root[data-ui-style="fluent"] {
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-panel: 12px;
+  --radius-composer: 14px;
+  --bg-glass: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+  --bg-glass-strong: color-mix(in srgb, var(--bg-raised) 95%, transparent);
+  --shadow-float:
+    0 4px 16px color-mix(in srgb, var(--text) 7%, transparent),
+    0 1px 3px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+:root[data-ui-style="liquid"] {
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-panel: 20px;
+  --radius-composer: 24px;
+  /* 浅色玻璃再透一点：液态玻璃的关键是身后的环境网格真的透得出来，84% 的实底会把折射感抹平 */
+  --bg-glass: color-mix(in srgb, var(--bg-raised) 64%, transparent);
+  --bg-glass-strong: color-mix(in srgb, var(--bg-raised) 78%, transparent);
+  --glass-rim: color-mix(in srgb, var(--border-strong) 55%, rgba(255, 255, 255, 0.45));
+  --shadow-float:
+    0 16px 42px color-mix(in srgb, var(--text) 11%, transparent),
+    0 2px 8px color-mix(in srgb, var(--text) 5%, transparent);
+}
+/* 深色里不能往描边里混 45% 纯白：那是玻璃浮层上一圈刺眼的白边。深色只留一点镜面高光，
+ * 阴影也改用纯黑扩散（深色主题的 --text 是浅色，按文字色算出来的阴影会发灰）。 */
+:root[data-ui-style="liquid"]:is([data-theme$="dark"], [data-theme="dark"]) {
+  --glass-rim: color-mix(in srgb, var(--border) 75%, rgba(255, 255, 255, 0.13));
+  --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.56), 0 2px 10px rgba(0, 0, 0, 0.34);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="liquid"]:not([data-theme]) {
+    --glass-rim: color-mix(in srgb, var(--border) 75%, rgba(255, 255, 255, 0.13));
+    --shadow-float: 0 18px 46px rgba(0, 0, 0, 0.56), 0 2px 10px rgba(0, 0, 0, 0.34);
+  }
+}
+
 /* 高亮 token 的类名（markdown/highlight-tokens.ts 的 tokenProps）：一种颜色一条规则，代替每个 token 一个内联 style。
    token-inserted / deleted / changed 没定义变量，和原来的内联写法一样继承所在行的颜色（diff 行的增删色）。 */
 .hl-foreground {
@@ -335,6 +386,22 @@
 }
 .hl-b {
   font-weight: var(--fw-strong);
+}
+
+/* 冷灰浅色代码卡片（Fluent 云母原型 #F2F5FA）：固定一套冷调、WCAG ≥ 4.5:1 的语法色，
+   深色主题下选了浅色卡也读得清；否则会继续用深色主题那套亮色 token（白字白底）。 */
+[data-code-light] {
+  color-scheme: only light;
+  --shiki-foreground: var(--fg-code-light);
+  --shiki-token-constant: #b45309;
+  --shiki-token-string: #047857;
+  --shiki-token-comment: #64748b;
+  --shiki-token-keyword: #be185d;
+  --shiki-token-parameter: var(--fg-code-light);
+  --shiki-token-function: #0369a1;
+  --shiki-token-string-expression: #047857;
+  --shiki-token-punctuation: #475569;
+  --shiki-token-link: #0369a1;
 }
 
 /* 暗色终端代码卡片（M3 × Liquid Glass）：浅色主题下也保留高对比深靛蓝卡片（[Image #2]），在 tokens.css 内统一覆写 Shiki token */
@@ -544,6 +611,22 @@
     --accent-glow: none;
     --theme-art: none;
   }
+}
+
+/* ───────────────────────── 深色：浮层描边与阴影 ─────────────────────────
+   深色下 --glass-rim 不再混大量纯白（那会成玻璃浮层上一圈白边），--shadow-float 用纯黑扩散而不是文字色。
+   必须写在上面系统深色块之后：test/themes.test.ts 用 indexOf("  :root:not([data-theme]) {") 取系统深色块，
+   放到前面会让它先命中这一小块，两块「逐行一致」的校验就取错了对象。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --glass-rim: color-mix(in srgb, var(--border) 82%, rgba(255, 255, 255, 0.1));
+    --shadow-float: 0 14px 36px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.28);
+  }
+}
+
+:root:is([data-theme$="dark"], [data-theme="dark"]) {
+  --glass-rim: color-mix(in srgb, var(--border) 82%, rgba(255, 255, 255, 0.1));
+  --shadow-float: 0 14px 36px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
 /* ───────────────────────── 基础深色：显式选择（Expressive Cosmic） ───────────────────────── */

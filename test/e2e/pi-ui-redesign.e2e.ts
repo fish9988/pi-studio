@@ -136,27 +136,32 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     await expect(assistantCode).not.toHaveAttribute("data-collapsed");
     await expect(assistantCode.locator(".md-codebody")).toBeVisible();
 
-    // 5. 检查主画布圆角、输入浮岛圆角、顶栏工作台工具与右侧 Overview 2×2 M3 磁贴
-    await expect(page.getByTestId("topbar-settings")).toBeVisible();
+    // 5. 检查主画布圆角、输入浮岛圆角、顶栏唯一的右栏切换按钮与右侧 Overview 2×2 M3 磁贴
+    // 顶栏右侧只留一个右栏切换按钮（设置改由侧栏底部 / Ctrl+, 打开）；旧子面板图标收进 1px 透明兜底层，看不见也点不到。
+    await expect(page.getByTestId("topbar-settings")).toHaveCount(0);
+    await expect(page.getByTestId("topbar-files")).toBeVisible();
+    await expect(page.locator(".topbar-legacy-toggles")).toHaveCSS("opacity", "0");
+    await expect(page.locator(".topbar-legacy-toggles")).toHaveCSS("pointer-events", "none");
     await page.getByTestId("topbar-files").click();
     await expect(page.getByTestId("dsh-start-launcher")).toBeVisible();
     await expect(page.getByTestId("dsh-start-files")).toBeVisible();
     await expect(page.getByTestId("dsh-start-terminal")).toBeVisible();
 
-    const radii = await page.evaluate(() => {
-      const g = globalThis as unknown as {
-        document: { querySelector(s: string): unknown };
-        getComputedStyle(el: unknown): { borderRadius: string };
-      };
-      const panel = g.document.querySelector('[data-testid="main-panel"]');
-      const composer = g.document.querySelector(".composer");
-      return {
-        panel: g.getComputedStyle(panel).borderRadius,
-        composer: g.getComputedStyle(composer).borderRadius,
-      };
-    });
-    expect(radii.panel).toBe("18px");
-    expect(radii.composer).toBe("22px");
+    const readRadii = () =>
+      page.evaluate(() => {
+        const g = globalThis as unknown as {
+          document: { querySelector(s: string): unknown };
+          getComputedStyle(el: unknown): { borderRadius: string };
+        };
+        const panel = g.document.querySelector('[data-testid="main-panel"]');
+        const composer = g.document.querySelector(".composer");
+        return {
+          panel: g.getComputedStyle(panel).borderRadius,
+          composer: g.getComputedStyle(composer).borderRadius,
+        };
+      });
+    // 默认 M3 灵动：主区面板 18px、输入浮岛 22px。
+    expect(await readRadii()).toEqual({ panel: "18px", composer: "22px" });
 
     // 6. 切暗色再切回浅色
     await setColorMode(page, "dark");
@@ -164,8 +169,9 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     await setColorMode(page, "light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
-    // 7. 设置页 → 通用：确认旧「过程行」三卡已移除、新 6 套主题全在、UI 与聊天字体独立设置并持久化
-    await page.getByTestId("topbar-settings").click();
+    // 7. 设置页 → 通用（顶栏不再有设置图标，走 Ctrl+,）：确认旧「过程行」三卡已移除、新 6 套主题全在、UI 与聊天字体独立设置并持久化
+    const openSettingsKeys = process.platform === "darwin" ? "Meta+," : "Control+,";
+    await page.keyboard.press(openSettingsKeys);
     await expect(page.getByTestId("settings")).toBeVisible();
     await page.getByTestId("settings-nav-general").click();
 
@@ -206,8 +212,64 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     expect(fontVars.chat).toContain(chosenFontName);
     expect(fontVars.chat).toContain("Anthropic Sans");
 
+    // 8. 三套界面风格与代码块配色：圆角跟着骨架变，浅色主题下只有 fluent 用冷灰浅色代码卡，手选配色优先于风格。
+    const closeSettings = async () => {
+      await page.getByTestId("settings-win-close").click();
+      await expect(page.getByTestId("settings")).toHaveCount(0);
+    };
+
+    await page.getByTestId("setting-ui-style-fluent").click();
+    await expect(page.locator("html")).toHaveAttribute("data-ui-style", "fluent");
+    await closeSettings();
+    expect(await readRadii()).toEqual({ panel: "12px", composer: "14px" });
+    await expect(assistantCode).toHaveAttribute("data-code-light", "");
+    await expect(assistantCode).not.toHaveAttribute("data-code-dark");
+
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-ui-style-liquid").click();
+    await expect(page.locator("html")).toHaveAttribute("data-ui-style", "liquid");
+    await closeSettings();
+    expect(await readRadii()).toEqual({ panel: "20px", composer: "24px" });
+    await expect(assistantCode).toHaveAttribute("data-code-dark", "");
+
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-ui-style-expressive").click();
+    await expect(page.locator("html")).toHaveAttribute("data-ui-style", "expressive");
+    await closeSettings();
+    expect(await readRadii()).toEqual({ panel: "18px", composer: "22px" });
+    await expect(assistantCode).toHaveAttribute("data-code-dark", "");
+
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-code-block-style-light").click();
+    await closeSettings();
+    await expect(assistantCode).toHaveAttribute("data-code-light", "");
+    await expect(assistantCode).not.toHaveAttribute("data-code-dark");
+
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-code-block-style-dark").click();
+    await closeSettings();
+    await expect(assistantCode).toHaveAttribute("data-code-dark", "");
+    await expect(assistantCode).not.toHaveAttribute("data-code-light");
+
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-code-block-style-auto").click();
+    await closeSettings();
+    await expect(page.locator("html")).toHaveAttribute("data-code-block-style", "auto");
+    await expect(assistantCode).toHaveAttribute("data-code-dark", "");
+
+    // 收起前留一组非默认值：重载后界面风格与代码块配色都还在。
+    await page.keyboard.press(openSettingsKeys);
+    await page.getByTestId("setting-ui-style-liquid").click();
+    await page.getByTestId("setting-code-block-style-light").click();
+    await closeSettings();
+    expect(await readRadii()).toEqual({ panel: "20px", composer: "24px" });
+    await expect(assistantCode).toHaveAttribute("data-code-light", "");
+
     await page.reload();
     await expect(page.getByTestId("app-root")).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-ui-style", "liquid");
+    await expect(page.locator("html")).toHaveAttribute("data-code-block-style", "light");
+    await expect(page.getByTestId("main-panel")).toHaveCSS("border-radius", "20px");
     await expect.poll(async () => (await readFontVars()).ui).toContain("Anthropic Serif");
     await expect.poll(async () => (await readFontVars()).chat).toContain(chosenFontName);
   } finally {

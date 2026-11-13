@@ -333,7 +333,12 @@ test("不是 git 仓库：输入框下面没有工作树开关，直接发送；
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("tsp-view")).toBeVisible();
     await expect(page.getByTestId("task-row-worktree")).toHaveCount(0);
-    await expect(page.getByTestId("topbar-terminal")).toBeVisible();
+    // 顶栏只剩一个右栏切换按钮：从 Overview 能直接开终端（普通目录也有内置终端），看完收起，后面的逐帧检查照旧。
+    await expect(page.getByTestId("topbar-files")).toBeVisible();
+    await page.getByTestId("topbar-files").click();
+    await expect(page.getByTestId("dsh-start-terminal")).toBeVisible();
+    await page.getByTestId("dsh-wb-collapse").click();
+    await expect(page.getByTestId("right-workbench")).toHaveCount(0);
     await expect(page.getByTestId("git-menu")).toHaveCount(0);
     await expect(page.getByTestId("topbar-review")).toHaveCount(0);
     const plainTaskId = await page.getByTestId("tsp-view").getAttribute("data-task-id");

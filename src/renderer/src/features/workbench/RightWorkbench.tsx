@@ -266,7 +266,7 @@ function DshStartView({
         </div>
 
         <section className="dsh-ov-section" aria-label={isZh ? "快捷导航" : "Quick navigation"}>
-          <div className="dsh-ov-section-head">{isZh ? "工作台视图" : "Workbench"}</div>
+          <div className="dsh-ov-section-head">{isZh ? "工作台" : "Workspace"}</div>
           <div className="dsh-ov-tile-grid">
             {taskId !== null && (
               <button
@@ -370,7 +370,7 @@ function DshStartView({
             <span className="dsh-ov-tile-ic is-violet">
               <Puzzle size={14} />
             </span>
-            <span className="dsh-ov-nav-label">{isZh ? "Extensions（插件与 Skill）" : "Extensions & Skills"}</span>
+            <span className="dsh-ov-nav-label">{isZh ? "扩展与技能 · Extensions" : "Extensions & Skills"}</span>
             <ChevronRight size={13} className="dsh-ov-nav-arrow" />
           </button>
         </section>
@@ -382,7 +382,7 @@ function DshStartView({
               aria-label={isZh ? "本轮涉及文件" : "Artifacts & Touched Files"}
             >
               <div className="dsh-ov-section-head">
-                <span>{isZh ? "Artifacts / 本轮涉及文件" : "Artifacts / Touched Files"}</span>
+                <span>{isZh ? "本轮文件 · Artifacts" : "Artifacts / Touched Files"}</span>
                 {sessionFiles.length > 0 && <span className="dsh-ov-head-count">{sessionFiles.length}</span>}
               </div>
               {sessionFiles.length === 0 ? (
@@ -419,7 +419,7 @@ function DshStartView({
 
             <section className="dsh-ov-section dsh-ov-card" aria-label="Subagents">
               <div className="dsh-ov-section-head">
-                <span>Subagents</span>
+                <span>{isZh ? "子代理 · Subagents" : "Subagents"}</span>
                 {agents.length > 0 && (
                   <span className="dsh-ov-head-count">
                     {activeAgentCount > 0
@@ -461,7 +461,7 @@ function DshStartView({
 
         <section className="dsh-ov-section dsh-ov-card" aria-label="Background Tasks">
           <div className="dsh-ov-section-head">
-            <span>Background Tasks</span>
+            <span>{isZh ? "后台任务 · Background" : "Background Tasks"}</span>
             {(terminalTabs.length > 0 || isRunningTask) && (
               <span className="dsh-ov-head-count">{terminalTabs.length + (isRunningTask ? 1 : 0)}</span>
             )}
@@ -503,7 +503,7 @@ function DshStartView({
 function tabMeta(tab: DshTabItem, isZh: boolean) {
   switch (tab.kind) {
     case "start":
-      return { label: "Overview", icon: <Compass size={13} /> };
+      return { label: isZh ? "概览" : "Overview", icon: <Compass size={13} /> };
     case "files":
       return { label: isZh ? "Files" : "Files", icon: <Folder size={13} /> };
     case "terminal": {
@@ -604,7 +604,7 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
           {isLoneStart ? (
             <span className="dsh-wb-lone-start">
               <Compass size={13} />
-              <span>Overview</span>
+              <span>{isZh ? "概览" : "Overview"}</span>
             </span>
           ) : (
             <>

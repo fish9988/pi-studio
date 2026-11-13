@@ -12,11 +12,11 @@ const RIPPLE = {
   changeRate: 2,
   digitRatio: 0.3,
   cloudScale: 100,
-  cloudCoverage: 1,
+  cloudCoverage: 0.65,
   cloudSoftness: 0.1,
   cloudDrift: 8,
-  idleAlphaLight: 0.26,
-  idleAlphaDark: 0.24,
+  idleAlphaLight: 0.045,
+  idleAlphaDark: 0.06,
   speedNear: 1100,
   speedFar: 80,
   speedFalloff: 240,
@@ -29,7 +29,7 @@ const RIPPLE = {
   sourceAmplitude: 1.4,
   waveGain: 3.5,
   glowDecay: 1.2,
-  glowAlpha: 0.3,
+  glowAlpha: 0.22,
   waveAlpha: 0.85,
   patchScale: 60,
   patchFloor: 0.3,
@@ -526,7 +526,8 @@ function readFieldPalette(canvas: HTMLCanvasElement): FieldPalette {
   const style = getComputedStyle(canvas);
   const dark = style.colorScheme === "dark";
   const ink = resolveCssColor(style.getPropertyValue("--text-3"), [138, 138, 133]);
-  const wave: Rgb = dark ? [127, 166, 255] : [59, 110, 240];
+  // 波纹前缘跟主题强调色：写死一片蓝会在暖色 / 森系主题里变成噪点。
+  const wave = resolveCssColor(style.getPropertyValue("--accent"), dark ? [127, 166, 255] : [59, 110, 240]);
   const fontFamily = style.getPropertyValue("--font-mono").trim() || "monospace";
   return { ink, wave, dark, fontFamily };
 }

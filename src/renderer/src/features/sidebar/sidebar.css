@@ -46,6 +46,25 @@
   background: var(--bg-glass-strong);
   border-color: var(--border-subtle);
 }
+/* Fluent 2 的搜索框是带细描边的方正输入框，不是满圆药丸 */
+:root[data-ui-style="fluent"] .sb-actions .ui-field {
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  border-color: var(--border);
+}
+:root[data-ui-style="liquid"] .sb-actions .ui-field {
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+/* 深色底色上的 0.45 白会变成一道死白杠：同样的镜面高光只留 0.14 */
+:root[data-ui-style="liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .sb-actions .ui-field {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="liquid"]:not([data-theme]) .sb-actions .ui-field {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+}
 .sb-new {
   display: flex;
   align-items: center;
@@ -70,18 +89,44 @@
 .sb-new:hover {
   background: var(--bg-hover);
 }
-.sb-new:active,
-.sb-new[aria-current="page"] {
+.sb-new:active {
   background: var(--bg-active);
 }
+/* 选中态：Fluent 2 × M3 的柔和胶囊（内描边 + 微阴影）+ 左缘 3px 主题色竖条，
+   和 .sb-row[data-selected="true"] 用同一套语言，不再是平铺一块色块 */
 .sb-new[aria-current="page"] {
-  font-weight: 600;
+  position: relative;
+  padding-left: calc(var(--space-2-5) + 2px);
+  background: var(--sb-row-selected-bg);
+  box-shadow: var(--sb-row-selected-shadow);
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+.sb-new[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+/* 3px 左缘竖条是 Fluent 2 的语言：M3 灵动与液态玻璃下改成整行药丸，不再画竖条 */
+:root[data-ui-style="expressive"] .sb-new[aria-current="page"],
+:root[data-ui-style="liquid"] .sb-new[aria-current="page"] {
+  border-radius: var(--radius-pill);
+  padding-left: var(--space-3);
+}
+:root[data-ui-style="expressive"] .sb-new[aria-current="page"]::before,
+:root[data-ui-style="liquid"] .sb-new[aria-current="page"]::before {
+  display: none;
 }
 .sb-new-label {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--text);
+  color: inherit;
   font-size: var(--fs-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -172,24 +217,53 @@
 }
 
 /* ───── 项目分组 ───── */
-/* 历史会话：标题右边是"文件夹 | 时间"两段切换（排列方式，记在外壳状态里） */
+/* 历史会话标题区：两行，不再把「会话 / 进行中 / 折叠全部 / 文件夹|时间」塞进 240px 的一行。
+   上行：左「会话」，右「进行中」胶囊 + 折叠全部；下行：拉满整行、两段等宽的「文件夹 | 时间」切换。
+   钉在滚动区顶部（.sb-list 上边没有内边距，起始位置就是钉住的位置），底色和侧栏一致，
+   上下留出匀称的内边距，滚过的行不会从边缝透出；z-index 压住行里的绝对定位元素 */
 .sb-history-head {
-  /* 钉在滚动区顶部，滚动时完全不动（.sb-list 上边没有内边距，起始位置就是钉住的位置）；
-     底色和侧栏一致，下面滚过的行不透出；z-index 压住行里的绝对定位元素 */
   position: sticky;
   top: 0;
   z-index: 1;
   display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1-5) 0 var(--space-1-5);
+  background: var(--bg-sidebar);
+}
+.sb-history-top {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding-right: var(--space-1);
-  background: var(--bg-sidebar);
+  min-width: 0;
 }
-.sb-history-controls {
+/* 标题左缘和文件夹名对齐（列表自身已有 8px 内边距） */
+.sb-history-top .sb-group-title {
+  padding: 0 0 0 var(--space-2);
+}
+.sb-history-meta {
   display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-1-5);
+}
+/* 排列切换拉满整行：两段等宽，短的那段（时间）文字仍在格子正中 */
+.sb-history-order-row {
+  min-width: 0;
+}
+.sb-history-order-row .ui-seg {
+  display: flex;
+  width: 100%;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+}
+.sb-history-order-row .ui-seg > button {
+  flex: 1 1 0;
+  min-width: 0;
+  /* 侧栏的 `:where(.sb) button` 把按钮文字改成左对齐，拉满整行后要显式回正 */
+  text-align: center;
+  font-size: var(--fs-xs);
 }
 .sb-active-filter {
   display: inline-flex;
@@ -198,7 +272,8 @@
   height: 22px;
   padding: 0 6px;
   border-radius: var(--radius-pill);
-  border: 1px solid transparent;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
   color: var(--text-2);
   font-size: var(--fs-2xs);
   line-height: 1;
@@ -212,6 +287,10 @@
 .sb-active-filter:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+/* Fluent 2 的筛选胶囊是方正控件，同 .sb-actions .ui-field 的几何 */
+:root[data-ui-style="fluent"] .sb-active-filter {
+  border-radius: var(--radius-md);
 }
 .sb-active-filter[data-has-active] {
   color: var(--text);
@@ -573,6 +652,15 @@
 }
 :root[data-glass] .sb-row[data-selected="true"] {
   background: color-mix(in srgb, var(--sb-row-selected-bg) 82%, transparent);
+}
+/* 液态玻璃下选中的任务行用薄玻璃托底，压住背后的侧栏背景 */
+:root[data-ui-style="liquid"] .sb-row[data-selected="true"] {
+  backdrop-filter: blur(12px);
+}
+/* 3px 左缘竖条只留给 Fluent 2：M3 灵动与液态玻璃下选中行是整行药丸，不再叠一道竖条（同 .sb-new） */
+:root[data-ui-style="expressive"] .sb-row[data-selected="true"]::before,
+:root[data-ui-style="liquid"] .sb-row[data-selected="true"]::before {
+  display: none;
 }
 .sb-row-main {
   display: flex;

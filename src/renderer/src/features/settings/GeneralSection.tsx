@@ -7,12 +7,14 @@ import {
   type BackdropMode,
   type BackdropStrength,
   type BrandStyle,
+  type CodeBlockStyle,
   type ColorMode,
   type FontStyle,
   type IdleClose,
   type LocalePreference,
   type MascotCharacter,
   type PreferredShell,
+  type UiStyle,
 } from "../../../../shared/ipc.ts";
 import type { MessageKey } from "../../../../shared/i18n/index.ts";
 import { chordKeys } from "../../../../shared/tsp/omp-keybindings.ts";
@@ -22,11 +24,13 @@ import {
   setBrandStyle,
   setChatFontFamily,
   setChatFontStyle,
+  setCodeBlockStyle,
   setHomeRipple,
   setMascotCharacter,
   setPreferredShell,
   setUiFontFamily,
   setUiFontStyle,
+  setUiStyle,
   useShellValue,
 } from "../../app/shell-store.ts";
 import { setAppearanceColorMode, useAppInfo, useSettings } from "../../store/index.ts";
@@ -106,6 +110,16 @@ export function GeneralSection() {
     label: t(`settings.mascot.${value}`),
   }));
   const homeRipple = useShellValue("homeRipple") ?? true;
+  const uiStyle = useShellValue("uiStyle") ?? "expressive";
+  const uiStyleOptions = (["fluent", "expressive", "liquid"] as const).map((value) => ({
+    value,
+    label: t(`settings.uiStyle.${value}`),
+  }));
+  const codeBlockStyle = useShellValue("codeBlockStyle") ?? "auto";
+  const codeBlockStyleOptions = (["auto", "dark", "light"] as const).map((value) => ({
+    value,
+    label: t(`settings.codeBlockStyle.${value}`),
+  }));
   const backdrop = settings?.backdrop ?? "theme";
   const backdropOptions = (["theme", "custom", "none"] as const).map((value) => ({
     value,
@@ -166,6 +180,30 @@ export function GeneralSection() {
               labelledBy={labelId}
               onChange={(next) => guard(setAppearanceColorMode(next))}
               testId="setting-color-mode"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.uiStyle")}>
+          {(labelId) => (
+            <Segmented<UiStyle>
+              size="sm"
+              value={uiStyle}
+              options={uiStyleOptions}
+              labelledBy={labelId}
+              onChange={(next) => setUiStyle(next)}
+              testId="setting-ui-style"
+            />
+          )}
+        </Row>
+        <Row label={t("settings.codeBlockStyle")}>
+          {(labelId) => (
+            <Segmented<CodeBlockStyle>
+              size="sm"
+              value={codeBlockStyle}
+              options={codeBlockStyleOptions}
+              labelledBy={labelId}
+              onChange={(next) => setCodeBlockStyle(next)}
+              testId="setting-code-block-style"
             />
           )}
         </Row>
