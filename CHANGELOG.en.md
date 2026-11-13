@@ -9,6 +9,8 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-13
+
 ### Added
 
 - Composer drafts now persist pasted snippets, images, and attached files across task switches and restarts.

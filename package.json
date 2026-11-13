@@ -1,6 +1,6 @@
 {
   "name": "pi-studio",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Pi (@earendil-works/pi-coding-agent) 的桌面工作台",
   "license": "MIT",
