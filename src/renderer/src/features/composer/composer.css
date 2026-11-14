@@ -140,10 +140,51 @@
       0 0 0 3px var(--accent-soft);
   }
 }
-/* ── 桌面宠物精灵表窗口与防遮挡侧边锚点（默认停靠在输入框外侧留白区，支持自由拖拽记忆；不再半透明避让） ── */
+/* ───── Claude Code Desktop（data-ui-style="claude"）：输入框是一张抬起的卡片 ─────
+   实底 --bg-raised、无磨砂、1px 描边 + 两道极淡投影（Claude 的输入框是纸，不是玻璃）。
+   聚焦只把描边加深一档，不加 3px 强调色外环：在近乎直角的卡片上那一圈会变成一道硬边。 */
+:root[data-ui-style="claude"] .composer {
+  background: var(--bg-raised);
+  backdrop-filter: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-composer);
+  box-shadow:
+    0 4px 12px rgba(20, 20, 19, 0.04),
+    0 1px 3px rgba(20, 20, 19, 0.02);
+}
+:root[data-ui-style="claude"] .composer:hover {
+  border-color: var(--border-strong);
+}
+:root[data-ui-style="claude"] .composer:focus-within {
+  border-color: var(--border-strong);
+  box-shadow:
+    0 4px 12px rgba(20, 20, 19, 0.04),
+    0 1px 3px rgba(20, 20, 19, 0.02);
+}
+:root[data-ui-style="claude"]:is([data-theme$="dark"], [data-theme="dark"]) .composer,
+:root[data-ui-style="claude"]:is([data-theme$="dark"], [data-theme="dark"]) .composer:focus-within {
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.32),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="claude"]:not([data-theme]) .composer,
+  :root[data-ui-style="claude"]:not([data-theme]) .composer:focus-within {
+    box-shadow:
+      0 6px 18px rgba(0, 0, 0, 0.32),
+      0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* ── 桌面宠物精灵表窗口（钉在输入框右上角内缘一点，支持自由拖拽记忆） ── */
 .composer-mascot {
   position: absolute;
   z-index: 2;
+  /* 五套界面风格、宽窄两种槽位共用同一个锚点：右上角内缘。原来宽槽会把宠物甩到输入框外的右侧留白里，
+     窗口一改宽就“飞”到正文上（2026-11-14） */
+  left: auto;
+  right: 14px;
+  bottom: calc(100% - 2px);
   pointer-events: none;
   translate: var(--mascot-dx, 0px) var(--mascot-dy, 0px);
   transform: scale(0.76);
@@ -153,47 +194,20 @@
   transition: none;
 }
 .composer-mascot-clawd {
-  left: auto;
-  right: 16px;
-  bottom: calc(100% - 4px);
   width: 104px;
   height: 72px;
 }
 .composer-mascot-deepy {
-  left: auto;
-  right: 16px;
-  bottom: calc(100% - 8px);
   width: 104px;
   height: 104px;
 }
 .composer-mascot-whalegirl {
-  left: auto;
-  right: 16px;
-  bottom: calc(100% - 10px);
   width: 138px;
   height: 132px;
 }
-.composer-mascot-clawd[data-narrow] {
-  left: auto;
+/* 窄槽（没有右侧留白）只把锚点往内让 6px，不改上下位置：宠物不从输入框上缘跳下来 */
+.composer-mascot[data-narrow] {
   right: 8px;
-  bottom: calc(100% - 2px);
-}
-.composer-mascot-deepy[data-narrow] {
-  left: auto;
-  right: 8px;
-  bottom: calc(100% - 6px);
-}
-.composer-mascot-whalegirl[data-narrow] {
-  left: auto;
-  right: 8px;
-  bottom: calc(100% - 12px);
-}
-/* 右侧留白够宽时（没有 data-narrow）干净地停靠在输入框外沿：不压正文，也不和 .composer-top、.tsp-jump 抢位置 */
-.composer-mascot:not([data-narrow]) {
-  left: calc(100% + 6px);
-  right: auto;
-  bottom: 2px;
-  transform-origin: bottom left;
 }
 .composer-mascot-sprite {
   position: absolute;
@@ -491,7 +505,8 @@ button.usage-context:hover,
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  height: 24px;
+  /* 和同一行的 .ui-chip / .usage-context / .send 同一条 28px 基线：24px 时整行控件高矮不齐 */
+  height: var(--control-h-sm);
   margin-left: 2px;
   padding: 0 7px 0 6px;
   border-radius: var(--radius-pill);
@@ -1243,8 +1258,9 @@ button.usage-context:hover,
   display: grid;
   place-items: center;
   flex: none;
-  width: var(--control-h-md);
-  height: var(--control-h-md);
+  /* 28×28：工具行上的胶囊、上下文圆环、费用都是 --control-h-sm，发送键不再比它们高一头 */
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
   padding: 0;
   border: 1px solid transparent;
   border-radius: 11px;
@@ -1256,14 +1272,22 @@ button.usage-context:hover,
     transform var(--dur-fast) var(--ease-spring),
     box-shadow var(--dur-fast) var(--ease-out);
 }
-/* 发送键跟界面风格的几何：Fluent 与云母方正（8px，Fluent 2 的控件圆角）、M3 与液态玻璃是圆胶囊 */
+/* 发送键跟界面风格的几何：Fluent 与云母方正（--radius-md）、M3 与液态玻璃是圆胶囊 */
 :root[data-ui-style="fluent"] .composer .send,
-:root[data-ui-style="mica-liquid"] .composer .send {
+:root[data-ui-style="mica-liquid"] .composer .send,
+:root[data-ui-style="claude"] .composer .send {
   border-radius: var(--radius-md);
 }
 :root[data-ui-style="expressive"] .composer .send,
 :root[data-ui-style="liquid"] .composer .send {
   border-radius: var(--radius-pill);
+}
+/* 思考档位胶囊与上下文圆环的圆角跟 .ui-chip 走（controls.css 的 fluent / mica-liquid / claude 都是 --radius-md）：
+   这里的选择器比 controls.css 的更重，不显式收回来就会把方正控件重新涂成药丸。 */
+:root:is([data-ui-style="fluent"], [data-ui-style="mica-liquid"], [data-ui-style="claude"])
+  .composer
+  :is(.ui-chip.chip-effort, .usage-context) {
+  border-radius: var(--radius-md);
 }
 .send:disabled {
   background: color-mix(in srgb, var(--text) 8%, transparent);

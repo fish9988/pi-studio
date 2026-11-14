@@ -389,6 +389,22 @@ html[data-platform="darwin"] .topbar-left {
   border-radius: var(--radius-pill);
 }
 
+/* 侧栏开关、工作台开关是常驻的开关，不是「打开了一个弹层」：展开时停在 --bg-active 的蓝紫色块上，
+   和右边 28px 圆角的工具胶囊凑在一起像两块不同材质的按钮（2026-11-14）。展开态照旧只是图标高亮。 */
+[data-testid="topbar-sidebar"].ui-icon-btn[aria-expanded="true"],
+[data-testid="topbar-files"].ui-icon-btn[aria-pressed="true"],
+[data-testid="topbar-files"].ui-icon-btn[aria-expanded="true"] {
+  background: transparent;
+  color: var(--text-2);
+}
+
+[data-testid="topbar-sidebar"].ui-icon-btn[aria-expanded="true"]:hover,
+[data-testid="topbar-files"].ui-icon-btn[aria-pressed="true"]:hover,
+[data-testid="topbar-files"].ui-icon-btn[aria-expanded="true"]:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 /* 旧的子面板独立按钮（Changes / Agents / Browser / Terminal）收拢成不可见节点：
    右侧视觉上只有一个工作台切换图标，这些节点留在 DOM 里兼容快捷键与 E2E 的 aria-pressed 断言。 */
 .topbar-legacy-toggles {
@@ -652,6 +668,8 @@ html[data-platform="darwin"] .topbar-left {
 
 :root[data-backdrop][data-backdrop-scope="window"] .panel {
   background: color-mix(in srgb, var(--bg-app) var(--bd-chat-veil, 82%), transparent);
+  /* 整窗背景图下主区是盖在图上的玻璃台面：磨砂 20px，图从面板里透出来时不带插图的边缘 */
+  backdrop-filter: blur(20px);
 }
 
 :root[data-backdrop][data-backdrop-scope="window"][data-backdrop-soft-mask="true"] .panel {
@@ -1100,22 +1118,22 @@ html[data-platform="darwin"] .topbar-left {
   }
 }
 
-/* Liquid 路径胶囊：与工具组同一层磨砂 + 内缘高光，两个胶囊才像一个系统 */
-:root[data-ui-style="liquid"] .crumb {
+/* Liquid 路径胶囊与工具组：只在全窗铺底（backdrop-scope="window"）有底图可折射时才加玻璃高光和磨砂 */
+:root[data-ui-style="liquid"][data-backdrop-scope="window"] .crumb {
   backdrop-filter: blur(26px) saturate(185%);
   box-shadow:
     var(--shadow-1),
     inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-:root[data-ui-style="liquid"][data-theme$="dark"] .crumb {
+:root[data-ui-style="liquid"][data-backdrop-scope="window"][data-theme$="dark"] .crumb {
   box-shadow:
     var(--shadow-1),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root[data-ui-style="liquid"]:not([data-theme]) .crumb {
+  :root[data-ui-style="liquid"][data-backdrop-scope="window"]:not([data-theme]) .crumb {
     box-shadow:
       var(--shadow-1),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -1136,7 +1154,7 @@ html[data-platform="darwin"] .topbar-left {
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-:root[data-ui-style="liquid"] .topbar-tools {
+:root[data-ui-style="liquid"][data-backdrop-scope="window"] .topbar-tools {
   backdrop-filter: blur(26px) saturate(185%);
   box-shadow:
     var(--shadow-1),
@@ -1150,7 +1168,7 @@ html[data-platform="darwin"] .topbar-left {
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-:root[data-ui-style="liquid"][data-theme$="dark"] .topbar-tools {
+:root[data-ui-style="liquid"][data-backdrop-scope="window"][data-theme$="dark"] .topbar-tools {
   box-shadow:
     var(--shadow-1),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -1163,7 +1181,7 @@ html[data-platform="darwin"] .topbar-left {
       inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
-  :root[data-ui-style="liquid"]:not([data-theme]) .topbar-tools {
+  :root[data-ui-style="liquid"][data-backdrop-scope="window"]:not([data-theme]) .topbar-tools {
     box-shadow:
       var(--shadow-1),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
@@ -1182,8 +1200,8 @@ html[data-platform="darwin"] .topbar-left {
   box-shadow: var(--shadow-1);
 }
 
-:root[data-ui-style="mica-liquid"] .crumb,
-:root[data-ui-style="mica-liquid"] .topbar-tools {
+:root[data-ui-style="mica-liquid"][data-backdrop-scope="window"] .crumb,
+:root[data-ui-style="mica-liquid"][data-backdrop-scope="window"] .topbar-tools {
   backdrop-filter: blur(22px) saturate(175%);
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-rim);
@@ -1197,18 +1215,95 @@ html[data-platform="darwin"] .topbar-left {
 }
 
 /* 深色里 0.45 的白会变成玻璃上一圈死白描边，只留 0.12 */
-:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .crumb,
-:root[data-ui-style="mica-liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .topbar-tools {
+:root[data-ui-style="mica-liquid"][data-backdrop-scope="window"]:is([data-theme$="dark"], [data-theme="dark"]) .crumb,
+:root[data-ui-style="mica-liquid"][data-backdrop-scope="window"]:is([data-theme$="dark"], [data-theme="dark"])
+  .topbar-tools {
   box-shadow:
     var(--shadow-1),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root[data-ui-style="mica-liquid"]:not([data-theme]) .crumb,
-  :root[data-ui-style="mica-liquid"]:not([data-theme]) .topbar-tools {
+  :root[data-ui-style="mica-liquid"][data-backdrop-scope="window"]:not([data-theme]) .crumb,
+  :root[data-ui-style="mica-liquid"][data-backdrop-scope="window"]:not([data-theme]) .topbar-tools {
     box-shadow:
       var(--shadow-1),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
+}
+
+/* ───────── 顶栏路径胶囊与工具组：没有整窗背景图时不要假磨砂 ─────────
+   原来无条件写 backdrop-filter: blur() saturate(150–185%)。但顶栏背后只是一层实色 --bg-sidebar，
+   磨砂没有东西可折射，saturate 只把那层实色换算成一块更暗的深藏青，和右边主区对不上（2026-11-14）。
+   没有 data-backdrop-scope="window" 时它们就是平面上的一行：路径胶囊无底色无描边，悬停 / 聚焦才浮出淡底。
+   放在这里（最后）是为了盖住上面 liquid / mica-liquid 的磨砂配方：那两套的磨砂只有在真有图可折射时才成立。 */
+:root:not([data-backdrop-scope="window"]) .crumb {
+  background: transparent;
+  backdrop-filter: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+:root:not([data-backdrop-scope="window"]) .crumb:hover,
+:root:not([data-backdrop-scope="window"]) .crumb:focus-within {
+  background: var(--bg-hover);
+}
+:root:not([data-backdrop-scope="window"]) .topbar-tools {
+  background: color-mix(in srgb, var(--bg-raised) 56%, var(--bg-sidebar));
+  backdrop-filter: none;
+  border-color: var(--border-subtle);
+  box-shadow: none;
+}
+
+/* 整窗背景图才需要真玻璃：顶栏后面是图，磨砂有东西可折射。只 blur 18px，不再叠 saturate()：
+   22px 的磨砂已经把 --bd-art 打散，再拉 150% 饱和度会把胶囊染成一格和周围不同的颜色。 */
+:root[data-backdrop-scope="window"] .crumb,
+:root[data-backdrop-scope="window"] .topbar-tools {
+  backdrop-filter: blur(18px);
+}
+
+/* ───────── Claude Code Desktop（data-ui-style="claude"）外壳 ─────────
+   dsh-claude-style 的骨架：顶栏不是一条同色带，而是左段（侧栏色）/ 右段（主区色）在侧栏右缘拼起来，
+   中间一条 0.5px 发丝线；主区面板去圆角、去描边、去投影，和窗口齐平。 */
+:root[data-ui-style="claude"] .topbar {
+  background: transparent;
+}
+:root[data-ui-style="claude"] .topbar-left {
+  background: var(--bg-sidebar);
+  border-right: 0.5px solid var(--border);
+}
+:root[data-ui-style="claude"] .topbar-main {
+  background: var(--bg-app);
+}
+/* 整窗背景图 / 毛玻璃 / 侧栏收起下顶栏本来就是磨砂或单层，再把两段涂实色就把图或背景盖掉了 */
+:root[data-ui-style="claude"]:is([data-backdrop-scope="window"], [data-glass]) .topbar-left,
+:root[data-ui-style="claude"]:is([data-backdrop-scope="window"], [data-glass]) .topbar-main,
+:root[data-ui-style="claude"] #app[data-sidebar="hidden"] .topbar-left {
+  background: transparent;
+  border-right-color: transparent;
+}
+:root[data-ui-style="claude"]:not([data-backdrop-scope="window"]):not([data-backdrop-scope="chat-sidebar"]):not(
+    [data-glass]
+  )
+  .body {
+  padding: 0;
+  background: var(--bg-app);
+}
+:root[data-ui-style="claude"]:is([data-backdrop-scope="window"], [data-backdrop-scope="chat-sidebar"]) .body {
+  padding: 0;
+}
+:root[data-ui-style="claude"] .sidebar-column {
+  border-right: 0.5px solid var(--border);
+}
+:root[data-ui-style="claude"] .panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* 路径胶囊和工具组在 Claude 里是纯文字 / 纯图标：没有任何胶囊底色与投影 */
+:root[data-ui-style="claude"] .crumb,
+:root[data-ui-style="claude"] .topbar-tools {
+  background: transparent;
+  backdrop-filter: none;
+  border-color: transparent;
+  box-shadow: none;
 }

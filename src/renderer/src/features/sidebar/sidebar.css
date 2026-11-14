@@ -46,8 +46,9 @@
   background: var(--bg-glass-strong);
   border-color: var(--border-subtle);
 }
-/* Fluent 2 的搜索框是带细描边的方正输入框，不是满圆药丸 */
-:root[data-ui-style="fluent"] .sb-actions .ui-field {
+/* Fluent 2 / Claude 极简的搜索框是带细描边的方正输入框，不是满圆药丸 */
+:root[data-ui-style="fluent"] .sb-actions .ui-field,
+:root[data-ui-style="claude"] .sb-actions .ui-field {
   border-radius: var(--radius-md);
   background: var(--bg-raised);
   border-color: var(--border);
@@ -78,7 +79,8 @@
   width: 100%;
   min-width: 0;
   height: 30px;
-  padding: 0 var(--space-2);
+  /* 左缘 14px = 3px 竖条（left 4px）+ 7px 空隙：选不选中都是它，文字不横向跳（2026-11-14） */
+  padding: 0 var(--space-2) 0 var(--space-3-5);
   color: var(--text-2);
   text-align: left;
   background: transparent;
@@ -99,10 +101,10 @@
   background: var(--bg-active);
 }
 /* 选中态：Fluent 2 × M3 的柔和胶囊（内描边 + 微阴影）+ 左缘 3px 主题色竖条，
-   和 .sb-row[data-selected="true"] 用同一套语言，不再是平铺一块色块 */
+   和 .sb-row[data-selected="true"] 用同一套语言，不再是平铺一块色块。
+   五套界面风格共用这道竖条：圆角都是 --radius-md，竖条在 left 4px、top/bottom 7px。 */
 .sb-new[aria-current="page"] {
   position: relative;
-  padding-left: calc(var(--space-2-5) + 2px);
   background: var(--sb-row-selected-bg);
   box-shadow: var(--sb-row-selected-shadow);
   color: var(--text);
@@ -111,22 +113,12 @@
 .sb-new[aria-current="page"]::before {
   content: "";
   position: absolute;
-  left: 3px;
+  left: 4px;
   top: 7px;
   bottom: 7px;
   width: 3px;
   border-radius: var(--radius-pill);
   background: var(--accent);
-}
-/* 3px 左缘竖条是 Fluent 2 的语言：M3 灵动与液态玻璃下改成整行药丸，不再画竖条 */
-:root[data-ui-style="expressive"] .sb-new[aria-current="page"],
-:root[data-ui-style="liquid"] .sb-new[aria-current="page"] {
-  border-radius: var(--radius-pill);
-  padding-left: var(--space-3);
-}
-:root[data-ui-style="expressive"] .sb-new[aria-current="page"]::before,
-:root[data-ui-style="liquid"] .sb-new[aria-current="page"]::before {
-  display: none;
 }
 .sb-new-label {
   flex: 1 1 auto;
@@ -244,8 +236,10 @@
   background: transparent;
 }
 :root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb-history-head {
-  background: color-mix(in srgb, var(--bg-sidebar) var(--bd-sidebar-veil, 84%), transparent);
-  backdrop-filter: blur(18px) saturate(150%);
+  /* 52% 而不是 --bd-sidebar-veil（84%）：这一层贴在 .sidebar-column 的磨砂纱上，两层纱相乘后
+   * 84% 会变成近 97% 的实心色带（2026-11-14）。52% + 磨砂足够挡住滚过去的行，又不把自己涂成一条板。 */
+  background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
+  backdrop-filter: blur(18px);
 }
 .sb-history-top {
   display: flex;
@@ -304,9 +298,10 @@
   background: var(--bg-hover);
   color: var(--text);
 }
-/* Fluent 2 的筛选胶囊是方正控件，同 .sb-actions .ui-field 的几何 */
+/* Fluent 2 / Claude 极简的筛选胶囊是方正控件，同 .sb-actions .ui-field 的几何 */
 :root[data-ui-style="fluent"] .sb-active-filter,
-:root[data-ui-style="mica-liquid"] .sb-active-filter {
+:root[data-ui-style="mica-liquid"] .sb-active-filter,
+:root[data-ui-style="claude"] .sb-active-filter {
   border-radius: var(--radius-md);
 }
 .sb-active-filter[data-has-active] {
@@ -504,9 +499,10 @@
   color: var(--text-2);
   font-weight: var(--fw-medium);
 }
+/* 悬停只加深文字，不给整块底色：折叠行本身已经有一个 hover 底，再叠一层就是两段不同的灰（同 dsh-claude-style） */
 .sb-group-head:hover .sb-group-toggle,
 .sb-group-head[data-menu-open="true"] .sb-group-toggle {
-  background: var(--bg-hover);
+  background: transparent;
   color: var(--text);
 }
 .sb-folder-icon {
@@ -520,10 +516,12 @@
   color: var(--text-3);
   opacity: 0.72;
 }
+/* 缩进轨道的左缘对准文件夹图标的中线（头部左内边距 8px + 图标半宽 ≈ 7px）；
+   内边距只留 6px，子行不会因为轨道往右挪 2px 而跟着错位 */
 .sb-group-body {
   position: relative;
-  margin: 2px 0 4px 13px;
-  padding-left: 7px;
+  margin: 2px 0 4px 15px;
+  padding-left: 6px;
   border-left: 1px solid var(--border-subtle);
 }
 /* 箭头跟在名称后面：展开朝下，折叠朝右；名称太长被省略时箭头不被挤掉 */
@@ -656,11 +654,11 @@
   background: var(--sb-row-selected-bg);
   box-shadow: var(--sb-row-selected-shadow);
 }
-/* Fluent 2 左侧 3px 主题色选中指示竖条 */
+/* Fluent 2 左侧 3px 主题色选中指示竖条（五套界面风格共用，见 .sb-new 的同一道竖条） */
 .sb-row[data-selected="true"]::before {
   content: "";
   position: absolute;
-  left: 3px;
+  left: 4px;
   top: 7px;
   bottom: 7px;
   width: 3px;
@@ -674,12 +672,8 @@
 :root[data-ui-style="liquid"] .sb-row[data-selected="true"] {
   backdrop-filter: blur(12px);
 }
-/* 3px 左缘竖条只留给 Fluent 2 与云母（mica-liquid）：M3 灵动与液态玻璃下选中行是整行药丸，
- * 不再叠一道竖条（同 .sb-new）。云母靠这道竖条复刻 Fluent 2 的层级感，所以不写 mica-liquid 规则。 */
-:root[data-ui-style="expressive"] .sb-row[data-selected="true"]::before,
-:root[data-ui-style="liquid"] .sb-row[data-selected="true"]::before {
-  display: none;
-}
+/* 3px 左缘竖条五套界面风格都保留：选中态是「同一块行底 + 一道竖条」，M3 / 液态玻璃不再换成整行药丸，
+ * 否则切风格时选中行会从「左对齐竖条」跳成「居中药丸」。 */
 .sb-row-main {
   display: flex;
   flex: 1;
@@ -687,7 +681,8 @@
   gap: var(--space-1-5);
   min-width: 0;
   height: 100%;
-  padding: 0 var(--space-2) 0 var(--space-2-5);
+  /* 左缘 14px 与 .sb-new 一致：竖条（left 4px + 3px）之后留 7px，文字不横向跳 */
+  padding: 0 var(--space-2) 0 var(--space-3-5);
   border-radius: var(--radius-md);
   color: var(--text-2);
   transition: color var(--dur-fast) var(--ease-out);
@@ -876,7 +871,7 @@
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-2);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 0.5px solid var(--border-subtle);
 }
 .sb-settings {
   display: flex;
@@ -931,4 +926,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Claude Code Desktop：行高收到 28px、圆角 6px，靠间距和左缘竖条分层，不再用 32px 的胶囊行（同 dsh-claude-style） */
+:root[data-ui-style="claude"] .sb-row,
+:root[data-ui-style="claude"] .sb-new {
+  height: var(--control-h-sm);
+  border-radius: var(--radius-sm);
 }

@@ -423,6 +423,14 @@
   border-color: rgba(15, 23, 42, 0.16);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
+/* 气泡里的代码卡头抬成实体亮白底：在 claude-light 的浅暖灰气泡里也能清楚分出代码头部 */
+:root .tsp-card[data-role="omp.user"] .md-codeblock[data-code-light] .md-codehead {
+  background: var(--bg-raised);
+}
+/* 自己发出去的代码块不画红黄绿三个窗口点：气泡本身不是窗口，三个点是终端卡的语言 */
+.tsp-card[data-role="omp.user"] .md-code-dots {
+  display: none;
+}
 /* 自己发出去的代码块不给「引用到输入框」按钮：引用自己刚说的话没意义 */
 .tsp-card[data-role="omp.user"] [data-testid="codeblock-quote-composer"] {
   display: none;
@@ -438,7 +446,9 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 :root[data-ui-style="liquid"] .md-codeblock[data-code-dark] {
-  background: color-mix(in srgb, #080c17 92%, transparent);
+  /* 透一点底，但底子跟主题走：写死的 #080c17 会让 coral / amber / dusk / claude 这些暖色主题
+   * 在深色代码卡里露出一块冷调靛蓝，和卡片头部、正文的暖调对不上（2026-11-14） */
+  background: color-mix(in srgb, var(--bg-code) 92%, transparent);
 }
 :root[data-ui-style="liquid"] .md-codeblock[data-code-dark] .md-codehead {
   background: color-mix(in srgb, var(--bg-code-head) 82%, transparent);
@@ -647,7 +657,8 @@
   overflow-y: auto;
   font-family: var(--font-mono);
   font-size: calc(1em - 1px);
-  font-weight: var(--fw-medium);
+  /* 400 而不是 500：Anthropic Mono 只发了 400 一档，写 500 会触发 Chromium 的合成加粗（字面发虚、笔画发胖） */
+  font-weight: var(--fw-regular);
   line-height: 23px;
   color: var(--fg-code);
   tab-size: 2;
@@ -711,4 +722,37 @@ button.md-attach-chip:hover {
 }
 button.md-attach-chip:active {
   transform: scale(0.95);
+}
+
+/* ───────── Claude Code Desktop（data-ui-style="claude"）正文材质 ─────────
+   表格是 0.5px 发丝线的通栏卡片；行内代码是中性灰小方块（不带主题强调色）；
+   代码卡直角 var(--radius-lg)、不画红黄绿三个窗口点。 */
+:root[data-ui-style="claude"] .md-table {
+  width: 100%;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+:root[data-ui-style="claude"] .md-table thead th,
+:root[data-ui-style="claude"] .md-table thead td {
+  background: var(--bg-sunken);
+  border-bottom: 0.5px solid var(--border);
+}
+:root[data-ui-style="claude"] .md-table th,
+:root[data-ui-style="claude"] .md-table td {
+  border-bottom: 0.5px solid var(--border-subtle);
+}
+:root[data-ui-style="claude"] .md-code-inline {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+  line-height: 1.2;
+}
+:root[data-ui-style="claude"] .md-codeblock {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+:root[data-ui-style="claude"] .md-codeblock .md-code-dots {
+  display: none;
 }

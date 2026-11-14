@@ -365,6 +365,21 @@
   }
 }
 
+/* Claude Code Desktop（data-ui-style="claude"）：几乎全部直角——面板、卡片、菜单都不画圆角，
+ * 只给控件留 6px、浮层给 12px、输入浮岛给 18px。代码卡走纯白冷底一套（同 dsh-claude-style）。 */
+:root[data-ui-style="claude"] {
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --radius-xl: 0px;
+  --radius-panel: 0px;
+  --radius-composer: 18px;
+  --bg-code-light: #ffffff;
+  --bg-code-light-head: #f7f7f6;
+  --border-code-light: #e9e9e9;
+  --fg-code-light: #161616;
+}
+
 /* 高亮 token 的类名（markdown/highlight-tokens.ts 的 tokenProps）：一种颜色一条规则，代替每个 token 一个内联 style。
    token-inserted / deleted / changed 没定义变量，和原来的内联写法一样继承所在行的颜色（diff 行的增删色）。 */
 .hl-foreground {
@@ -533,8 +548,8 @@
   --scrollbar-thumb-hover: rgba(19, 22, 41, 0.34);
 
   --sb-row-selected-bg: #e3e7fc;
-  --sb-row-selected-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(91, 78, 230, 0.16), 0 1px 2px rgba(19, 22, 41, 0.04);
+  /* 选中行只用一道很淡的内描边：原来 0.16 的强调色环 + 投影把行包成了一个盒子（2026-11-14） */
+  --sb-row-selected-shadow: inset 0 0 0 1px rgba(91, 78, 230, 0.08);
   --sb-running-dots: #5b4ee6;
   --sb-active-pill-bg: #ffffff;
   --sb-active-pill-border: rgba(91, 78, 230, 0.22);
@@ -626,10 +641,11 @@
     --scrollbar-thumb: rgba(242, 244, 252, 0.2);
     --scrollbar-thumb-hover: rgba(242, 244, 252, 0.38);
 
-    --sb-row-selected-bg: #1e2447;
-    --sb-row-selected-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(139, 140, 248, 0.22);
+    --sb-row-selected-bg: #171d3a;
+    /* 选中行只用一道很淡的内描边（同浅色块）：0.22 的强调色环把行包成了一个盒子 */
+    --sb-row-selected-shadow: inset 0 0 0 1px rgba(139, 140, 248, 0.08);
     --sb-running-dots: #8b8cf8;
-    --sb-active-pill-bg: #1e2447;
+    --sb-active-pill-bg: #171d3a;
     --sb-active-pill-border: rgba(139, 140, 248, 0.28);
     --sb-active-pill-fg: #f2f4fc;
 
@@ -749,10 +765,11 @@
   --scrollbar-thumb: rgba(242, 244, 252, 0.2);
   --scrollbar-thumb-hover: rgba(242, 244, 252, 0.38);
 
-  --sb-row-selected-bg: #1e2447;
-  --sb-row-selected-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(139, 140, 248, 0.22);
+  --sb-row-selected-bg: #171d3a;
+  /* 与系统深色块逐行一致（test/themes.test.ts 校验） */
+  --sb-row-selected-shadow: inset 0 0 0 1px rgba(139, 140, 248, 0.08);
   --sb-running-dots: #8b8cf8;
-  --sb-active-pill-bg: #1e2447;
+  --sb-active-pill-bg: #171d3a;
   --sb-active-pill-border: rgba(139, 140, 248, 0.28);
   --sb-active-pill-fg: #f2f4fc;
 

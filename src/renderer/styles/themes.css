@@ -1,7 +1,188 @@
-/* 其余 8 套双模式主题（16 张色板），每套都融合 Material 3 Expressive × Fluent 2 × Liquid Glass 表面语义。
+/* 其余 9 套双模式主题（18 张色板），每套都融合 Material 3 Expressive × Fluent 2 × Liquid Glass 表面语义。
    每张色板必须声明与 tokens.css 浅色基准块完全一致的 token 集合（test/themes.test.ts 逐键校验与 WCAG 对比度检测）。 */
 
-/* ───────── 1. 冰川云母（Mica · Microsoft Fluent 2 天青蓝） ───────── */
+/* ───────── 1. Claude Code（Claude · Anthropic 陶土珊瑚暖纸） ───────── */
+[data-theme="claude-light"] {
+  color-scheme: light;
+
+  --bg-sidebar: #fafafa;
+  --bg-app: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-overlay: #ffffff;
+  --bg-sunken: #f4f4f4;
+  --bg-tool: #f7f6f5;
+  --bg-code: #1a1918;
+  --bg-code-head: #242220;
+  --fg-code: #f5f2ef;
+  --fg-code-muted: #a69e9a;
+  --border-code: rgba(255, 255, 255, 0.14);
+  --bg-hover: rgba(22, 22, 22, 0.055);
+  --bg-active: rgba(217, 119, 87, 0.13);
+  --bg-scrim: rgba(22, 22, 22, 0.32);
+  --bg-bubble: #f4f2f3;
+
+  --border-subtle: rgba(22, 22, 22, 0.07);
+  --border: rgba(22, 22, 22, 0.13);
+  --border-strong: rgba(22, 22, 22, 0.24);
+
+  --text: #161616;
+  --text-2: #5c5456;
+  --text-3: #6c6365;
+  --text-disabled: #8c8284;
+  --text-on-accent: #ffffff;
+  --text-on-danger: #ffffff;
+  --control-on: #ffffff;
+
+  --accent: #b84f2e;
+  --accent-soft: rgba(217, 119, 87, 0.14);
+  --accent-gradient: linear-gradient(135deg, #d97757, #c46343);
+  --selection-bg: rgba(184, 79, 46, 0.18);
+  --focus-ring: #b84f2e;
+  --link: #184f95;
+
+  --primary: #b84f2e;
+  --primary-hover: #a14224;
+  --text-on-primary: #ffffff;
+
+  --st-running: #d97757;
+  --st-waiting: #b56c00;
+  --st-waiting-text: #854f00;
+  --st-waiting-soft: rgba(181, 108, 0, 0.12);
+  --st-done: #15803d;
+  --st-error: #c62828;
+  --st-error-soft: rgba(198, 40, 40, 0.09);
+
+  --chart-1: #b84f2e;
+  --chart-2: #184f95;
+  --chart-3: #b56c00;
+  --chart-4: #15803d;
+  --chart-5: #be185d;
+  --chart-6: #0e7490;
+
+  --diff-add-fg: #15803d;
+  --diff-del-fg: #c62828;
+  --diff-add-bg: rgba(21, 128, 61, 0.1);
+  --diff-del-bg: rgba(198, 40, 40, 0.09);
+
+  --syn-keyword: #9a3412;
+  --syn-string: #15803d;
+  --syn-number: #8f5300;
+  --syn-comment: #685f61;
+  --syn-func: #9e3d1e;
+  --syn-type: #0e7490;
+  --syn-punct: #5c5456;
+
+  --shadow-1: 0 1px 3px rgba(22, 22, 22, 0.05);
+  --shadow-2: 0 8px 24px rgba(22, 22, 22, 0.08), 0 1px 3px rgba(22, 22, 22, 0.04);
+  --shadow-3: 0 24px 64px rgba(22, 22, 22, 0.14), 0 0 0 1px var(--border);
+  --shadow-modal: 0 24px 64px rgba(22, 22, 22, 0.14);
+  --shadow-composer: 0 10px 28px rgba(22, 22, 22, 0.07), 0 2px 6px rgba(22, 22, 22, 0.04);
+
+  --scrollbar-thumb: rgba(22, 22, 22, 0.18);
+  --scrollbar-thumb-hover: rgba(22, 22, 22, 0.34);
+
+  --sb-row-selected-bg: #f6e6e0;
+  --sb-row-selected-shadow: inset 0 0 0 1px rgba(184, 79, 46, 0.12);
+  --sb-running-dots: #d97757;
+  --sb-active-pill-bg: #ffffff;
+  --sb-active-pill-border: rgba(184, 79, 46, 0.22);
+  --sb-active-pill-fg: #7a2d15;
+
+  --accent-glow: none;
+  --theme-art: url("./themes/claude-light.svg");
+}
+
+[data-theme="claude-dark"] {
+  color-scheme: dark;
+
+  --bg-sidebar: #1f1f1f;
+  --bg-app: #191919;
+  --bg-raised: #232323;
+  --bg-overlay: #282828;
+  --bg-sunken: #141414;
+  --bg-tool: #212121;
+  --bg-code: #141414;
+  --bg-code-head: #212121;
+  --fg-code: #fdfdfd;
+  --fg-code-muted: #9c9395;
+  --border-code: rgba(255, 255, 255, 0.12);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(217, 119, 87, 0.18);
+  --bg-scrim: rgba(10, 10, 10, 0.64);
+  --bg-bubble: #292726;
+
+  --border-subtle: rgba(255, 255, 255, 0.075);
+  --border: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.24);
+
+  --text: #fdfdfd;
+  --text-2: #beb6b8;
+  --text-3: #9c9395;
+  --text-disabled: #7d7577;
+  --text-on-accent: #161616;
+  --text-on-danger: #1a0707;
+  --control-on: #2b2b2b;
+
+  --accent: #d97757;
+  --accent-soft: rgba(217, 119, 87, 0.18);
+  --accent-gradient: linear-gradient(135deg, #d97757, #e8926f);
+  --selection-bg: rgba(217, 119, 87, 0.26);
+  --focus-ring: #d97757;
+  --link: #8ab4f8;
+
+  --primary: #d97757;
+  --primary-hover: #eb9170;
+  --text-on-primary: #161616;
+
+  --st-running: #d97757;
+  --st-waiting: #e09a4d;
+  --st-waiting-text: #e8ab63;
+  --st-waiting-soft: rgba(224, 154, 77, 0.16);
+  --st-done: #4ade80;
+  --st-error: #f87171;
+  --st-error-soft: rgba(248, 113, 113, 0.14);
+
+  --chart-1: #d97757;
+  --chart-2: #8ab4f8;
+  --chart-3: #e8ab63;
+  --chart-4: #4ade80;
+  --chart-5: #f472b6;
+  --chart-6: #a78bfa;
+
+  --diff-add-fg: #4ade80;
+  --diff-del-fg: #f87171;
+  --diff-add-bg: rgba(74, 222, 128, 0.14);
+  --diff-del-bg: rgba(248, 113, 113, 0.14);
+
+  --syn-keyword: #f472b6;
+  --syn-string: #4ade80;
+  --syn-number: #fcd34d;
+  --syn-comment: #9c9395;
+  --syn-func: #e8926f;
+  --syn-type: #7dd3fc;
+  --syn-punct: #beb6b8;
+
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.32);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.42), 0 0 0 1px var(--border-subtle);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, 0.56), 0 0 0 1px var(--border);
+  --shadow-modal: var(--shadow-3);
+  --shadow-composer: 0 12px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px var(--border-subtle);
+
+  --scrollbar-thumb: rgba(253, 253, 253, 0.2);
+  --scrollbar-thumb-hover: rgba(253, 253, 253, 0.38);
+
+  --sb-row-selected-bg: #2f2622;
+  --sb-row-selected-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.16);
+  --sb-running-dots: #d97757;
+  --sb-active-pill-bg: #2f2622;
+  --sb-active-pill-border: rgba(217, 119, 87, 0.28);
+  --sb-active-pill-fg: #fdfdfd;
+
+  --accent-glow: none;
+  --theme-art: url("./themes/claude-dark.svg");
+}
+
+/* ───────── 2. 冰川云母（Mica · Microsoft Fluent 2 天青蓝） ───────── */
 [data-theme="mica-light"] {
   color-scheme: light;
 
@@ -183,7 +364,7 @@
   --theme-art: url("./themes/mica-dark.svg");
 }
 
-/* ───────── 2. 极光翠雾（Aurora · Google Material 3 苍翠极光） ───────── */
+/* ───────── 3. 极光翠雾（Aurora · Google Material 3 苍翠极光） ───────── */
 [data-theme="aurora-light"] {
   color-scheme: light;
 
@@ -365,7 +546,7 @@
   --theme-art: url("./themes/aurora-dark.svg");
 }
 
-/* ───────── 3. 液态珊瑚（Coral · Apple Liquid Glass 珊瑚霓虹） ───────── */
+/* ───────── 4. 液态珊瑚（Coral · Apple Liquid Glass 珊瑚霓虹） ───────── */
 [data-theme="coral-light"] {
   color-scheme: light;
 
@@ -547,7 +728,7 @@
   --theme-art: url("./themes/coral-dark.svg");
 }
 
-/* ───────── 4. 钛金琥珀（Amber · Titanium Pro 琥珀暖金） ───────── */
+/* ───────── 5. 钛金琥珀（Amber · Titanium Pro 琥珀暖金） ───────── */
 [data-theme="amber-light"] {
   color-scheme: light;
 
@@ -729,7 +910,7 @@
   --theme-art: url("./themes/amber-dark.svg");
 }
 
-/* ───────── 5. 曜石深空（Obsidian · Studio Monochrome 钴灰） ───────── */
+/* ───────── 6. 曜石深空（Obsidian · Studio Monochrome 钴灰） ───────── */
 [data-theme="obsidian-light"] {
   color-scheme: light;
 
@@ -911,7 +1092,7 @@
   --theme-art: none;
 }
 
-/* ───────── 6. 鼠尾草晨雾（Sage · 护眼森系清晨草雾） ───────── */
+/* ───────── 7. 鼠尾草晨雾（Sage · 护眼森系清晨草雾） ───────── */
 [data-theme="sage-light"] {
   color-scheme: light;
 
@@ -1093,7 +1274,7 @@
   --theme-art: url("./themes/sage-dark.svg");
 }
 
-/* ───────── 7. 海岸青灰（Slate · Coastal 海盐薄雾） ───────── */
+/* ───────── 8. 海岸青灰（Slate · Coastal 海盐薄雾） ───────── */
 [data-theme="slate-light"] {
   color-scheme: light;
 
@@ -1275,7 +1456,7 @@
   --theme-art: url("./themes/slate-dark.svg");
 }
 
-/* ───────── 8. 暮紫黄昏（Dusk · Twilight 薰衣草薄雾） ───────── */
+/* ───────── 9. 暮紫黄昏（Dusk · Twilight 薰衣草薄雾） ───────── */
 [data-theme="dusk-light"] {
   color-scheme: light;
 

@@ -202,7 +202,8 @@
   flex: 1 1 auto;
   flex-direction: column;
   padding: var(--space-4) var(--space-4) var(--space-6);
-  background: var(--bg-app);
+  /* 凹陷台面：上面 --bg-raised 的 Bento 磁贴在 Fluent / 云母浅色下才有分层，否则是白底上的白块 */
+  background: var(--bg-sunken);
   overflow-y: auto;
   /* 窄右栏里用容器查询收掉磁贴快捷键，免得溢出 */
   container-type: inline-size;

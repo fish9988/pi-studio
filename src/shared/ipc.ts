@@ -1095,7 +1095,7 @@ export interface ShellState {
   chatWidth?: number;
   /** 顶栏与新任务页的品牌标志风格（Claude / DeepSeek / OMP）。 */
   brandStyle?: BrandStyle;
-  /** 界面设计风格（Fluent 云母 / 云母液态 / M3 灵动 / Liquid 液态），映射到根节点的 data-ui-style。 */
+  /** 界面设计风格（Fluent 云母 / 云母液态 / M3 灵动 / Liquid 液态 / Claude 极简），映射到根节点的 data-ui-style。 */
   uiStyle?: UiStyle;
   /** 代码块配色（随设计风格 / 深色终端 / 冷灰浅色），映射到根节点的 data-code-block-style。 */
   codeBlockStyle?: CodeBlockStyle;
@@ -1144,8 +1144,8 @@ export const conversationViews: readonly ConversationView[] = ["chat", "trajecto
 export type BrandStyle = "pi" | "claude" | "deepseek" | "omp";
 export const brandStyles: readonly BrandStyle[] = ["pi", "claude", "deepseek", "omp"];
 
-export type UiStyle = "fluent" | "mica-liquid" | "expressive" | "liquid";
-export const uiStyles: readonly UiStyle[] = ["fluent", "mica-liquid", "expressive", "liquid"];
+export type UiStyle = "fluent" | "mica-liquid" | "expressive" | "liquid" | "claude";
+export const uiStyles: readonly UiStyle[] = ["fluent", "mica-liquid", "expressive", "liquid", "claude"];
 
 /** 背景图的覆盖范围：只聊天区 / 聊天区 + 侧栏 / 整窗铺底（映射到根节点的 data-backdrop-scope）。 */
 export type BackdropScope = "chat" | "chat-sidebar" | "window";

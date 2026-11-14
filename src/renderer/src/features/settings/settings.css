@@ -407,9 +407,11 @@
   grid-template-columns: minmax(0, 1fr);
   row-gap: var(--space-1-5);
 }
-/* 四段的设计风格分段同理横跨整行：双列格里 4 个中文标签挤一格会折成两行 */
+/* 五段的设计风格分段同样改为上方标签+整行分段：高字号下五个中文标签不会挤在一列里折行 */
 .st-cells .ui-row:has([data-testid="setting-ui-style"]) {
   grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-1-5);
 }
 .st-cells .ui-row:has([data-testid="setting-process-rows"]) {
   grid-column: 1 / -1;
@@ -715,24 +717,24 @@
 
 /* ───────── 通用 → 外观：主题画廊（ThemeGallery.tsx） ───────── */
 
-/* 卡片网格：固定三列（九个主题家族刚好三排，3×3 左右对称）；容器窄到 520 以下降成两列。
+/* 卡片网格：固定五列（十个主题家族刚好两排，5×2 左右上下都对称）；容器窄到 600 降三列、420 降两列。
    预览块挂 data-theme，下面的颜色都是那个主题自己的变量。
-   三排 × 9 张要完整落在弹窗视口里：格距与卡片内边距取最紧的一档，预览块 16 / 7.2 压扁一点。 */
+   两排 × 10 张要完整落在弹窗视口里（不许折到屏幕下方）：格距与卡片内边距取最紧的一档，预览块走 16 / 9。 */
 .st-theme-gallery {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-1-5);
   margin: var(--space-2-5) 0 var(--space-1);
 }
 
 .st-theme-card {
   display: grid;
   grid-template-rows: auto auto;
-  gap: var(--space-1-5);
+  gap: var(--space-1);
   min-width: 0;
   padding: var(--space-1-5);
   font: inherit;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   color: var(--text-2);
   text-align: left;
   cursor: pointer;
@@ -770,7 +772,7 @@
 /* 迷你界面：底色 = 侧栏 / 顶栏，主区面板在右下（主区底 + 主题插图），右上一个你的消息气泡，左下一个强调色点 */
 .st-theme-preview {
   display: flex;
-  aspect-ratio: 16 / 7.2;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
   background: var(--bg-app);
   border: 1px solid var(--border-subtle);
@@ -812,13 +814,19 @@
   width: 22%;
 }
 
-/* 插图是 ThemeGallery.tsx 内联的缩略图（不用 --theme-art 的 SVG，见那里的说明） */
+/* 插图是 ThemeGallery.tsx 内联的缩略图（不用 --theme-art 的 SVG，见那里的说明）；
+   没有 WebP 插图的主题（默认 / 曜石）也垫一层极淡环境光晕，5×2 网格十张卡视觉重量更均衡。 */
 .st-theme-main {
   position: relative;
   flex: 1;
   min-width: 0;
   margin: var(--space-2) var(--space-1) var(--space-1) 0;
   background-color: var(--bg-app);
+  background-image: radial-gradient(
+    circle at 82% 80%,
+    color-mix(in srgb, var(--accent) 18%, transparent),
+    transparent 64%
+  );
   background-position: right bottom;
   background-size: cover;
   border-radius: var(--radius-sm);
@@ -845,11 +853,10 @@
   box-shadow: var(--accent-glow);
 }
 
-/* 没有 WebP 缩略图的主题（默认 / 黑曜石）用骨架搭一层迷你界面，六张卡都不至于空着：
-   一条标题行 + 一块代码面板，颜色全取主题自己的变量，位置避开右上气泡与左下强调点。 */
+/* 没有 WebP 缩略图的主题（默认 / 黑曜石）用骨架搭一层迷你界面，底部留足 34% 避开左下强调圆点。 */
 .st-theme-skeleton {
   position: absolute;
-  inset: 40% 10% 24%;
+  inset: 36% 10% 34%;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -878,7 +885,14 @@
   white-space: nowrap;
 }
 
-@container (max-width: 520px) {
+/* 五列在弹窗里一行排开最整齐；面板窄下来（侧栏式设置窗）先降三列，再窄降到两列，卡片不被挤成细条 */
+@container (max-width: 600px) {
+  .st-theme-gallery {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 420px) {
   .st-theme-gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

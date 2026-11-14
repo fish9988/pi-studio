@@ -9,6 +9,23 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-14
+
+### Added
+
+- Added the **Claude Code Desktop** theme family (`claude-light` / `claude-dark`) and dedicated **`Claude` UI design style** inspired by `dsh-claude-style`: warm alabaster & charcoal surfaces with terracotta accents, flush split chrome with `0.5px` hairlines, full-width `12px` rounded tables, crisp bordered inline code chips, dot-free light/dark code cards, and an elevated `18px` minimal composer card.
+- Arranged the Settings theme gallery into a symmetric **5×2 ten-theme grid** so all ten dual-mode theme families fit cleanly above the fold.
+
+### Fixed
+
+- Fixed the dark-mode topbar color mismatch caused by persistent `aria-expanded` active tinting on the sidebar toggle and false `saturate()` backdrop-filtering on `.crumb` over solid chrome, and gated window-backdrop glass highlights cleanly.
+- Restored the **`3px` left accent bar** on selected sidebar sessions and the active New Task row across **all 5 UI design styles**, with stable `14px` left padding and refined dark contrast.
+- Fixed hardcoded navy background on Liquid dark code cards, improved light code header contrast inside user message bubbles, prevented theme skeleton overlap with accent dots, and reduced double-veil stacking on sticky sidebar headers under full-window backdrops.
+
+### Changed
+
+- Aligned composer toolbar controls and send button on a unified `28px` optical baseline, kept mascot anchoring steady across window resizes, tightened conversation vertical spacing, improved turn footer metadata contrast, and added subtle recessed depth to the light Overview workbench.
+
 ## [0.5.0] - 2026-11-14
 
 ### Added

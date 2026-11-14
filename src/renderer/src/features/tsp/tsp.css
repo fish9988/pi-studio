@@ -143,8 +143,20 @@
   /* 对话内容在底端 14px 内渐隐到输入浮岛（2026-11-13）：mask 只改 alpha、不改颜色，纯白底 / Liquid 染色 /
    * 整窗背景图都能一起淡出，不再用一层实色 --bg-app 的渐变遮住背景。
    * mask 只在滚动区自己的边框盒里生效（不是滚动内容），所以只要滚动区，不要层层套。 */
-  mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 14px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 calc(100% - 24px),
+    rgba(0, 0, 0, 0.45) calc(100% - 8px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 calc(100% - 24px),
+    rgba(0, 0, 0, 0.45) calc(100% - 8px),
+    transparent 100%
+  );
 }
 
 /* 对话列：和旧 ConversationView 同宽同轴（--content-w），块之间 --space-4 */
@@ -257,8 +269,9 @@
 .tsp-convline {
   position: absolute;
   top: var(--space-6);
-  bottom: var(--space-6);
-  right: 12px;
+  /* 底部让出 56px：右下角有 .tsp-jump 悬浮按钮，窄对话时两者会叠在一起 */
+  bottom: 56px;
+  right: 6px;
   z-index: calc(var(--z-sticky) + 3);
   display: flex;
   flex-direction: column;
@@ -3034,7 +3047,8 @@
   align-self: flex-end;
   max-width: 82%;
   margin-top: var(--space-3);
-  margin-bottom: var(--space-6);
+  /* 用户的提问和下面助手的回答是一个回合：只隔一个块间距，不再空出一大块（2026-11-14） */
+  margin-bottom: var(--space-2);
   background: var(--bg-bubble);
   border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
   box-shadow: var(--shadow-1);
@@ -3307,7 +3321,8 @@
   margin-top: 2px;
   color: var(--text-3);
   font-size: var(--fs-2xs);
-  opacity: 0.45;
+  /* 0.78 而不是 0.45：0.45 时这一回合的用量几乎看不见，鼠标不悬停就读不出来 */
+  opacity: 0.78;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 .tsp-col[data-role="omp.assistant"]:hover > .tsp-row[data-role="omp.turn.usage"],
@@ -3406,7 +3421,8 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  margin-bottom: var(--space-2);
+  /* 过程区自己不留底边距：和下面的回答靠 .tsp-column 的 gap 隔开，否则两段间距会叠成一块空 */
+  margin-bottom: 0;
 }
 .tsp-process-live-dot {
   width: 7px;

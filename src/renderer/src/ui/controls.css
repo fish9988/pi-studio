@@ -539,14 +539,17 @@
     0 0 0 1px color-mix(in srgb, var(--accent) 32%, var(--border));
 }
 
-/* Fluent 2：分段控件与胶囊按钮去满圆，改方正小圆角，贴合 Fluent 的几何语言；
- * 云母沿用同一套几何（玻璃质感在别处给，控件本身保持 Fluent 2 的方块感） */
+/* Fluent 2 / Claude 极简：分段控件与胶囊按钮去满圆，改方正小圆角，贴合几何语言；
+ * 云母液态沿用同一套几何（玻璃质感在别处给，控件本身保持 Fluent 2 的方块感） */
 :root[data-ui-style="fluent"] .ui-seg,
 :root[data-ui-style="fluent"] .ui-seg > button,
 :root[data-ui-style="fluent"] .ui-chip,
 :root[data-ui-style="mica-liquid"] .ui-seg,
 :root[data-ui-style="mica-liquid"] .ui-seg > button,
-:root[data-ui-style="mica-liquid"] .ui-chip {
+:root[data-ui-style="mica-liquid"] .ui-chip,
+:root[data-ui-style="claude"] .ui-seg,
+:root[data-ui-style="claude"] .ui-seg > button,
+:root[data-ui-style="claude"] .ui-chip {
   border-radius: var(--radius-md);
 }
 

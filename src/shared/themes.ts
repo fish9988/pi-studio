@@ -1,6 +1,7 @@
 // 内置配色主题与独立深浅色模式（ColorMode × ThemeFamily → 具体 CSS [data-theme]）。
 // 融合 Material 3 Expressive、Microsoft Fluent 2 与 Apple Liquid Glass 三大设计语言：
 // - default（灵动紫晶）：Porcelain 浅瓷云母 / Cosmic 暗夜深空 + Indigo-Violet 渐变高光；
+// - claude（Claude Code）：Anthropic 陶土珊瑚 #d97757，暖象牙白 / 深暖炭灰双模式；
 // - mica（冰川云母）：Windows 11 Fluent 2 天青蓝；
 // - aurora（极光翠雾）：Google Material 3 苍翠极光；
 // - coral（液态珊瑚）：Apple Liquid Glass 珊瑚霓虹；
@@ -19,6 +20,7 @@ export function isColorMode(value: string): value is ColorMode {
 
 export const themeFamilyNames = [
   "default",
+  "claude",
   "mica",
   "aurora",
   "sage",
@@ -38,6 +40,8 @@ export function isThemeFamily(value: string): value is ThemeFamily {
 export const themeNames = [
   "light",
   "dark",
+  "claude-light",
+  "claude-dark",
   "mica-light",
   "mica-dark",
   "aurora-light",
@@ -77,6 +81,7 @@ export interface ThemeSpec {
 
 export const themeFamilies = {
   default: { light: "light", dark: "dark" },
+  claude: { light: "claude-light", dark: "claude-dark" },
   mica: { light: "mica-light", dark: "mica-dark" },
   aurora: { light: "aurora-light", dark: "aurora-dark" },
   coral: { light: "coral-light", dark: "coral-dark" },
@@ -103,6 +108,22 @@ export const themes = {
     text: "#f2f4fc",
     scrim: "rgba(5, 8, 18, 0.62)",
     art: false,
+  },
+  "claude-light": {
+    dark: false,
+    app: "#ffffff",
+    sidebar: "#fafafa",
+    text: "#161616",
+    scrim: "rgba(22, 22, 22, 0.32)",
+    art: true,
+  },
+  "claude-dark": {
+    dark: true,
+    app: "#191919",
+    sidebar: "#1f1f1f",
+    text: "#fdfdfd",
+    scrim: "rgba(10, 10, 10, 0.64)",
+    art: true,
   },
   "mica-light": {
     dark: false,
@@ -244,6 +265,7 @@ export function familyOfTheme(preference: string): ThemeFamily {
     return "default";
   }
   if (isThemeFamily(preference)) return preference;
+  if (preference.startsWith("claude-")) return "claude";
   if (preference.startsWith("mica-")) return "mica";
   if (preference.startsWith("aurora-")) return "aurora";
   if (preference.startsWith("coral-")) return "coral";
@@ -256,7 +278,6 @@ export function familyOfTheme(preference: string): ThemeFamily {
   if (preference === "deepseek" || preference.startsWith("deepseek-") || preference.startsWith("whale-")) return "mica";
   if (preference === "openai" || preference.startsWith("openai-")) return "aurora";
   if (preference === "sakura" || preference.startsWith("sakura-") || preference === "night-sakura") return "coral";
-  if (preference === "claude" || preference.startsWith("claude-")) return "amber";
   if (preference === "ink" || preference.startsWith("ink-")) return "obsidian";
   if (
     preference === "pi" ||
