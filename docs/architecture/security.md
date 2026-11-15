@@ -6,7 +6,8 @@
 
 - `BrowserWindow` 一律 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`，不开 `webviewTag`，不关 `webSecurity`（`browser-window-flags`）。CSP 严格：不允许内联脚本和 `eval`，不从网络加载脚本。
 - 页面只从 `app://studio/` 加载；禁止窗口内导航到外部地址和新开窗口（`will-navigate`、`setWindowOpenHandler`）。
-- 例外只有右栏浏览器面板（仓库所有者 2026-10-28 批准）：外部网页放在主进程的独立 `WebContentsView` 里（`sandbox`、`contextIsolation`、独立分区、拒绝所有权限、只放行 http/https），不和应用页面同一个 webContents、拿不到 preload；给 omp 的 CDP 口只听 127.0.0.1、校验 Host、拒带 Origin 的请求、路径带随机 token。见 [browser.md](browser.md)「安全」。
+- HTML 文件预览通过随机、可释放的 `app://preview/<id>` 内存文档响应加载，避免 `srcdoc` 继承主应用 CSP。预览 iframe 与响应 CSP 同时施加 `sandbox`，仅允许 `allow-scripts`，无 `allow-same-origin`、preload、Node、表单、弹窗或顶层导航权限；应用自身的 `script-src` 保持严格。预览只可按文档请求 HTTP(S) 资源，不能读取应用协议资源或任意本地文件；HTML 预览默认执行脚本，用户关闭后切换文件保留选择；本地存储使用每个文档独立的临时内存替代。嵌套 iframe、WebSocket、IndexedDB/Cache API 和相对本地资源尚不属于此隔离预览支持范围，需要完整站点环境的页面可用系统浏览器打开。
+- 另一个例外是右栏浏览器面板（仓库所有者 2026-10-28 批准）：外部网页放在主进程的独立 `WebContentsView` 里（`sandbox`、`contextIsolation`、独立分区、拒绝所有权限、只放行 http/https），不和应用页面同一个 webContents、拿不到 preload；给 omp 的 CDP 口只听 127.0.0.1、校验 Host、拒带 Origin 的请求、路径带随机 token。见 [browser.md](browser.md)「安全」。
 
 ## preload 和 IPC
 

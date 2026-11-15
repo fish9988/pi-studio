@@ -1,9 +1,11 @@
 // 预览页的正文：md 渲染 / 图片与 SVG（带画布背景切换与尺寸信息）/ html 沙箱 iframe / CSV&TSV 表格 / JSON 结构树 / Mermaid 流程图 / 音视频 / 其余文本高亮源码。
-import { useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { PreviewFile } from "../../../../shared/ipc.ts";
 import { useLocale, useT } from "../../i18n/use-t.ts";
 import { Markdown } from "../../markdown/index.ts";
 import { CodeBlock } from "../../markdown/CodeBlock.tsx";
+import { injectHtmlPreviewShim } from "./html-preview.ts";
+import { reportErrorNow } from "../../ui/errors.ts";
 
 export function baseName(path: string): string {
   const parts = path.split(/[\\/]/).filter((part) => part !== "");
@@ -172,7 +174,7 @@ function JsonTreeView({ text }: { text: string }) {
     }
   }, [text]);
   if (!parsed.ok) {
-    return <CodeBlock code={text} lang="json" closed />;
+    return <CodeBlock code={text} lang="json" closed standalone />;
   }
   return (
     <div className="file-preview-json-tree" data-testid="file-preview-json-tree">
@@ -293,6 +295,53 @@ function ImageView({
   );
 }
 
+/** 独立文档响应避免 srcdoc 继承主应用 CSP；iframe 始终没有同源权限。 */
+function HtmlPreview({ html, scripts, title }: { html: string; scripts: boolean; title: string }) {
+  const t = useT();
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [page, setPage] = useState<{ html: string; scripts: boolean; url: string } | null>(null);
+  useEffect(() => {
+    let disposed = false;
+    let allocated: string | null = null;
+    setLoadError(null);
+    void window.studio.registerHtmlPreview(scripts ? injectHtmlPreviewShim(html) : html).then(
+      (url) => {
+        allocated = url;
+        if (disposed) void window.studio.releaseHtmlPreview(url).catch(reportErrorNow);
+        else setPage({ html, scripts, url });
+      },
+      (error: unknown) => {
+        if (disposed) return;
+        setLoadError(error instanceof Error ? error.message : String(error));
+        reportErrorNow(error);
+      },
+    );
+    return () => {
+      disposed = true;
+      if (allocated !== null) void window.studio.releaseHtmlPreview(allocated).catch(reportErrorNow);
+    };
+  }, [html, scripts]);
+  if (loadError !== null)
+    return (
+      <p className="file-preview-note" role="alert">
+        {t("preview.readFailed", { message: loadError })}
+      </p>
+    );
+  if (page === null || page.html !== html || page.scripts !== scripts)
+    return <p className="file-preview-note">{t("preview.loading")}</p>;
+  return (
+    <iframe
+      key={page.url}
+      className="file-preview-frame"
+      data-testid="file-preview-frame"
+      title={title}
+      sandbox={scripts ? "allow-scripts" : ""}
+      referrerPolicy="no-referrer"
+      src={page.url}
+    />
+  );
+}
+
 export function PreviewContent({
   file,
   ext,
@@ -331,7 +380,7 @@ export function PreviewContent({
     }
     case "image": {
       const dataUrl = file.dataUrl ?? "";
-      if (source) return <CodeBlock code={file.text ?? decodeDataUrl(dataUrl)} lang="xml" closed />;
+      if (source) return <CodeBlock code={file.text ?? decodeDataUrl(dataUrl)} lang="xml" closed standalone />;
       return (
         <ImageView
           src={dataUrl}
@@ -342,18 +391,10 @@ export function PreviewContent({
         />
       );
     }
-    case "html":
-      if (source) return <CodeBlock code={file.text ?? ""} lang="html" closed />;
-      // 没有 allow-same-origin：页面拿不到应用的任何权限；脚本默认关，用户勾选后才放行。
-      return (
-        <iframe
-          className="file-preview-frame"
-          data-testid="file-preview-frame"
-          title={t("preview.htmlTitle", { name })}
-          sandbox={scripts ? "allow-scripts" : ""}
-          srcDoc={file.text ?? ""}
-        />
-      );
+    case "html": {
+      if (source) return <CodeBlock code={file.text ?? ""} lang="html" closed standalone />;
+      return <HtmlPreview html={file.text ?? ""} scripts={scripts} title={t("preview.htmlTitle", { name })} />;
+    }
     case "text":
       if (isMarkdown && !source) {
         return (
@@ -366,9 +407,12 @@ export function PreviewContent({
         return <CsvTableView text={file.text ?? ""} delimiter={ext === "tsv" ? "\t" : ","} />;
       }
       if (isMermaid && !source) {
+        const raw = file.text ?? "";
+        const runs = raw.match(/`{3,}/g);
+        const fence = "`".repeat(runs ? Math.max(3, ...runs.map((r) => r.length)) + 1 : 3);
         return (
           <div className="file-preview-md" data-testid="file-preview-mermaid">
-            <Markdown source={`\`\`\`mermaid\n${file.text ?? ""}\n\`\`\``} />
+            <Markdown source={`${fence}mermaid\n${raw}\n${fence}`} />
           </div>
         );
       }

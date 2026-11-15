@@ -9,6 +9,13 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-15
+
+### Fixed
+
+- Fixed HTML file and interactive page previews inheriting the application script policy, which prevented Canvas diagrams, dynamic content, and buttons from working; local HTML now enables isolated script previews by default with an option to disable scripts.
+- Fixed collapsed HTML/SVG source views and invalid JSON fallbacks, added missing media resource policy support, and reset outline/tree state when switching files.
+
 ## [0.6.1] - 2026-11-15
 
 ### Fixed

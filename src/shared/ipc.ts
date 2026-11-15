@@ -1427,6 +1427,8 @@ export interface StudioInvokeApi {
    * 文本 > 2 MB、图片 > 20 MB 返回 too_large；文件不存在返回 missing（不 reject）。
    */
   readPreviewFile(target: ProjectFilesTarget, relPath: string): Promise<PreviewFile>;
+  registerHtmlPreview(html: string): Promise<string>;
+  releaseHtmlPreview(url: string): Promise<void>;
   /**
    * 文件面板的文件树：列根目录（任务 cwd，开了工作树就是工作树目录；或草稿的项目目录）下 relDir 这一层（"" = 根）。
    * 目录在前、文件在后按名字排序，`.git` 不列出，被 .gitignore 忽略的条目带 ignored 标记；
@@ -1947,6 +1949,8 @@ export const invokeNames = {
   refreshWorkspaceDirs: true,
   openTaskFolder: true,
   readPreviewFile: true,
+  registerHtmlPreview: true,
+  releaseHtmlPreview: true,
   listDirectory: true,
   listProjectFiles: true,
   createFileEntry: true,

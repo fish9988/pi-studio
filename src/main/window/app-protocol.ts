@@ -7,6 +7,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { backdropFilePattern } from "../../shared/ipc.ts";
 import { backdropsDir } from "../settings/backdrop-image.ts";
+import { htmlPreviewResponse } from "./html-preview-store.ts";
 
 const appScheme = "app";
 export const appOrigin = `${appScheme}://studio`;
@@ -38,6 +39,7 @@ const notFound = () => new Response("Not found", { status: 404 });
 
 export function installAppProtocol(): void {
   protocol.handle(appScheme, async (request) => {
+    if (new URL(request.url).host === "preview") return htmlPreviewResponse(request.url);
     const file = resolveAppFile(request.url);
     if (file === null) return notFound();
     // 文件不存在（被删掉的旧背景图、拼错的资源名）回 404，而不是让请求以网络错误失败；别的读取错误照常抛出。

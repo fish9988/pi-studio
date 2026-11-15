@@ -15,6 +15,8 @@ import { parseOneOf, parseProjectId, parseRecord, parseString, parseTaskId } fro
 import { parseRootIndex, rootDir } from "../files/task-roots.ts";
 import { resolveInside, resolveInsideReal } from "./task-file-path.ts";
 
+import { registerHtmlPreview, releaseHtmlPreview, htmlPreviewMaxChars } from "../window/html-preview-store.ts";
+
 const index = new ProjectFileIndex();
 
 export function parseFilesTarget(value: unknown): ProjectFilesTarget {
@@ -44,12 +46,20 @@ export async function targetCwd(target: ProjectFilesTarget): Promise<string> {
 export const fileHandlers: HandlerGroup<
   | "listProjectFiles"
   | "readPreviewFile"
+  | "registerHtmlPreview"
+  | "releaseHtmlPreview"
   | "listDirectory"
   | "createFileEntry"
   | "renameFileEntry"
   | "deleteFileEntry"
   | "revealProjectFile"
 > = {
+  async registerHtmlPreview(html) {
+    return registerHtmlPreview(parseString(html, "html", htmlPreviewMaxChars, { allowEmpty: true }));
+  },
+  async releaseHtmlPreview(url) {
+    releaseHtmlPreview(parseString(url, "url", 256));
+  },
   async readPreviewFile(target, relPath) {
     const parsed = parseFilesTarget(target);
     const cwd = await targetCwd(parsed);

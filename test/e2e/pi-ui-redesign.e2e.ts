@@ -3,7 +3,7 @@
 // 2. Markdown 代码块深色终端卡片（默认折叠、点击展开）；
 // 3. 输入框复制全部（含图片 <img> 富文本）、支持图片上下文的提示词优化（只替换文字保留附件）、发送后气泡内联芯片渲染；
 // 4. 设置页移除旧「过程行」三卡、UI 与聊天字体独立配置及持久化。
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { crc32, deflateSync } from "node:zlib";
@@ -438,6 +438,83 @@ test("UI 精细优化与 Plan Mode 交互兼容：无框 SVG、HTML Artifact 卡
       "[UI cancelled]",
       { timeout: 20_000 },
     );
+
+    // 6. 本地 HTML 交互页面预览：默认开启脚本且兼容 localStorage / history.replaceState，源码模式直接展示高亮代码
+    const realFixture = process.env["STUDIO_TEST_HTML_FIXTURE"];
+    if (realFixture) await writeFile(path.join(project, "theorem.html"), await readFile(realFixture));
+    const htmlFile = path.join(project, "viz.html");
+    await writeFile(
+      htmlFile,
+      [
+        "<!doctype html><html><head><meta charset='utf-8'><title>Viz</title></head><body>",
+        "<div id='out'>waiting</div><canvas id='cv' width='60' height='20'></canvas>",
+        "<button id='btn'>switch</button>",
+        "<script>",
+        "localStorage.setItem('k','ok');",
+        "document.getElementById('out').textContent = 'rendered:' + localStorage.getItem('k');",
+        "var ctx = document.getElementById('cv').getContext('2d'); ctx.fillStyle='#2f6f5e'; ctx.fillRect(0,0,60,20);",
+        "document.getElementById('btn').addEventListener('click', function(){ history.replaceState(null,'','#tab2'); document.getElementById('out').textContent='clicked:' + location.hash; });",
+        "</script></body></html>",
+      ].join(""),
+      "utf8",
+    );
+    await page.getByTestId("topbar-files").click();
+    const omni = page.getByTestId("dsh-sidebar-omni-input");
+    if ((await omni.count()) === 0) {
+      await page.getByTestId("dsh-start-files").click();
+    }
+    await page.getByTestId("dsh-sidebar-omni-input").fill("viz.html");
+    await page.getByTestId("dsh-sidebar-omni-results").locator("button").first().click();
+
+    const previewFrame = page.getByTestId("file-preview-frame");
+    await expect(previewFrame).toBeVisible({ timeout: 10_000 });
+    const frameHandle = await previewFrame.elementHandle();
+    const frameContent = (await frameHandle!.contentFrame())!;
+    await expect(frameContent.locator("#out")).toHaveText("rendered:ok", { timeout: 10_000 });
+    await frameContent.locator("#btn").click();
+    await expect(frameContent.locator("#out")).toHaveText("clicked:#tab2");
+    // 子文档没有 preload、Node 和父窗口权限；Canvas 真实输出了像素。
+    expect(await frameContent.evaluate("typeof window.studio")).toBe("undefined");
+    expect(await frameContent.evaluate("typeof require")).toBe("undefined");
+    expect(await frameContent.evaluate("(() => { try { return !!parent.document; } catch { return false; } })()")).toBe(
+      false,
+    );
+    expect(
+      await frameContent.evaluate("document.getElementById('cv').getContext('2d').getImageData(5,5,1,1).data[3]"),
+    ).toBe(255);
+    const runScripts = page.getByRole("checkbox", { name: "运行脚本" });
+    await runScripts.click();
+    await expect(runScripts).not.toBeChecked();
+    await expect(page.frameLocator('[data-testid="file-preview-frame"]').locator("#out")).toHaveText("waiting");
+    await runScripts.click();
+    await expect(runScripts).toBeChecked();
+    await expect(page.frameLocator('[data-testid="file-preview-frame"]').locator("#out")).toHaveText("rendered:ok");
+
+    // 切到「源码」模式应展示完整代码而非嵌套 Artifact 卡片
+    await page.getByTestId("file-preview-mode-source").click();
+    await expect(page.getByTestId("file-preview-body").locator("pre.md-codebody")).toContainText("rendered:");
+    await expect(page.getByTestId("file-preview-body").getByTestId("codeblock-artifact-head")).toHaveCount(0);
+
+    // 本机复现可经环境变量指定真实页面，只读复制到隔离测试项目。
+    if (realFixture) {
+      await page.getByTestId("file-preview-page-files").click();
+      await page.getByTestId("dsh-sidebar-omni-input").fill("theorem.html");
+      await page.getByTestId("dsh-sidebar-omni-results").locator("button").first().click();
+      const theorem = page.frameLocator('[data-testid="file-preview-frame"]');
+      await expect(theorem.locator("#stageTitle")).toContainText("拉格朗日");
+      await expect(theorem.locator("#valK")).not.toHaveText("—");
+      await theorem.getByRole("tab", { name: "罗尔定理", exact: true }).click();
+      await expect(theorem.locator("#stageTitle")).toContainText("罗尔");
+      await theorem.getByRole("button", { name: "自动找到解点" }).click();
+      await expect(theorem.locator("#valGap")).toHaveText("0.000");
+      const handle = await page.getByTestId("file-preview-frame").elementHandle();
+      const child = (await handle!.contentFrame())!;
+      expect(
+        await child.evaluate(
+          "(() => { const c=document.getElementById('stage'); const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data; let count=0; for(let i=3;i<pixels.length;i+=4) if(pixels[i]) count++; return count; })()",
+        ),
+      ).toBeGreaterThan(100);
+    }
   } finally {
     await launched.close();
     await rm(work, { recursive: true, force: true });

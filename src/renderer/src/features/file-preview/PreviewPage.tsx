@@ -70,7 +70,7 @@ export function PreviewPage({
   const isZh = locale === "zh-CN";
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [source, setSource] = useState(false);
-  const [scripts, setScripts] = useState(false);
+  const [scripts, setScripts] = useState(true);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [zoom, setZoom] = useState<number | "fit">("fit");
   // 图片以外的内容（文本、Markdown、源码、网页）整体缩放；换文件不复位，面板开着时一直沿用。
@@ -91,22 +91,23 @@ export function PreviewPage({
     setTextZoom((current) => Math.min(zoomRange[1], Math.max(zoomRange[0], current * factor)));
 
   useEffect(() => {
+    setOutlineOpen(false);
+    setJsonTree(false);
     const inline = getInlineArtifact(path);
     if (inline !== null) {
       setLoad({ state: "done", file: inline });
       setSource(focusLine !== undefined);
-      setScripts(inline.kind === "html");
       setZoom("fit");
       return;
     }
     let cancelled = false;
     setLoad({ state: "loading" });
     setSource(focusLine !== undefined);
-    setScripts(false);
     setZoom("fit");
     window.studio.readPreviewFile(target, path).then(
       (file) => {
-        if (!cancelled) setLoad({ state: "done", file });
+        if (cancelled) return;
+        setLoad({ state: "done", file });
       },
       (error: unknown) => {
         if (!cancelled) setLoad({ state: "error", message: error instanceof Error ? error.message : String(error) });
