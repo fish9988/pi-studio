@@ -9,6 +9,21 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-15
+
+### Fixed
+
+- Fixed Plan Mode question prompts where selecting `Other` failed to allow free-form typing or lost IME composition: added inline `Other` submission bridged to follow-up input/editor prompts, switched dialog text fields to native controlled inputs with clear focus rings, and restored `Enter` / `Ctrl+Enter` submission and `Esc` cancellation.
+- Fixed excessive bottom vertical space usage during Plan Mode questions by automatically collapsing the redundant composer body (keeping the compact status strip) and tightening question card spacing, returning focus cleanly once answered.
+- Fixed changed-files panels and deliverable cards staying pure white across tinted and dark themes by blending theme surface tokens with backdrop translucency and per-style glass/radius rules.
+- Isolated the conversation timeline strip from the right-edge overlay scrollbar to prevent accidental triggers while dragging, and turned the expanded timeline card into a compact frosted glass popover.
+
+### Changed
+
+- Unified topbar left/right sidebar toggle icons on a `16×16` grid with `--icon-stroke`, removed obsolete topbar center markup and dead styles, replaced the command palette theme icon with a linear palette, and simplified the thinking effort bulb icon.
+- Auto-collapsed the secondary "Copy all" and "Enhance prompt" actions when the composer draft is empty, revealing them smoothly as soon as text or attachments are added.
+- Rendered `svg` and `mermaid` diagrams inline without outer borders or header chrome (with a hover/focus floating action pill in the top-right corner), and turned closed `html` fenced blocks into compact Artifact cards with title extraction, a primary `Preview` action, and expandable source toggle.
+
 ## [0.6.0] - 2026-11-14
 
 ### Added

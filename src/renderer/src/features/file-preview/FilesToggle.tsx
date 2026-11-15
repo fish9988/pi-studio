@@ -7,10 +7,23 @@ import { toggleDshSidebar, useDshWorkspace } from "../workbench/dsh-workbench-st
 
 export function RightSidebarIcon({ shown }: { shown: boolean }) {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="1.75" y="2.5" width="12.5" height="11" rx="2" stroke="currentColor" strokeWidth="1.35" />
-      <line x1="10.25" y1="3" x2="10.25" y2="13" stroke="currentColor" strokeWidth="1.35" />
-      {shown && <rect x="10.8" y="3.8" width="2.3" height="8.4" rx="0.6" fill="currentColor" opacity="0.32" />}
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="var(--icon-stroke)"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="icon"
+      aria-hidden="true"
+    >
+      <rect x="1.75" y="2.5" width="12.5" height="11" rx="2" />
+      <path d="M10.25 2.5v11" />
+      {shown && (
+        <rect x="10.8" y="3.8" width="2.3" height="8.4" rx="0.6" fill="currentColor" stroke="none" opacity="0.32" />
+      )}
     </svg>
   );
 }

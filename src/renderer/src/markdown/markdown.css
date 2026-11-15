@@ -373,9 +373,35 @@
   overflow: hidden;
 }
 .md-codeblock[data-figure] {
-  background: var(--bg-tool);
+  background: transparent;
   color: var(--text);
-  border-color: var(--border-subtle);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.md-codeblock[data-artifact] {
+  background: color-mix(in srgb, var(--bg-tool) 78%, var(--bg-raised));
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.md-codeblock[data-artifact][data-code-dark]:not([data-collapsed]) .md-codebody {
+  background: var(--bg-code);
+  color: var(--fg-code);
+  border-top: 1px solid var(--border-code);
+}
+.md-codeblock[data-artifact][data-code-light]:not([data-collapsed]) .md-codebody {
+  background: var(--bg-code-light);
+  color: var(--fg-code-light);
+  border-top: 1px solid var(--border-code-light);
+}
+.md-codeblock[data-artifact][data-code-light] .md-artifact-actions .md-codebtn {
+  color: var(--text-2);
+}
+.md-codeblock[data-artifact][data-code-light] .md-artifact-actions .md-codebtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 /* 冷灰浅色代码卡（Fluent 云母原型的 #F2F5FA）：不铺深色底、不画红黄绿三个窗口点，语法色用 tokens.css 的 [data-code-light] 一套 */
 .md-codeblock[data-code-light] {
@@ -436,7 +462,7 @@
   display: none;
 }
 /* Liquid 设计风格：代码卡也是玻璃浮层（顶部一道镜面高光，头部磨砂） */
-:root[data-ui-style="liquid"] .md-codeblock {
+:root[data-ui-style="liquid"] .md-codeblock:not([data-figure]):not([data-artifact]) {
   border-radius: var(--radius-lg);
   background: var(--bg-glass-strong);
   backdrop-filter: blur(22px) saturate(165%);
@@ -445,48 +471,48 @@
     var(--shadow-float),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
-:root[data-ui-style="liquid"] .md-codeblock[data-code-dark] {
+:root[data-ui-style="liquid"] .md-codeblock[data-code-dark]:not([data-figure]):not([data-artifact]) {
   /* 透一点底，但底子跟主题走：写死的 #080c17 会让 coral / amber / dusk / claude 这些暖色主题
    * 在深色代码卡里露出一块冷调靛蓝，和卡片头部、正文的暖调对不上（2026-11-14） */
   background: color-mix(in srgb, var(--bg-code) 92%, transparent);
 }
-:root[data-ui-style="liquid"] .md-codeblock[data-code-dark] .md-codehead {
+:root[data-ui-style="liquid"] .md-codeblock[data-code-dark]:not([data-figure]):not([data-artifact]) .md-codehead {
   background: color-mix(in srgb, var(--bg-code-head) 82%, transparent);
 }
-:root[data-ui-style="liquid"] .md-codeblock[data-code-light] {
+:root[data-ui-style="liquid"] .md-codeblock[data-code-light]:not([data-figure]):not([data-artifact]) {
   background: color-mix(in srgb, var(--bg-code-light) 82%, transparent);
   border-color: var(--border-code-light);
 }
-:root[data-ui-style="liquid"] .md-codeblock .md-codehead {
+:root[data-ui-style="liquid"] .md-codeblock:not([data-figure]):not([data-artifact]) .md-codehead {
   background: color-mix(in srgb, var(--bg-code-head) 72%, transparent);
   backdrop-filter: blur(14px) saturate(150%);
 }
-:root[data-ui-style="liquid"] .md-codeblock[data-code-light] .md-codehead {
+:root[data-ui-style="liquid"] .md-codeblock[data-code-light]:not([data-figure]):not([data-artifact]) .md-codehead {
   background: color-mix(in srgb, var(--bg-code-light-head) 76%, transparent);
 }
 /* 云母 × 液态玻璃：代码卡换成 Fluent 2 的冷灰卡底 + 更薄的玻璃头部（磨砂不抢正文） */
-:root[data-ui-style="mica-liquid"] .md-codeblock {
+:root[data-ui-style="mica-liquid"] .md-codeblock:not([data-figure]):not([data-artifact]) {
   border-color: var(--glass-rim);
   border-radius: var(--radius-lg);
 }
-:root[data-ui-style="mica-liquid"] .md-codeblock .md-codehead {
+:root[data-ui-style="mica-liquid"] .md-codeblock:not([data-figure]):not([data-artifact]) .md-codehead {
   background: color-mix(in srgb, var(--bg-code-head) 74%, transparent);
   backdrop-filter: blur(12px);
 }
-:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-light] {
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-light]:not([data-figure]):not([data-artifact]) {
   border-color: var(--border-code-light);
   background: color-mix(in srgb, var(--bg-code-light) 90%, transparent);
   backdrop-filter: blur(14px);
 }
-:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-dark] {
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-dark]:not([data-figure]):not([data-artifact]) {
   background: color-mix(in srgb, var(--bg-code) 90%, transparent);
   backdrop-filter: blur(14px);
 }
-:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-light] .md-codehead {
+:root[data-ui-style="mica-liquid"] .md-codeblock[data-code-light]:not([data-figure]):not([data-artifact]) .md-codehead {
   background: color-mix(in srgb, var(--bg-code-light-head) 78%, transparent);
 }
-:root[data-ui-style="mica-liquid"] .md-codeblock[data-figure] .md-codehead {
-  background: color-mix(in srgb, var(--text) 3%, transparent);
+:root[data-backdrop] .md-codeblock[data-artifact] {
+  background: color-mix(in srgb, var(--bg-tool) var(--bd-surface-alpha, 88%), transparent);
 }
 .md-codehead {
   display: flex;
@@ -626,14 +652,138 @@
   outline-offset: 2px;
   opacity: 1;
 }
-/* 助手画的 svg 图：不铺底色（omp 约定画布就是读者的主题），1 个单位 ≈ 1px，宽了按比例缩到列宽 */
+/* 助手画的 svg 图：无框直出融入正文流，悬停或聚焦时右上角浮出操作微胶囊 */
 .md-figure {
-  padding: var(--space-1) var(--space-3) var(--space-3);
+  position: relative;
+  padding: var(--space-1) 0;
 }
 .md-figure img {
   display: block;
   max-width: 100%;
   height: auto;
+}
+.md-figure-actions {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid var(--glass-rim);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.md-codeblock[data-figure]:hover .md-figure-actions,
+.md-codeblock[data-figure]:focus-within .md-figure-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+.md-figure-actions .md-codebtn {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  color: var(--text-2);
+  opacity: 0.88;
+}
+.md-figure-actions .md-codebtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  opacity: 1;
+}
+
+/* HTML Artifact 紧凑卡片头 */
+.md-artifact-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2-5);
+  min-height: 46px;
+  padding: var(--space-2) var(--space-3);
+}
+.md-artifact-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--fw-strong);
+  letter-spacing: 0.03em;
+}
+.md-artifact-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.md-artifact-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.md-artifact-sub {
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+}
+.md-artifact-actions {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.md-artifact-actions .md-codebtn {
+  color: var(--text-2);
+  opacity: 0.78;
+}
+.md-artifact-actions .md-codebtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  opacity: 1;
+}
+.md-artifact-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+.md-artifact-preview-btn:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+}
+.md-artifact-preview-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .md-figure-note {
   margin: 0;

@@ -82,9 +82,11 @@ export const SidebarToggleIcon = () => (
 
 export const ThemeIcon = () => (
   <Icon>
-    <circle cx="8" cy="8" r="5" />
-    <path d="M8 3v10" />
-    <path d="M8 3a5 5 0 0 1 0 10z" fill="currentColor" />
+    <path d="M8 2a6 6 0 0 0-6 6c0 2.9 2.2 5.3 5 5.8.65.12 1.25-.4 1.25-1.06v-.55c0-.66.54-1.19 1.2-1.19h.95A3.6 3.6 0 0 0 14 7.4 5.6 5.6 0 0 0 8 2Z" />
+    <circle cx="5.25" cy="7.5" r="0.65" fill="currentColor" stroke="none" />
+    <circle cx="7.25" cy="5.25" r="0.65" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="5.5" r="0.65" fill="currentColor" stroke="none" />
+    <circle cx="11.25" cy="8" r="0.65" fill="currentColor" stroke="none" />
   </Icon>
 );
 

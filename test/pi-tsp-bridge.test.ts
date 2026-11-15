@@ -14,7 +14,12 @@ import { deriveWorkingLabel } from "../src/shared/tsp/working.ts";
 import type { PiLaunch } from "../src/main/pi/discover.ts";
 import { PiService } from "../src/main/pi/pi-service.ts";
 import { PiTaskRunner } from "../src/main/pi/pi-task-runner.ts";
-import { computeTextDiffHunks, PI_SURFACE_ID, PiTspBridge } from "../src/main/pi/pi-tsp-bridge.ts";
+import {
+  computeTextDiffHunks,
+  isFreeFormOtherOption,
+  PI_SURFACE_ID,
+  PiTspBridge,
+} from "../src/main/pi/pi-tsp-bridge.ts";
 import { fallbackSmartTitle } from "../src/main/tasks/ai-helper.ts";
 import type { TaskRecord } from "../src/main/tasks/task-registry.ts";
 
@@ -501,6 +506,86 @@ describe("PiTspBridge — live streaming RPC events & extension UI dialogs", () 
     });
     const cancelResp = bridge.handleTspKeys("\x1b");
     expect(cancelResp).toEqual({ id: "req_ed", cancelled: true });
+  });
+
+  it("tags Other (free-form) in select dialogs as omp.ask.other, uses col root + max 6 lines, and bridges custom Other text to follow-up editor", () => {
+    expect(isFreeFormOtherOption("3. Other (free-form)")).toBe(true);
+    expect(isFreeFormOtherOption("Other")).toBe(true);
+    expect(isFreeFormOtherOption("4. 其他（自由输入）")).toBe(true);
+    expect(isFreeFormOtherOption("1. 方案 A")).toBe(false);
+
+    const bridge = new PiTspBridge();
+    bridge.handleRpcEvent({
+      type: "extension_ui_request",
+      id: "req_plan_q",
+      method: "select",
+      title: "方案选择: 请选择实现方式",
+      options: ["1. 方案 A", "2. 方案 B", "3. Other (free-form)"],
+    });
+
+    const surface = bridge.document.surfaces.get(PI_SURFACE_ID)!;
+    const rootCol = surface.nodes.get("dlg_req_plan_q");
+    expect(rootCol?.k).toBe("col");
+    expect(rootCol?.p["role"]).toBe("omp.editor.ask");
+
+    const list = surface.nodes.get("dlg_req_plan_q/list");
+    expect(list?.p["max"]).toEqual({ lines: 6 });
+    expect(surface.nodes.get("dlg_req_plan_q/opt.0")?.p["role"]).toBe("omp.ask.option");
+    expect(surface.nodes.get("dlg_req_plan_q/opt.2")?.p["role"]).toBe("omp.ask.other");
+    expect(surface.nodes.get("dlg_req_plan_q/btns")?.p["role"]).toBe("omp.actions");
+
+    // 1) Directly submitting custom text via send on select resolves select with the offered Other option
+    const selectResp = bridge.handleTspEvent({
+      ev: "send",
+      sf: PI_SURFACE_ID,
+      id: "dlg_req_plan_q",
+      text: "自定义中文方案 C",
+    });
+    expect(selectResp).toEqual({ id: "req_plan_q", value: "3. Other (free-form)" });
+    expect(deriveTaskStatus(bridge.document).ask).toBeNull();
+
+    // 2) Follow-up editor request prefills the custom text and auto-completes when consumed by PiTaskRunner
+    bridge.handleRpcEvent({
+      type: "extension_ui_request",
+      id: "req_plan_ed",
+      method: "editor",
+      title: "请选择实现方式",
+    });
+    const editorNode = surface.nodes.get("dlg_req_plan_ed/input");
+    expect(editorNode?.k).toBe("editor");
+    expect(editorNode?.p["role"]).toBe("omp.ask.input");
+    expect(editorNode?.p["text"]).toBe("自定义中文方案 C");
+
+    const autoResp = bridge.consumeAutoSubmittedCustomOther();
+    expect(autoResp).toEqual({ id: "req_plan_ed", value: "自定义中文方案 C" });
+    expect(deriveTaskStatus(bridge.document).ask).toBeNull();
+
+    // 3) Standard input / editor submission via send or action:submit
+    bridge.handleRpcEvent({
+      type: "extension_ui_request",
+      id: "req_ed_direct",
+      method: "editor",
+      title: "补充说明",
+    });
+    expect(
+      bridge.handleTspEvent({
+        ev: "edit",
+        sf: PI_SURFACE_ID,
+        id: "dlg_req_ed_direct/input",
+        from: 0,
+        to: 0,
+        text: "支持中文输入法提交",
+        cursor: 9,
+        len: 0,
+      }),
+    ).toBeNull();
+    const submitResp = bridge.handleTspEvent({
+      ev: "action",
+      sf: PI_SURFACE_ID,
+      id: "dlg_req_ed_direct/submit",
+      act: "submit",
+    });
+    expect(submitResp).toEqual({ id: "req_ed_direct", value: "支持中文输入法提交" });
   });
 });
 

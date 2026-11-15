@@ -735,12 +735,10 @@ test("提问:选项是 omp 的列表,双击一项发 activate;提问期间 studi
     await expect(askHead).toBeVisible();
     await expect(askHead).not.toContainText(question);
     await expect.poll(async () => Math.round((await dockLayout(page, "omp.editor.ask")).gap)).toBe(17);
-    await page.getByTestId("composer-input").fill("先别发");
-    // 运行中右下角只有停止键；按 Enter 也不发（字留在输入框里）。
+    // 提问期间底部重复的 Composer 主体自动折叠，释放聊天可视空间；仅保留极简单行状态栏（ComposerTop）。
+    await expect(page.getByTestId("composer-stack")).toHaveAttribute("data-asking", "");
+    await expect(page.getByTestId("composer-input")).toHaveCount(0);
     await expect(page.getByTestId("send-button")).toHaveCount(0);
-    await page.getByTestId("composer-input").press("Enter");
-    await expect(page.getByTestId("composer-input")).toHaveValue("先别发");
-    await page.getByTestId("composer-input").fill("");
     await option.dblclick();
     await expect(option).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByTestId("task-row").first()).toHaveAttribute("data-status", "idle", { timeout: 30_000 });
@@ -749,7 +747,8 @@ test("提问:选项是 omp 的列表,双击一项发 activate;提问期间 studi
     expect((await received()).filter((event) => event["ev"] === "activate")).toEqual([
       expect.objectContaining({ ev: "activate", id: "t.q0", item: "t.q0/option:1" }),
     ]);
-    // 提问被撤掉后焦点回到 studio 输入框。
+    // 提问被撤掉后输入框恢复并重新拿回焦点。
+    await expect(page.getByTestId("composer-input")).toBeVisible();
     await expect(page.getByTestId("composer-input")).toBeFocused();
   } finally {
     await cleanup();

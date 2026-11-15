@@ -808,6 +808,20 @@ export function resolveSubagentRun(
   };
 }
 
+/** 识别 select 列表里的自由输入（Other）项，供 AskGateCol 直接挂载内联输入框。 */
+export function isFreeFormOtherOption(option: string): boolean {
+  const stripped = option
+    .trim()
+    .replace(/^\d+[.)、]\s*/, "")
+    .replace(/[\s.…]+$/, "")
+    .trim();
+  return (
+    /^other(?:\s*\(free[- ]?form\))?$/i.test(stripped) ||
+    /^其他(?:[（(][^）)]*[）)])?$/.test(stripped) ||
+    /^自定义(?:回答|输入)?$/.test(stripped)
+  );
+}
+
 // ───────── Bridge Class ─────────
 
 export class PiTspBridge {
@@ -844,6 +858,8 @@ export class PiTspBridge {
   private lastStreamAssistantId: string | null = null;
   private pendingOptimisticUsers: string[] = [];
   private activeDialog: ActiveDialogState | null = null;
+  private pendingCustomOther: { text: string; expiresAt: number } | null = null;
+  private autoSubmitInputResponse: PiExtensionUiResponsePayload | null = null;
   private lastHydrationMeta: SessionHydrationMeta = {
     sessionId: null,
     sessionName: null,
@@ -3167,13 +3183,13 @@ export class PiTspBridge {
         p: {
           role: "omp.ask.options",
           ...(firstOptId !== null ? { selected: firstOptId } : {}),
-          max: { lines: 10 },
+          max: { lines: 6 },
         },
         c: options.map((opt, idx) => ({
           id: optionIds[idx]!,
           k: "item",
           p: {
-            role: "omp.ask.option",
+            role: isFreeFormOtherOption(opt) ? "omp.ask.other" : "omp.ask.option",
             label: opt,
           },
         })),
@@ -3181,7 +3197,7 @@ export class PiTspBridge {
       {
         id: `${cardId}/btns`,
         k: "row",
-        p: { gap: "sm", justify: "end" },
+        p: { role: "omp.actions", gap: "sm", justify: "end" },
         c: [
           {
             id: `${cardId}/cancel`,
@@ -3207,18 +3223,12 @@ export class PiTspBridge {
 
     const card: TspNode = {
       id: cardId,
-      k: "card",
+      k: "col",
       p: {
         role: "omp.editor.ask",
+        gap: "sm",
       },
-      c: [
-        {
-          id: `${cardId}/ask`,
-          k: "col",
-          p: { role: "omp.ask", gap: "sm" },
-          c: askChildren,
-        },
-      ],
+      c: askChildren,
     };
 
     const ops: TspOp[] = [];
@@ -3284,7 +3294,7 @@ export class PiTspBridge {
       {
         id: `${cardId}/btns`,
         k: "row",
-        p: { gap: "sm", justify: "end" },
+        p: { role: "omp.actions", gap: "sm", justify: "end" },
         c: [
           {
             id: `${cardId}/btn.deny`,
@@ -3304,18 +3314,12 @@ export class PiTspBridge {
 
     const card: TspNode = {
       id: cardId,
-      k: "card",
+      k: "col",
       p: {
         role: "omp.editor.ask.approval",
+        gap: "sm",
       },
-      c: [
-        {
-          id: `${cardId}/body`,
-          k: "col",
-          p: { gap: "sm" },
-          c: children,
-        },
-      ],
+      c: children,
     };
 
     const ops: TspOp[] = [];
@@ -3324,10 +3328,30 @@ export class PiTspBridge {
     return this.emitOps(ops);
   }
 
+  private consumePendingCustomOther(): string | null {
+    const pending = this.pendingCustomOther;
+    this.pendingCustomOther = null;
+    if (pending === null || Date.now() > pending.expiresAt) return null;
+    return pending.text;
+  }
+
+  /** 若前一步在 select 卡片内直接填写并提交了 Other 自定义回答，则自动回传给紧随其后的 input/editor 请求并关闭弹窗。 */
+  consumeAutoSubmittedCustomOther(): PiExtensionUiResponsePayload | null {
+    const resp = this.autoSubmitInputResponse;
+    this.autoSubmitInputResponse = null;
+    if (resp !== null && this.activeDialog?.requestId === resp.id) {
+      this.closeActiveDialog();
+    }
+    return resp;
+  }
+
   private openInputDialog(req: PiExtensionUiRequestEvent, method: "input" | "editor"): TspDocMessage[] {
     const cardId = `dlg_${req.id}`;
     const inputId = `${cardId}/input`;
-    const initial = req.prefill ?? "";
+    const pendingCustom = (req.prefill ?? "") === "" ? this.consumePendingCustomOther() : null;
+    const initial = pendingCustom ?? req.prefill ?? "";
+    this.autoSubmitInputResponse =
+      pendingCustom !== null && pendingCustom.trim() !== "" ? { id: req.id, value: pendingCustom } : null;
 
     this.activeDialog = {
       requestId: req.id,
@@ -3364,16 +3388,17 @@ export class PiTspBridge {
         id: inputId,
         k: method === "editor" ? "editor" : "input",
         p: {
+          role: "omp.ask.input",
           text: initial,
           cursor: initial.length,
           placeholder: req.placeholder ?? "",
-          ...(method === "editor" ? { maxLines: 12 } : {}),
+          ...(method === "editor" ? { maxLines: 8 } : {}),
         },
       },
       {
         id: `${cardId}/btns`,
         k: "row",
-        p: { gap: "sm", justify: "end" },
+        p: { role: "omp.actions", gap: "sm", justify: "end" },
         c: [
           {
             id: `${cardId}/cancel`,
@@ -3403,18 +3428,12 @@ export class PiTspBridge {
 
     const card: TspNode = {
       id: cardId,
-      k: "card",
+      k: "col",
       p: {
         role: "omp.editor.ask",
+        gap: "sm",
       },
-      c: [
-        {
-          id: `${cardId}/ask`,
-          k: "col",
-          p: { role: "omp.ask", gap: "sm" },
-          c: askChildren,
-        },
-      ],
+      c: askChildren,
     };
 
     const ops: TspOp[] = [];
@@ -3508,7 +3527,17 @@ export class PiTspBridge {
 
     if (event.ev === "send") {
       const reqId = dlg.requestId;
-      if (dlg.method === "input" || dlg.method === "editor" || dlg.method === "select") {
+      if (dlg.method === "input" || dlg.method === "editor") {
+        this.closeActiveDialog();
+        return { kind: "extension_ui_response", response: { id: reqId, value: event.text } };
+      }
+      if (dlg.method === "select") {
+        const otherOption = dlg.options.find(isFreeFormOtherOption);
+        if (otherOption !== undefined && event.text !== otherOption) {
+          this.pendingCustomOther = { text: event.text, expiresAt: Date.now() + 10_000 };
+          this.closeActiveDialog();
+          return { kind: "extension_ui_response", response: { id: reqId, value: otherOption } };
+        }
         this.closeActiveDialog();
         return { kind: "extension_ui_response", response: { id: reqId, value: event.text } };
       }
@@ -3669,6 +3698,8 @@ export class PiTspBridge {
     this.lastStreamAssistantId = null;
     this.pendingOptimisticUsers = [];
     this.activeDialog = null;
+    this.pendingCustomOther = null;
+    this.autoSubmitInputResponse = null;
     this.widgets.clear();
     this.turnStartedAtMs = null;
   }

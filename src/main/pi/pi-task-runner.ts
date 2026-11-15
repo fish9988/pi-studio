@@ -1706,6 +1706,14 @@ export class PiTaskRunner {
 
     this.#bridge.handleRpcEvent(event);
 
+    if (event.type === "extension_ui_request" && (event.method === "input" || event.method === "editor")) {
+      const autoResp = this.#bridge.consumeAutoSubmittedCustomOther();
+      if (autoResp !== null) {
+        this.#client?.sendExtensionUiResponse(autoResp);
+        this.#syncDialogAndWorkingFromDoc();
+      }
+    }
+
     if (event.type === "agent_start") {
       this.#agentLifecycleSeq += 1;
       this.#lastActiveAt = Date.now();

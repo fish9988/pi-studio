@@ -41,9 +41,16 @@ export function AskGateCol(props: NodeProps & { dom: NodeDomProps }) {
     }
   }
 
+  const isBridgeDialog = node.id.startsWith("dlg_");
+
   const submitCustomOther = () => {
     const trimmed = customText.trim();
     if (!trimmed || askListId === null || otherItemId === null) return;
+    if (isBridgeDialog) {
+      ctx.send({ ev: "send", sf: ctx.sf, id: node.id, text: trimmed });
+      setCustomText("");
+      return;
+    }
     ctx.send({ ev: "select", sf: ctx.sf, id: askListId, item: otherItemId });
     setTimeout(() => {
       ctx.keys(`${encodePaste(trimmed)}\r`);
@@ -54,7 +61,12 @@ export function AskGateCol(props: NodeProps & { dom: NodeDomProps }) {
   useEffect(() => {
     const el = root.current;
     if (el === null) return;
-    if (isBlankFocus() || !document.activeElement?.closest("[data-tspi-keys]")) el.focus({ preventScroll: true });
+    if (
+      !el.contains(document.activeElement) &&
+      (isBlankFocus() || !document.activeElement?.closest("[data-tspi-keys]"))
+    ) {
+      el.focus({ preventScroll: true });
+    }
     // 对话框里最后拿着焦点的元素：它被换页拆掉（焦点掉到 <body>）时才拿回来；用户点到别处（焦点离开又没被拆）不抢。
     let held: Element | null = null;
     const onFocusIn = (e: FocusEvent) => {

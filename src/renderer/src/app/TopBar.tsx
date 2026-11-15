@@ -64,7 +64,6 @@ export function TopBar(props: TopBarProps) {
       </div>
       <div className="topbar-main">
         <TaskCrumb />
-        <div className="topbar-center" />
         <TaskTools />
       </div>
     </header>

@@ -105,6 +105,17 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
   // 审批不拦：输入框里写的字发出去 = 拒绝并说明理由（omp 自己的行为），Ctrl+Enter 批准，Ctrl+O 看详情。
   const approval = task?.dialogs.some((dialog) => dialog.id === TSP_APPROVAL_DIALOG_ID) ?? false;
   const tspAsking = (task?.status === "needs_you" || gate) && !approval;
+  const prevAskingRef = useRef(tspAsking);
+  useEffect(() => {
+    const wasAsking = prevAskingRef.current;
+    prevAskingRef.current = tspAsking;
+    if (wasAsking && !tspAsking) {
+      const active = document.activeElement;
+      if (active === null || active === document.body || active.closest('[data-testid="tsp-view"]') !== null) {
+        fieldRef.current?.focus({ preventScroll: true });
+      }
+    }
+  }, [tspAsking]);
   // omp 的全屏面板（Agent Hub 等）开着：输入框不往主代理发（B5）。
   const screenOpen = useTspPanelOpen(taskId);
   const hasContent =
@@ -381,7 +392,12 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
       ? (firstPrompt?.thinkingLevel ?? task.thinkingLevel ?? (preStart ? projectDefault.thinkingLevel : null))
       : task.thinkingLevel;
   return (
-    <div className="composer-stack" data-testid="composer-stack" data-from-draft={fromDraft ? "" : undefined}>
+    <div
+      className="composer-stack"
+      data-testid="composer-stack"
+      data-from-draft={fromDraft ? "" : undefined}
+      data-asking={tspAsking ? "" : undefined}
+    >
       <Reveal open={shownNotice !== null}>
         {heldNotice && (
           <div className="suggest" role="status" data-testid="slash-guard">
@@ -400,112 +416,114 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
         )}
       </Reveal>
       <ComposerTop task={task} />
-      <div
-        className="composer"
-        data-composer-drop
-        data-dragging={attach.dragging || undefined}
-        onDragOver={attach.onDragOver}
-        onDragLeave={attach.onDragLeave}
-        onDrop={attach.onDrop}
-        onMouseDown={(event) => keepFieldFocus(event, fieldRef.current)}
-      >
-        <ClawdMascot status={task.status} sessionUsage={task.sessionUsage} />
-        <SlashMenu
-          id="slash-menu"
-          open={slashOpen}
-          commands={slashMatches}
-          active={slashActive}
-          onHover={setSlashIndex}
-          onPick={(command) => completeSlash(command.name)}
-        />
-        <HistorySearch
-          open={historyOpen}
-          entries={historyEntries()}
-          onPick={pickHistory}
-          onClose={() => {
-            setHistoryOpen(false);
-            fieldRef.current?.focus();
-          }}
-        />
-        <FileMenu
-          id="file-menu-list"
-          open={fileMenu.open}
-          files={fileMenu.files}
-          active={fileMenu.active}
-          onHover={fileMenu.setActive}
-          onPick={fileMenu.pick}
-        />
-        <ComposerInput
-          draftKey={taskId}
-          draft={draft}
-          view={view}
-          fieldRef={fieldRef}
-          placeholder={placeholder}
-          disabled={worktreeGone}
-          controls={slashOpen ? "slash-menu" : fileMenu.open ? "file-menu-list" : undefined}
-          activeDescendant={
-            slashOpen && slashMatches.length > 0
-              ? `slash-menu-${slashActive}`
-              : fileMenu.open
-                ? `file-menu-list-${fileMenu.active}`
-                : undefined
-          }
-          addFiles={attach.addFiles}
-          onEdit={(caret) => {
-            fileMenu.trackCaret(caret);
-            setSlashIndex(0);
-            resetHistoryCursor(taskId);
-          }}
-          onCaret={fileMenu.trackCaret}
-          onKeyDown={onKeyDown}
-        />
-        <div className="composer-tools">
-          <AttachButton
-            addFiles={attach.addFiles}
-            acceptsImages={shownModel?.acceptsImages}
-            disabled={tooOld === true || worktreeGone}
+      {!tspAsking && (
+        <div
+          className="composer"
+          data-composer-drop
+          data-dragging={attach.dragging || undefined}
+          onDragOver={attach.onDragOver}
+          onDragLeave={attach.onDragLeave}
+          onDrop={attach.onDrop}
+          onMouseDown={(event) => keepFieldFocus(event, fieldRef.current)}
+        >
+          <ClawdMascot status={task.status} sessionUsage={task.sessionUsage} />
+          <SlashMenu
+            id="slash-menu"
+            open={slashOpen}
+            commands={slashMatches}
+            active={slashActive}
+            onHover={setSlashIndex}
+            onPick={(command) => completeSlash(command.name)}
           />
-          <PathLabel path={task.cwd} testId="composer-folder" />
-          <EnhancePromptButton
-            draftKey={taskId}
-            text={draft.text}
-            taskId={taskId}
-            disabled={tooOld === true || worktreeGone}
-            onFocusField={() => fieldRef.current?.focus()}
-          />
-          <ShellTag taskId={taskId} />
-          <span className="composer-spacer" />
-          {tooOld && <span className="composer-note">{t("composer.versionTooOld")}</span>}
-          <ModelChip
-            model={shownModel}
-            thinkingLevel={shownThinking}
-            thinkingLevels={thinkingLevelOptions(shownModel, task.thinkingLevels)}
-            running={running}
-            projectId={task.projectId}
-            loadModels={() => window.studio.listTaskModels(taskId)}
-            setModel={(key) => window.studio.setTaskModel(taskId, key)}
-            setThinking={(level) => window.studio.setTaskThinkingLevel(taskId, level)}
-            taskId={taskId}
-            fallbackModel={task.fallbackModel}
-            // 起进程期间还不知道模型时和草稿一样写"模型…"，不写"未连接模型"
-            {...(shownModel === null && (task.status === "starting" || (preStart && projectDefault.pending))
-              ? { emptyLabel: t("composer.modelLoading") }
-              : {})}
-          />
-          <ContextMeter task={task} />
-          <SendStop
-            running={running}
-            stopping={stopping}
-            hasContent={hasContent}
-            swapped={swapped}
-            disabled={tooOld === true || worktreeGone || tspAsking || screenOpen}
-            onSend={() => {
-              if (allowSend()) sendNow("steer");
+          <HistorySearch
+            open={historyOpen}
+            entries={historyEntries()}
+            onPick={pickHistory}
+            onClose={() => {
+              setHistoryOpen(false);
+              fieldRef.current?.focus();
             }}
-            onStop={stop}
           />
+          <FileMenu
+            id="file-menu-list"
+            open={fileMenu.open}
+            files={fileMenu.files}
+            active={fileMenu.active}
+            onHover={fileMenu.setActive}
+            onPick={fileMenu.pick}
+          />
+          <ComposerInput
+            draftKey={taskId}
+            draft={draft}
+            view={view}
+            fieldRef={fieldRef}
+            placeholder={placeholder}
+            disabled={worktreeGone}
+            controls={slashOpen ? "slash-menu" : fileMenu.open ? "file-menu-list" : undefined}
+            activeDescendant={
+              slashOpen && slashMatches.length > 0
+                ? `slash-menu-${slashActive}`
+                : fileMenu.open
+                  ? `file-menu-list-${fileMenu.active}`
+                  : undefined
+            }
+            addFiles={attach.addFiles}
+            onEdit={(caret) => {
+              fileMenu.trackCaret(caret);
+              setSlashIndex(0);
+              resetHistoryCursor(taskId);
+            }}
+            onCaret={fileMenu.trackCaret}
+            onKeyDown={onKeyDown}
+          />
+          <div className="composer-tools">
+            <AttachButton
+              addFiles={attach.addFiles}
+              acceptsImages={shownModel?.acceptsImages}
+              disabled={tooOld === true || worktreeGone}
+            />
+            <PathLabel path={task.cwd} testId="composer-folder" />
+            <EnhancePromptButton
+              draftKey={taskId}
+              text={draft.text}
+              taskId={taskId}
+              disabled={tooOld === true || worktreeGone}
+              onFocusField={() => fieldRef.current?.focus()}
+            />
+            <ShellTag taskId={taskId} />
+            <span className="composer-spacer" />
+            {tooOld && <span className="composer-note">{t("composer.versionTooOld")}</span>}
+            <ModelChip
+              model={shownModel}
+              thinkingLevel={shownThinking}
+              thinkingLevels={thinkingLevelOptions(shownModel, task.thinkingLevels)}
+              running={running}
+              projectId={task.projectId}
+              loadModels={() => window.studio.listTaskModels(taskId)}
+              setModel={(key) => window.studio.setTaskModel(taskId, key)}
+              setThinking={(level) => window.studio.setTaskThinkingLevel(taskId, level)}
+              taskId={taskId}
+              fallbackModel={task.fallbackModel}
+              // 起进程期间还不知道模型时和草稿一样写"模型…"，不写"未连接模型"
+              {...(shownModel === null && (task.status === "starting" || (preStart && projectDefault.pending))
+                ? { emptyLabel: t("composer.modelLoading") }
+                : {})}
+            />
+            <ContextMeter task={task} />
+            <SendStop
+              running={running}
+              stopping={stopping}
+              hasContent={hasContent}
+              swapped={swapped}
+              disabled={tooOld === true || worktreeGone || tspAsking || screenOpen}
+              onSend={() => {
+                if (allowSend()) sendNow("steer");
+              }}
+              onStop={stop}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

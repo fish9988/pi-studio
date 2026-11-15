@@ -134,8 +134,14 @@ export function EnhancePromptButton({
     setBackup(null);
     onFocusField?.();
   };
+  const visible = hasContent || canUndo;
   return (
-    <span className="enhance-prompt-group" data-testid="enhance-prompt-group">
+    <span
+      className="enhance-prompt-group"
+      data-testid="enhance-prompt-group"
+      data-visible={visible ? "" : undefined}
+      aria-hidden={!visible || undefined}
+    >
       {canUndo && (
         <button
           type="button"
@@ -151,6 +157,7 @@ export function EnhancePromptButton({
         type="button"
         className="ui-chip enhance-prompt-btn"
         disabled={!hasContent}
+        tabIndex={visible ? undefined : -1}
         title={t("composer.copyAllTip")}
         aria-label={t("composer.copyAll")}
         onClick={() => void onCopyAll()}
@@ -162,6 +169,7 @@ export function EnhancePromptButton({
         type="button"
         className="ui-chip enhance-prompt-btn"
         disabled={busy || !hasContent || disabled}
+        tabIndex={visible ? undefined : -1}
         title={t("composer.enhanceTip")}
         aria-label={t("composer.enhance")}
         onClick={() => void onEnhance()}

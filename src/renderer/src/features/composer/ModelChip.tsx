@@ -251,14 +251,12 @@ function ThinkingPillBadge({ levelText, total, lit }: { levelText: string | null
           viewBox="0 0 16 16"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.5"
+          strokeWidth="var(--icon-stroke)"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
           <path d="M8 1.75a4.75 4.75 0 0 0-3.15 8.3c.52.46.9 1.07 1.02 1.75h4.26c.12-.68.5-1.29 1.02-1.75A4.75 4.75 0 0 0 8 1.75Z" />
           <path d="M6.25 13.75h3.5" />
-          <path d="M8 5v2.5" />
-          <path d="M6.75 6.25h2.5" />
         </svg>
       </span>
       <span className="effort-pill-label">{levelText}</span>

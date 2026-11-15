@@ -83,7 +83,6 @@ button {
 
 .topbar-left button,
 .crumb,
-.topbar-view-switch,
 .topbar-tools {
   -webkit-app-region: no-drag;
 }
@@ -261,72 +260,6 @@ html[data-platform="darwin"] .topbar-left {
   outline: none;
 }
 
-/* 顶栏中段：[对话 | 轨迹] 滑动胶囊分段开关（复刻 DSH 会话头分段控件） */
-.topbar-center {
-  display: flex;
-  flex: none;
-  align-items: center;
-  margin-inline: auto;
-  padding-inline: var(--space-1);
-}
-
-.topbar-view-switch {
-  position: relative;
-  display: inline-grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-  height: 26px;
-  padding: 2px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
-}
-
-.topbar-view-thumb {
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  left: 2px;
-  width: calc(50% - 2px);
-  border-radius: var(--radius-pill);
-  background: var(--control-on);
-  box-shadow: var(--shadow-1);
-  transition: transform var(--dur-base) var(--ease-out);
-  pointer-events: none;
-}
-
-.topbar-view-switch[data-view="trajectory"] .topbar-view-thumb {
-  transform: translateX(100%);
-}
-
-.topbar-view-pill {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 48px;
-  height: 100%;
-  padding: 0 var(--space-2-5);
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-2);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color var(--dur-fast) var(--ease-out);
-}
-
-.topbar-view-pill:hover {
-  color: var(--text);
-}
-
-.topbar-view-pill[data-active] {
-  color: var(--text);
-}
-
 /* 工作区快捷菜单按钮（Open ▾） */
 .topbar-open-btn {
   display: inline-flex;
@@ -419,14 +352,9 @@ html[data-platform="darwin"] .topbar-left {
   pointer-events: none;
 }
 
-/* 有中段胶囊时由 topbar-center 的 margin-inline: auto 把工具推到右端 */
-.topbar-center + .topbar-tools {
-  margin-left: 0;
-}
-
 /* 切换侧栏图标：左栏填充随显隐淡入淡出 */
 .sidebar-icon-fill {
-  opacity: 0.35;
+  opacity: 0.32;
   transition: opacity var(--dur-base) var(--ease-out);
 }
 
@@ -441,8 +369,7 @@ html[data-platform="darwin"] .topbar-left {
 /* 准备页（omp 没就绪，问接管除外）盖住顶栏以下时，顶栏只留标志：任务标题、工具、侧栏开关都作用在还不能用的应用上；
    工具藏起来后分隔线孤零零一条，也藏（2026-10-29）。问接管时底下的应用照常画、遮罩盖到顶栏，不用藏。
    只看 #app 的直接子元素，DOM 变动不触发整页重算。 */
-#app:has(> .setup:not([data-state="ask_takeover"]))
-  :is(.crumb, .topbar-center, [data-testid="topbar-sidebar"], .topbar-tools) {
+#app:has(> .setup:not([data-state="ask_takeover"])) :is(.crumb, [data-testid="topbar-sidebar"], .topbar-tools) {
   visibility: hidden;
 }
 

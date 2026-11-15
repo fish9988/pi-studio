@@ -71,11 +71,14 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     await page.getByTestId("sidebar-open-folder").click();
     await expect(page.getByTestId("empty-state")).toHaveAttribute("data-kind", "project");
 
-    // 1. 粘贴图片 + 输入带代码块的测试指令（Shift+Enter 换行不发送）
+    // 1. 空态隐藏「复制全部 / 优化提示词」，粘贴图片或输入文本后平滑显现
+    const enhanceGroup = page.getByTestId("enhance-prompt-group");
+    await expect(enhanceGroup).not.toBeVisible();
     const input = page.getByTestId("composer-input");
     await input.click();
     await pasteImage(page, solidPng(40, 30));
     await expect(page.getByTestId("attachment")).toHaveCount(1);
+    await expect(enhanceGroup).toBeVisible();
     await input.pressSequentially("请检查样式，示例：");
     await input.press("Shift+Enter");
     await input.pressSequentially("```css");
@@ -290,6 +293,151 @@ test("UI/UX 全面重构：主题家族、默认折叠代码卡、图文全量�
     await expect(page.getByTestId("main-panel")).toHaveCSS("border-radius", "20px");
     await expect.poll(async () => (await readFontVars()).ui).toContain("Anthropic Serif");
     await expect.poll(async () => (await readFontVars()).chat).toContain(chosenFontName);
+  } finally {
+    await launched.close();
+    await rm(work, { recursive: true, force: true });
+  }
+});
+
+test("UI 精细优化与 Plan Mode 交互兼容：无框 SVG、HTML Artifact 卡片、主题随动变更条、Other 自由输入与提问期空间紧凑", async () => {
+  const work = await mkdtemp(path.join(os.tmpdir(), "pi-ui-polish-"));
+  const project = path.join(work, "demo-project");
+  await mkdir(project);
+
+  const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
+  try {
+    const { app, page } = launched;
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 1360, height: 840 });
+    await app.evaluate(({ dialog }, dir) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [dir] });
+    }, project);
+
+    await setLocaleTheme(page, "zh-CN", "sage-light");
+    await page.getByTestId("sidebar-open-folder").click();
+    await expect(page.getByTestId("empty-state")).toHaveAttribute("data-kind", "project");
+
+    // 1. 验证顶栏清理后无残留中心节点，左右分栏图标统一为 16x16 viewBox；空态草稿隐藏次级操作组；思考气泡图标无十字杂线
+    await expect(page.locator(".topbar-center")).toHaveCount(0);
+    await expect(page.locator('[data-testid="topbar-sidebar"] svg')).toHaveAttribute("viewBox", "0 0 16 16");
+    await expect(page.locator('[data-testid="topbar-files"] svg')).toHaveAttribute("viewBox", "0 0 16 16");
+    await expect(page.getByTestId("draft-composer").getByTestId("enhance-prompt-group")).not.toBeVisible();
+    await expect(page.locator('[data-testid="chip-thinking"] .effort-pill-icon path')).toHaveCount(2);
+
+    // 1.1 命令面板主题图标已改为线性调色盘（4 个色点圆 + 轮廓 path，不再是半黑半白对比度圆）
+    await page.keyboard.press("Control+k");
+    const palette = page.getByTestId("command-palette");
+    await expect(palette).toBeVisible();
+    await palette.getByRole("combobox").fill("选择主题");
+    const themeOpt = palette.getByRole("option").first();
+    await expect(themeOpt).toBeVisible();
+    await expect(themeOpt.locator("svg circle")).toHaveCount(4);
+    await page.keyboard.press("Escape");
+    await expect(palette).toHaveCount(0);
+
+    // 2. 发送带 [edit] 与 [render:svg-html] 的消息，检验 SVG/Mermaid 无框直出、HTML Artifact 卡片、以及变更条在 sage-light 下不是纯白 #ffffff
+    const input = page.getByTestId("composer-input");
+    await input.fill("[edit] [render:svg-html]");
+    await input.press("Enter");
+    await expect(page.getByTestId("tsp-view")).toBeVisible({ timeout: 20_000 });
+
+    const assistant = page.locator('[data-testid="tsp-view"] [data-role="omp.assistant"]').last();
+    const blocks = assistant.getByTestId("codeblock");
+    await expect(blocks).toHaveCount(3, { timeout: 20_000 });
+
+    const svgBlock = blocks.nth(0);
+    await expect(svgBlock).toHaveAttribute("data-figure", "true");
+    await expect(svgBlock.locator(".md-codehead")).toHaveCount(0);
+    await expect(svgBlock.getByTestId("codeblock-figure")).toBeVisible();
+    await svgBlock.hover();
+    await expect(svgBlock.getByTestId("codeblock-figure-actions")).toBeVisible();
+
+    const mermaidBlock = blocks.nth(1);
+    await expect(mermaidBlock).toHaveAttribute("data-figure", "true", { timeout: 15_000 });
+    await expect(mermaidBlock.locator(".md-codehead")).toHaveCount(0);
+    await expect(mermaidBlock.getByTestId("codeblock-figure")).toBeVisible();
+    await mermaidBlock.hover();
+    await expect(mermaidBlock.getByTestId("codeblock-figure-actions")).toBeVisible();
+
+    const htmlBlock = blocks.nth(2);
+    await expect(htmlBlock).toHaveAttribute("data-artifact", "html");
+    await expect(htmlBlock.getByTestId("codeblock-artifact-head")).toContainText("交互式演示页");
+    await htmlBlock.getByTestId("codeblock-preview-sidebar").click();
+    await expect(page.getByTestId("file-preview")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await htmlBlock.getByTestId("codeblock-toggle").click();
+    await expect(htmlBlock.locator(".md-codebody")).toBeVisible();
+
+    const agPanel = page.getByTestId("tsp-ag-changes-panel");
+    await expect(agPanel).toBeVisible();
+    const bgColorLight = await agPanel.evaluate((el) => {
+      const g = globalThis as unknown as { getComputedStyle(e: unknown): { backgroundColor: string } };
+      return g.getComputedStyle(el).backgroundColor;
+    });
+    expect(bgColorLight).not.toBe("rgb(255, 255, 255)");
+    await setLocaleTheme(page, "zh-CN", "dusk-dark");
+    const bgColorDark = await agPanel.evaluate((el) => {
+      const g = globalThis as unknown as { getComputedStyle(e: unknown): { backgroundColor: string } };
+      return g.getComputedStyle(el).backgroundColor;
+    });
+    expect(bgColorDark).not.toBe("rgb(255, 255, 255)");
+    expect(bgColorDark).not.toBe(bgColorLight);
+    await setLocaleTheme(page, "zh-CN", "sage-light");
+
+    // 3. 长对话下校验电梯条与右侧滚动条间隔（right >= 18px）
+    await input.fill("第二轮消息，用于触发对话线电梯条");
+    await input.press("Enter");
+    const convline = page.getByTestId("conversation-line");
+    await expect(convline).toBeVisible({ timeout: 20_000 });
+    await expect(convline).toHaveCSS("right", "18px");
+
+    // 4. Plan Mode 问答兼容：select(Other (free-form)) + 原生输入法/文本提交，且提问期底部重复 Composer 折叠
+    await input.fill("[ask:plan]");
+    await input.press("Enter");
+    const askGate = page.locator('[data-testid="tsp-view"] [data-role="omp.editor.ask"]');
+    await expect(askGate).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("composer-stack")).toHaveAttribute("data-asking", "");
+    await expect(page.getByTestId("composer-input")).toHaveCount(0);
+
+    // 点选 Other (free-form) 选项后，无缝弹出原生编辑器，输入中文并 Ctrl+Enter 提交
+    await askGate.locator('[data-role="omp.ask.other"]').click();
+    const nativeEditor = askGate.getByTestId("tspi-ask-native-input");
+    await expect(nativeEditor).toBeVisible({ timeout: 10_000 });
+    await nativeEditor.fill("采用极简方案并保留中文支持");
+    await nativeEditor.press("Control+Enter");
+    await expect(askGate).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.locator('[data-testid="tsp-view"] [data-role="omp.assistant"]').last()).toContainText(
+      "[UI value: 采用极简方案并保留中文支持]",
+      { timeout: 20_000 },
+    );
+    await expect(page.getByTestId("composer-input")).toBeVisible();
+
+    // 5. 测试内联 Other 输入框直接提交与 Esc 取消
+    await input.fill("[ask:plan]");
+    await input.press("Enter");
+    await expect(askGate).toBeVisible({ timeout: 20_000 });
+    const otherInline = askGate.getByTestId("tspi-ask-other-input");
+    await expect(otherInline).toBeVisible();
+    await otherInline.fill("内联直接提交的方案");
+    await otherInline.press("Enter");
+    await expect(askGate).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.locator('[data-testid="tsp-view"] [data-role="omp.assistant"]').last()).toContainText(
+      "[UI value: 内联直接提交的方案]",
+      { timeout: 20_000 },
+    );
+
+    // Esc 取消 input 对话框
+    await input.fill("[ask:input]");
+    await input.press("Enter");
+    await expect(askGate).toBeVisible({ timeout: 20_000 });
+    const singleNative = askGate.getByTestId("tspi-ask-native-input");
+    await expect(singleNative).toBeVisible();
+    await singleNative.press("Escape");
+    await expect(askGate).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.locator('[data-testid="tsp-view"] [data-role="omp.assistant"]').last()).toContainText(
+      "[UI cancelled]",
+      { timeout: 20_000 },
+    );
   } finally {
     await launched.close();
     await rm(work, { recursive: true, force: true });

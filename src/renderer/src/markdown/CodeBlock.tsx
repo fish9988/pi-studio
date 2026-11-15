@@ -11,6 +11,7 @@ import { Check, ChevronDown, Code, CopyIcon, External, Plus } from "../icons.tsx
 import { useSelectedTaskId, useSettings } from "../store/index.ts";
 import { currentLocale } from "../store/settings-store.ts";
 import { onThemeChange } from "../ui/theme-change.ts";
+import { extractHtmlArtifactTitle, isHtmlArtifactCodeBlock } from "./artifact-meta.ts";
 import { useHighlighted } from "./highlight.ts";
 import { codeBlockUsesDark } from "./code-block-theme.ts";
 import { resolveLanguage } from "./highlight-languages.ts";
@@ -92,6 +93,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
   );
   const ready = figure && !failed && (kind === "svg" || mermaidSvg !== null);
   const drawing = ready && !showSource;
+  const isHtmlArtifact = isHtmlArtifactCodeBlock({ lang, closed, standalone });
   const isCollapsed = !drawing && !standalone && !expanded;
   const tokens = useHighlighted(code, closed && !drawing && !isCollapsed ? lang : null);
   const lines = code.split("\n");
@@ -100,6 +102,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
     const first = lines.find((line) => line.trim() !== "")?.trim() ?? "";
     return first.length > 72 ? `${first.slice(0, 71)}…` : first;
   }, [lines]);
+  const artifactTitle = useMemo(() => (isHtmlArtifact ? extractHtmlArtifactTitle(code) : ""), [isHtmlArtifact, code]);
 
   useEffect(() => {
     if (focusLine !== undefined) setExpanded(true);
@@ -148,135 +151,251 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
     );
   };
   const quote = () => quoteToComposer(taskId, code, { lang });
+  const openSidebarPreview = () => {
+    if (previewableExt === null) return;
+    const panelKey = taskId ?? draftKey(null);
+    const content = kind === "mermaid" ? (mermaidSvg ?? code) : code;
+    const name = previewableExt === "html" ? "preview.html" : previewableExt === "svg" ? "figure.svg" : "document.md";
+    openInlineArtifact(panelKey, {
+      id: `cb-${code.length}`,
+      name,
+      ext: previewableExt,
+      content,
+    });
+  };
   const zh = currentLocale() === "zh-CN";
   // 代码卡配色：图（svg / mermaid）不铺底色；深色终端卡与冷灰浅色卡的取舍见 code-block-theme.ts。
   const useDarkCode = codeBlockUsesDark({ uiStyle, codeBlockStyle, darkTheme: isDarkTheme, drawing });
+
+  if (drawing) {
+    return (
+      <div className="md-codeblock" data-anchor data-testid="codeblock" data-figure="true">
+        <FigureImage
+          prepare={prepare}
+          alt={t("code.figure")}
+          onFail={() => setImageFailed(true)}
+          actions={
+            <span className="md-figure-actions" data-testid="codeblock-figure-actions">
+              {previewableExt !== null && (kind !== "mermaid" || mermaidSvg !== null) && (
+                <button
+                  type="button"
+                  className="md-codebtn"
+                  aria-label={t("code.previewSidebar")}
+                  title={t("code.previewSidebar")}
+                  data-testid="codeblock-preview-sidebar"
+                  onClick={openSidebarPreview}
+                >
+                  <External size={14} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="md-codebtn"
+                aria-pressed={showSource}
+                aria-label={t("code.source")}
+                title={t("code.source")}
+                data-testid="codeblock-source"
+                onClick={() => {
+                  setShowSource(true);
+                  setExpanded(true);
+                }}
+              >
+                <Code size={14} />
+              </button>
+              <button
+                type="button"
+                className="md-codebtn"
+                onClick={copy}
+                aria-label={t("code.copy")}
+                title={t("code.copy")}
+                data-testid="codeblock-copy"
+              >
+                {copied ? <Check size={14} /> : <CopyIcon size={14} />}
+              </button>
+              <span className="md-sr" aria-live="polite">
+                {copied ? t("common.copied") : ""}
+              </span>
+            </span>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div
       className="md-codeblock"
       data-anchor
       data-testid="codeblock"
-      data-figure={drawing || undefined}
-      data-code-dark={!drawing && useDarkCode ? "" : undefined}
-      data-code-light={!drawing && !useDarkCode ? "" : undefined}
+      data-artifact={isHtmlArtifact ? "html" : undefined}
+      data-code-dark={useDarkCode ? "" : undefined}
+      data-code-light={!useDarkCode ? "" : undefined}
       data-collapsed={isCollapsed || undefined}
     >
-      <div
-        className="md-codehead"
-        role={!drawing && !standalone ? "button" : undefined}
-        tabIndex={!drawing && !standalone ? 0 : undefined}
-        aria-expanded={!drawing && !standalone ? !isCollapsed : undefined}
-        onClick={
-          !drawing && !standalone
-            ? (event) => {
-                if ((event.target as Element | null)?.closest(".md-codeactions")) return;
-                setExpanded((value) => !value);
-              }
-            : undefined
-        }
-        onKeyDown={
-          !drawing && !standalone
-            ? (event) => {
-                if ((event.target as Element | null)?.closest(".md-codeactions")) return;
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setExpanded((value) => !value);
-                }
-              }
-            : undefined
-        }
-      >
-        <span className="md-code-title">
-          <span className="md-code-dots" aria-hidden="true">
-            <i />
-            <i />
-            <i />
+      {isHtmlArtifact ? (
+        <div className="md-artifact-head" data-testid="codeblock-artifact-head">
+          <span className="md-artifact-badge">HTML</span>
+          <span className="md-artifact-meta">
+            <span className="md-artifact-title" title={artifactTitle}>
+              {artifactTitle}
+            </span>
+            <span className="md-artifact-sub">
+              {zh ? `${lines.length} 行 · 交互网页` : `${lines.length} lines · Interactive HTML`}
+            </span>
           </span>
-          <span className="md-codelang">{lang === "" ? "text" : lang}</span>
-          <span className="md-codelines">
-            {zh ? `${lines.length} 行` : `${lines.length} lines`}
-            {!closed ? (zh ? " · 输出中…" : " · streaming…") : ""}
-          </span>
-          {isCollapsed && previewSnippet !== "" && <span className="md-code-preview">{previewSnippet}</span>}
-        </span>
-        <span className="md-codeactions">
-          {previewableExt !== null && (kind !== "mermaid" || mermaidSvg !== null) && (
+          <span className="md-artifact-actions">
             <button
               type="button"
-              className="md-codebtn"
+              className="md-artifact-preview-btn"
               aria-label={t("code.previewSidebar")}
               title={t("code.previewSidebar")}
               data-testid="codeblock-preview-sidebar"
-              onClick={() => {
-                const panelKey = taskId ?? draftKey(null);
-                const content = kind === "mermaid" ? (mermaidSvg ?? code) : code;
-                const name =
-                  previewableExt === "html" ? "preview.html" : previewableExt === "svg" ? "figure.svg" : "document.md";
-                openInlineArtifact(panelKey, {
-                  id: `cb-${code.length}`,
-                  name,
-                  ext: previewableExt,
-                  content,
-                });
-              }}
+              onClick={openSidebarPreview}
             >
-              <External size={14} />
+              <span>{zh ? "预览" : "Preview"}</span>
+              <External size={13} />
             </button>
-          )}
-          {ready && (
             <button
               type="button"
               className="md-codebtn"
-              aria-pressed={showSource}
-              aria-label={t("code.source")}
-              title={t("code.source")}
-              data-testid="codeblock-source"
-              onClick={() => setShowSource((value) => !value)}
+              onClick={quote}
+              aria-label={zh ? "引用到输入框" : "Quote to composer"}
+              title={zh ? "引用到输入框" : "Quote to composer"}
+              data-testid="codeblock-quote-composer"
             >
-              <Code size={14} />
+              <Plus size={14} />
             </button>
-          )}
-          <button
-            type="button"
-            className="md-codebtn"
-            onClick={quote}
-            aria-label={zh ? "引用到输入框" : "Quote to composer"}
-            title={zh ? "引用到输入框" : "Quote to composer"}
-            data-testid="codeblock-quote-composer"
-          >
-            <Plus size={14} />
-          </button>
-          <button
-            type="button"
-            className="md-codebtn"
-            onClick={copy}
-            aria-label={t("code.copy")}
-            title={t("code.copy")}
-          >
-            {copied ? <Check size={14} /> : <CopyIcon size={14} />}
-          </button>
-          {!drawing && !standalone && (
+            <button
+              type="button"
+              className="md-codebtn"
+              onClick={copy}
+              aria-label={t("code.copy")}
+              title={t("code.copy")}
+              data-testid="codeblock-copy"
+            >
+              {copied ? <Check size={14} /> : <CopyIcon size={14} />}
+            </button>
             <button
               type="button"
               className="md-codebtn md-code-toggle"
               aria-expanded={!isCollapsed}
-              aria-label={isCollapsed ? (zh ? "展开代码" : "Expand code") : zh ? "折叠代码" : "Collapse code"}
-              title={isCollapsed ? (zh ? "展开代码" : "Expand code") : zh ? "折叠代码" : "Collapse code"}
+              aria-label={isCollapsed ? (zh ? "展开源码" : "Expand source") : zh ? "折叠源码" : "Collapse source"}
+              title={isCollapsed ? (zh ? "展开源码" : "Expand source") : zh ? "折叠源码" : "Collapse source"}
               data-testid="codeblock-toggle"
               onClick={() => setExpanded((value) => !value)}
             >
               <ChevronDown size={14} />
             </button>
-          )}
-        </span>
-        <span className="md-sr" aria-live="polite">
-          {copied ? t("common.copied") : ""}
-        </span>
-      </div>
-      {drawing ? (
-        <FigureImage prepare={prepare} alt={t("code.figure")} onFail={() => setImageFailed(true)} />
-      ) : isCollapsed ? null : (
+          </span>
+          <span className="md-sr" aria-live="polite">
+            {copied ? t("common.copied") : ""}
+          </span>
+        </div>
+      ) : (
+        <div
+          className="md-codehead"
+          role={!standalone ? "button" : undefined}
+          tabIndex={!standalone ? 0 : undefined}
+          aria-expanded={!standalone ? !isCollapsed : undefined}
+          onClick={
+            !standalone
+              ? (event) => {
+                  if ((event.target as Element | null)?.closest(".md-codeactions")) return;
+                  setExpanded((value) => !value);
+                }
+              : undefined
+          }
+          onKeyDown={
+            !standalone
+              ? (event) => {
+                  if ((event.target as Element | null)?.closest(".md-codeactions")) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setExpanded((value) => !value);
+                  }
+                }
+              : undefined
+          }
+        >
+          <span className="md-code-title">
+            <span className="md-code-dots" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            <span className="md-codelang">{lang === "" ? "text" : lang}</span>
+            <span className="md-codelines">
+              {zh ? `${lines.length} 行` : `${lines.length} lines`}
+              {!closed ? (zh ? " · 输出中…" : " · streaming…") : ""}
+            </span>
+            {isCollapsed && previewSnippet !== "" && <span className="md-code-preview">{previewSnippet}</span>}
+          </span>
+          <span className="md-codeactions">
+            {previewableExt !== null && (kind !== "mermaid" || mermaidSvg !== null) && (
+              <button
+                type="button"
+                className="md-codebtn"
+                aria-label={t("code.previewSidebar")}
+                title={t("code.previewSidebar")}
+                data-testid="codeblock-preview-sidebar"
+                onClick={openSidebarPreview}
+              >
+                <External size={14} />
+              </button>
+            )}
+            {ready && (
+              <button
+                type="button"
+                className="md-codebtn"
+                aria-pressed={showSource}
+                aria-label={t("code.source")}
+                title={t("code.source")}
+                data-testid="codeblock-source"
+                onClick={() => setShowSource((value) => !value)}
+              >
+                <Code size={14} />
+              </button>
+            )}
+            <button
+              type="button"
+              className="md-codebtn"
+              onClick={quote}
+              aria-label={zh ? "引用到输入框" : "Quote to composer"}
+              title={zh ? "引用到输入框" : "Quote to composer"}
+              data-testid="codeblock-quote-composer"
+            >
+              <Plus size={14} />
+            </button>
+            <button
+              type="button"
+              className="md-codebtn"
+              onClick={copy}
+              aria-label={t("code.copy")}
+              title={t("code.copy")}
+              data-testid="codeblock-copy"
+            >
+              {copied ? <Check size={14} /> : <CopyIcon size={14} />}
+            </button>
+            {!standalone && (
+              <button
+                type="button"
+                className="md-codebtn md-code-toggle"
+                aria-expanded={!isCollapsed}
+                aria-label={isCollapsed ? (zh ? "展开代码" : "Expand code") : zh ? "折叠代码" : "Collapse code"}
+                title={isCollapsed ? (zh ? "展开代码" : "Expand code") : zh ? "折叠代码" : "Collapse code"}
+                data-testid="codeblock-toggle"
+                onClick={() => setExpanded((value) => !value)}
+              >
+                <ChevronDown size={14} />
+              </button>
+            )}
+          </span>
+          <span className="md-sr" aria-live="polite">
+            {copied ? t("common.copied") : ""}
+          </span>
+        </div>
+      )}
+      {isCollapsed ? null : (
         <>
           {failed && <p className="md-figure-note">{t("code.figureFailed")}</p>}
           <pre ref={preRef} className="md-codebody" style={standalone ? { maxHeight: "none" } : undefined}>
@@ -317,10 +436,12 @@ function FigureImage({
   prepare,
   alt,
   onFail,
+  actions,
 }: {
   prepare: (style: CSSStyleDeclaration) => string;
   alt: string;
   onFail: () => void;
+  actions?: React.ReactNode;
 }) {
   const [theme, setTheme] = useState(0);
   useEffect(() => onThemeChange(() => setTheme((value) => value + 1)), []);
@@ -329,6 +450,7 @@ function FigureImage({
   return (
     <div className="md-figure">
       <img src={src} alt={alt} data-testid="codeblock-figure" onError={onFail} />
+      {actions}
     </div>
   );
 }

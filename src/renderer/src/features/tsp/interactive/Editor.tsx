@@ -46,6 +46,178 @@ function measureLines(
 }
 
 export function Editor(props: NodeProps) {
+  const { node } = props;
+  const p = node.p as TspEditorProps & { role?: string };
+  if (p.role === "omp.ask.input" || node.id.startsWith("dlg_")) {
+    return <AskNativeEditor {...props} />;
+  }
+  return <TerminalEditor {...props} />;
+}
+
+/**
+ * 扩展下发的 `dock.dialog` 提问输入框（`method: "input" | "editor"`）：
+ * 使用原生受控 `<input>` / `<textarea>` 处理自由文本录入与中文 IME 组合，
+ * 避免透明叠层光标错位或焦点被外层 `AskGateCol` 抢走。
+ */
+function AskNativeEditor(props: NodeProps) {
+  const { node, ctx } = props;
+  const p = node.p as TspEditorProps;
+  const propText = p.text ?? "";
+  const readonly = p.readonly === true;
+  const single = node.k === "input";
+  const surface = useTspSurface(ctx.taskId, ctx.sf);
+  const hasFocus = surface?.focus === node.id;
+
+  const [value, setValue] = useState(propText);
+  const syncedRef = useRef(propText);
+  const composingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  if (propText !== syncedRef.current && !composingRef.current) {
+    syncedRef.current = propText;
+    setValue(propText);
+  }
+
+  useEffect(() => {
+    if (!hasFocus && !node.id.startsWith("dlg_")) return;
+    const el = single ? inputRef.current : textareaRef.current;
+    if (el && document.activeElement !== el) {
+      el.focus({ preventScroll: true });
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    }
+  }, [hasFocus, single, node.id]);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el || single) return;
+    el.style.height = "auto";
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 20;
+    const padY = parseFloat(getComputedStyle(el).paddingTop) + parseFloat(getComputedStyle(el).paddingBottom);
+    const maxLines = p.maxLines !== undefined && p.maxLines > 0 ? p.maxLines : 8;
+    const cap = maxLines * lineHeight + padY;
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 68), cap)}px`;
+  }, [value, single, p.maxLines]);
+
+  const syncEdit = useCallback(
+    (nextText: string, caret: number) => {
+      const prevLen = syncedRef.current.length;
+      if (nextText === syncedRef.current) return;
+      syncedRef.current = nextText;
+      ctx.send({
+        ev: "edit",
+        sf: ctx.sf,
+        id: node.id,
+        from: 0,
+        to: prevLen,
+        text: nextText,
+        cursor: caret,
+        len: prevLen,
+      });
+    },
+    [ctx, node.id],
+  );
+
+  const submit = useCallback(
+    (currentValue: string) => {
+      if (readonly) return;
+      ctx.send({ ev: "send", sf: ctx.sf, id: node.id, text: currentValue });
+    },
+    [ctx, node.id, readonly],
+  );
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const like = likeOf(e.nativeEvent);
+    if (composingRef.current || isComposingKey(like)) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      ctx.keys("\x1b");
+      return;
+    }
+    if (single && e.key === "Enter" && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      submit(e.currentTarget.value);
+      return;
+    }
+    if (!single && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      submit(e.currentTarget.value);
+    }
+  };
+
+  const placeholder = typeof p.placeholder === "string" ? p.placeholder : "";
+  return (
+    <div {...nodeDomProps(props, "tspi-ask-native-wrap", { pointer: false, noTitle: true })}>
+      {single ? (
+        <input
+          ref={inputRef}
+          type="text"
+          className="tspi-ask-native-input"
+          data-tspi-keys=""
+          data-testid="tspi-ask-native-input"
+          value={value}
+          placeholder={placeholder}
+          readOnly={readonly}
+          spellCheck={false}
+          onChange={(e) => {
+            const next = e.currentTarget.value;
+            setValue(next);
+            const nativeComposing = (e.nativeEvent as { isComposing?: boolean }).isComposing === true;
+            if (!composingRef.current && !nativeComposing) {
+              syncEdit(next, e.currentTarget.selectionStart ?? next.length);
+            }
+          }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            composingRef.current = false;
+            const next = e.currentTarget.value;
+            setValue(next);
+            syncEdit(next, e.currentTarget.selectionStart ?? next.length);
+          }}
+          onKeyDown={onKeyDown}
+        />
+      ) : (
+        <textarea
+          ref={textareaRef}
+          className="tspi-ask-native-textarea"
+          data-tspi-keys=""
+          data-testid="tspi-ask-native-input"
+          rows={3}
+          value={value}
+          placeholder={placeholder}
+          readOnly={readonly}
+          spellCheck={false}
+          onChange={(e) => {
+            const next = e.currentTarget.value;
+            setValue(next);
+            const nativeComposing = (e.nativeEvent as { isComposing?: boolean }).isComposing === true;
+            if (!composingRef.current && !nativeComposing) {
+              syncEdit(next, e.currentTarget.selectionStart ?? next.length);
+            }
+          }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            composingRef.current = false;
+            const next = e.currentTarget.value;
+            setValue(next);
+            syncEdit(next, e.currentTarget.selectionStart ?? next.length);
+          }}
+          onKeyDown={onKeyDown}
+        />
+      )}
+    </div>
+  );
+}
+
+function TerminalEditor(props: NodeProps) {
   const { node, ctx } = props;
   const p = node.p as TspEditorProps;
   const text = p.text ?? "";

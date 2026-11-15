@@ -522,7 +522,15 @@ function runRpcServer(opts) {
     const lowerPrompt = promptText.toLowerCase();
     if (promptText.includes("[ask") || promptText.includes("[confirm]")) {
       const reqId = `ui_${shortId()}`;
-      if (promptText.includes("[ask:select]")) {
+      if (promptText.includes("[ask:plan]")) {
+        sendJson({
+          type: "extension_ui_request",
+          id: reqId,
+          method: "select",
+          title: "方案选择: 请选择实现方式",
+          options: ["1. 方案 A — 保持现状", "2. 方案 B — 精简重构", "3. Other (free-form)"],
+        });
+      } else if (promptText.includes("[ask:select]")) {
         sendJson({
           type: "extension_ui_request",
           id: reqId,
@@ -565,7 +573,27 @@ function runRpcServer(opts) {
       } else if (typeof uiResp.confirmed === "boolean") {
         uiNote = uiResp.confirmed ? " [UI confirmed]" : " [UI denied]";
       } else if (typeof uiResp.value === "string") {
-        uiNote = ` [UI value: ${uiResp.value}]`;
+        if (promptText.includes("[ask:plan]") && uiResp.value === "3. Other (free-form)") {
+          const edReqId = `ui_${shortId()}`;
+          sendJson({
+            type: "extension_ui_request",
+            id: edReqId,
+            method: "editor",
+            title: "请选择实现方式",
+            placeholder: "请输入自定义方案",
+          });
+          const edResp = await waitForExtensionUiResponse(edReqId);
+          if (abortCurrentRun) {
+            return finishAbortedTurn(partialAssistant, assistantContent);
+          }
+          if (edResp.cancelled) {
+            uiNote = " [UI cancelled]";
+          } else if (typeof edResp.value === "string") {
+            uiNote = ` [UI value: ${edResp.value}]`;
+          }
+        } else {
+          uiNote = ` [UI value: ${uiResp.value}]`;
+        }
       }
     }
 
@@ -672,7 +700,24 @@ function runRpcServer(opts) {
 
     // 5. Slow streaming or normal text streaming
     let replyText = `Fake Pi reply to: ${promptText}${uiNote}`;
-    if (promptText.includes("[unicode]")) {
+    if (promptText.includes("[render:svg-html]")) {
+      replyText = [
+        "下面是一张结构图、流程图与交互网页示例：",
+        "",
+        "```svg",
+        '<svg viewBox="0 0 180 48"><rect width="180" height="48" rx="8" fill="var(--accent)"/><text x="16" y="29" fill="var(--fg)">流程图</text></svg>',
+        "```",
+        "",
+        "```mermaid",
+        "flowchart LR",
+        "  A[开始] --> B[完成]",
+        "```",
+        "",
+        "```html",
+        "<!DOCTYPE html><html><head><title>交互式演示页</title></head><body><h1>Hello Artifact</h1></body></html>",
+        "```",
+      ].join("\n");
+    } else if (promptText.includes("[unicode]")) {
       replyText += " \u2028line-sep\u2029para-sep";
     }
 

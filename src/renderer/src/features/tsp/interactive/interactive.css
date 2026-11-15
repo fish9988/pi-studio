@@ -47,11 +47,66 @@
   gap: var(--space-2);
   min-width: 0;
   padding: var(--space-1-5) var(--space-2-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--fs-base);
   line-height: var(--lh-base);
   cursor: text;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.tspi-editor.focused,
+.tspi-editor.dom-focus {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.tspi-ask-native-wrap {
+  min-width: 0;
+  width: 100%;
+}
+.tspi-ask-native-input,
+.tspi-ask-native-textarea {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  outline: none;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.tspi-ask-native-input {
+  height: var(--control-h-md);
+  padding: 0 var(--space-2-5);
+}
+.tspi-ask-native-textarea {
+  min-height: 68px;
+  max-height: 180px;
+  padding: var(--space-2) var(--space-2-5);
+  resize: vertical;
+  overflow-y: auto;
+}
+.tspi-ask-native-input::placeholder,
+.tspi-ask-native-textarea::placeholder {
+  color: var(--text-3);
+}
+.tspi-ask-native-input:focus,
+.tspi-ask-native-textarea:focus {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .tspi-editor.readonly {
   cursor: default;
@@ -337,8 +392,8 @@
 .tspi-ask-other-inline {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
+  gap: var(--space-1-5);
+  margin-top: var(--space-0-5);
 }
 .tspi-ask-other-input {
   flex: 1;
@@ -1448,10 +1503,15 @@
 /* 门有外框（和输入框同宽同轴：dock 已经和输入框同宽），不再像对话正文。只用一道细线、不加阴影（2026-10-29：--border 偏重） */
 .tsp-col[data-role="omp.editor.ask"],
 .tsp-col[data-role="omp.editor.ask.approval"] {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2-5) var(--space-3);
+  gap: var(--space-1-5);
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+}
+.tsp-col[data-role="omp.editor.ask"] .tspi-item[data-role^="omp.ask."] {
+  padding-block: var(--space-1);
+  min-height: calc(var(--lh-sm) + var(--space-1));
 }
 /* 根节点自己接键盘（Review 页没有 list），不画聚焦环。 */
 .tspi-ask-gate {
@@ -1460,7 +1520,8 @@
 /* 底栏 Hide / Note / Skip / Next / Submit：ui 的 sm 按钮，按钮里尾随快捷键小字；按钮靠右，Hide 在最左（omp 的 spacer 撑开）。 */
 .tsp-col[data-role="omp.editor.ask"] [data-role="omp.actions"],
 .tsp-col[data-role="omp.editor.ask.approval"] [data-role="omp.actions"] {
-  gap: var(--space-2);
+  gap: var(--space-1-5);
+  margin-top: var(--space-0-5);
 }
 
 /* 审批卡的顺序是 标题 / 命令 / 选项 / 底栏（Details、Deny、Approve）。Deny / Approve 和选项重复，不画（gate.ts

@@ -271,7 +271,7 @@
   top: var(--space-6);
   /* 底部让出 56px：右下角有 .tsp-jump 悬浮按钮，窄对话时两者会叠在一起 */
   bottom: 56px;
-  right: 6px;
+  right: 18px;
   z-index: calc(var(--z-sticky) + 3);
   display: flex;
   flex-direction: column;
@@ -304,11 +304,12 @@
   display: none;
 }
 .tsp-convline-card[data-open] {
-  width: 280px;
+  width: 236px;
   max-width: calc(100vw - 32px);
   padding: 6px;
-  background: var(--bg-overlay);
-  border-color: var(--border-subtle);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(18px) saturate(155%);
+  border-color: var(--glass-rim);
   box-shadow: var(--shadow-2);
 }
 .tsp-convline-tick {
@@ -3763,8 +3764,8 @@
   flex-direction: column;
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-raised);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-tool) 78%, var(--bg-raised));
   overflow: hidden;
   transition:
     border-color var(--dur-fast) var(--ease-out),
@@ -3894,7 +3895,7 @@
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-raised);
+  background: color-mix(in srgb, var(--bg-sunken) 65%, var(--bg-raised));
   color: var(--text-2);
   cursor: pointer;
   transition:
@@ -3913,8 +3914,8 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-raised);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-tool) 78%, var(--bg-raised));
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
@@ -3962,7 +3963,7 @@
   padding: 0 var(--space-2);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: var(--bg-raised);
+  background: var(--bg-sunken);
   color: var(--text);
   font: inherit;
   font-size: var(--fs-2xs);
@@ -3970,6 +3971,7 @@
 }
 .tsp-ag-search:focus {
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--bg-tool) 50%, var(--bg-raised));
 }
 .tsp-ag-review-btn {
   margin-left: auto;
@@ -3980,7 +3982,7 @@
   padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-raised);
+  background: color-mix(in srgb, var(--bg-sunken) 65%, var(--bg-raised));
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-xs);
@@ -3995,6 +3997,36 @@
   background: var(--bg-hover);
   border-color: var(--border-strong);
   color: var(--text);
+}
+:root[data-backdrop] .tsp-dsh-card-wrap,
+:root[data-backdrop] .tsp-ag-panel {
+  background: color-mix(in srgb, var(--bg-tool) var(--bd-surface-alpha, 88%), transparent);
+}
+:root[data-ui-style="fluent"] .tsp-dsh-card-wrap,
+:root[data-ui-style="fluent"] .tsp-ag-panel {
+  border-radius: var(--radius-md);
+  border-color: var(--border);
+  box-shadow: none;
+}
+:root[data-ui-style="mica-liquid"] .tsp-dsh-card-wrap,
+:root[data-ui-style="mica-liquid"] .tsp-ag-panel {
+  border-radius: var(--radius-lg);
+  border-color: var(--glass-rim);
+  backdrop-filter: blur(14px);
+}
+:root[data-ui-style="liquid"] .tsp-dsh-card-wrap,
+:root[data-ui-style="liquid"] .tsp-ag-panel {
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-tool) 68%, var(--bg-glass-strong));
+  border-color: var(--glass-rim);
+  backdrop-filter: blur(18px) saturate(155%);
+  box-shadow: var(--shadow-1);
+}
+:root[data-ui-style="claude"] .tsp-dsh-card-wrap,
+:root[data-ui-style="claude"] .tsp-ag-panel {
+  border-radius: var(--radius-md);
+  border-color: var(--border);
+  box-shadow: none;
 }
 .tsp-ag-list {
   display: flex;

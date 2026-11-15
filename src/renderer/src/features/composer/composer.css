@@ -11,6 +11,9 @@
   margin: 0 auto;
   padding-bottom: var(--space-4);
 }
+.composer-stack[data-asking] {
+  padding-bottom: var(--space-2);
+}
 /* 输入框上缘不再画淡出带：渐变尽头是实色 --bg-app，在纯白、Liquid 染色、整窗背景图上都会横出一条盖住背景的白带子。
    滚动内容改成在 tsp.css 给 .tsp-scroller 加底部 14px 的 mask 渐隐，跟着它身后的任何底色一起淡出。 */
 /* Liquid Glass 悬浮输入浮岛 */
@@ -342,6 +345,25 @@
   align-items: center;
   gap: var(--space-0-5);
   flex: none;
+  max-width: 0;
+  margin-left: calc(var(--space-0-5) * -1);
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: scale(0.92);
+  transition:
+    max-width var(--dur-base) var(--ease-out),
+    margin-left var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.enhance-prompt-group[data-visible] {
+  max-width: 180px;
+  margin-left: 0;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+  transform: none;
 }
 .enhance-prompt-btn {
   width: var(--control-h-sm);
