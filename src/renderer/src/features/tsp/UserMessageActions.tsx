@@ -6,7 +6,7 @@ import type { TaskId } from "../../../../shared/ipc.ts";
 import { userCardFromEnd } from "../../../../shared/tsp/session-tree.ts";
 import { Check, Close, CopyIcon } from "../../icons.tsx";
 import { currentLocale } from "../../store/settings-store.ts";
-import { useTaskIdle } from "../../store/tasks-store.ts";
+import { useTaskValue } from "../../store/tasks-store.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
 import { useTitleBarDim } from "../../ui/title-bar-dim.ts";
 import { branchToNode } from "../conversation/fork-actions.ts";
@@ -148,7 +148,9 @@ function ConfirmUndoModal({
 }
 
 export function UserMessageActions({ taskId, sf, cardId }: { taskId: TaskId; sf: string; cardId: string }) {
-  const idle = useTaskIdle(taskId);
+  const idle = useTaskValue(taskId, (task) => task?.status === "idle");
+  // 刚撤回完、后台正在重开进程时是 starting（没有轮次在跑），不能报"当前轮次还在运行"。
+  const starting = useTaskValue(taskId, (task) => task?.status === "starting");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -166,7 +168,13 @@ export function UserMessageActions({ taskId, sf, cardId }: { taskId: TaskId; sf:
     if (!idle) {
       pushToast({
         level: "info",
-        message: zh ? "当前轮次还在运行，请等停止后再撤回" : "Wait for the current turn to finish first",
+        message: starting
+          ? zh
+            ? "会话正在准备，请稍候再撤回"
+            : "The session is starting; try again in a moment"
+          : zh
+            ? "当前轮次还在运行，请等停止后再撤回"
+            : "Wait for the current turn to finish first",
       });
       return;
     }

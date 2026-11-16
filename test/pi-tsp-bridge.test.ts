@@ -590,6 +590,48 @@ describe("PiTspBridge — live streaming RPC events & extension UI dialogs", () 
 });
 
 describe("PiService & PiTaskRunner integration with fake-pi", () => {
+  /** 一条 n 轮的假会话文件（每轮一条用户消息 + 一条回答）。 */
+  async function seedRewindSession(dir: string, name: string, turns: number): Promise<string> {
+    const file = path.join(dir, name);
+    const lines = [JSON.stringify({ type: "session", version: 3, id: name, cwd: dir })];
+    for (let i = 1; i <= turns; i++) {
+      lines.push(
+        JSON.stringify({
+          type: "message",
+          id: `u${i}`,
+          parentId: i === 1 ? null : `a${i - 1}`,
+          message: { role: "user", content: [{ type: "text", text: `问 ${i}` }] },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: `a${i}`,
+          parentId: `u${i}`,
+          message: { role: "assistant", content: [{ type: "text", text: `答 ${i}` }] },
+        }),
+      );
+    }
+    await writeFile(file, `${lines.join("\n")}\n`, "utf8");
+    return file;
+  }
+
+  function rewindRecord(dir: string, sessionFile: string, id: string): TaskRecord {
+    return {
+      id: id as TaskId,
+      projectId: "proj_rewind_extra" as ProjectId,
+      title: "",
+      archived: false,
+      sessionFile,
+      worktreePath: null,
+      worktreeBranch: null,
+      worktreeBase: null,
+      cwd: dir,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      model: null,
+      thinkingLevel: null,
+    };
+  }
+
   it("撤回不等重开进程：文件截断 + 对话回到撤回点时，新进程还没起来", async () => {
     const dir = await makeTempDir();
     const sessionFile = path.join(dir, "rewind-fast.jsonl");
@@ -668,6 +710,88 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
       await runner.start();
       expect(runner.status).toBe("idle");
       expect(userMessages(document()).map((m) => m.text)).toEqual(["问 1", "问 2"]);
+    } finally {
+      releaseSecondLaunch();
+      await runner.dispose();
+    }
+  });
+
+  it("刚撤回完马上再撤一条：排队等上一次做完，不会报错也不会截错", async () => {
+    const dir = await makeTempDir();
+    const sessionFile = await seedRewindSession(dir, "rewind-queue.jsonl", 3);
+    let record = rewindRecord(dir, sessionFile, "task_queue");
+    const runner = new PiTaskRunner(
+      record,
+      { id: record.projectId, name: "Queue", path: dir },
+      {
+        buildPiLaunch: () => Promise.resolve({ ...FAKE_LAUNCH, env: { ...FAKE_LAUNCH.env, PI_CODING_AGENT_DIR: dir } }),
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    const document = () => restoreDocument(runner.tspSnapshot().document);
+    try {
+      await runner.start();
+      // 第一条还在后台重开进程时立刻发起第二条：应该排队完成，而不是回一句“正在撤回”。
+      const first = runner.rewindTo("u3");
+      const second = runner.rewindTo("u2");
+      expect((await first).text).toBe("问 3");
+      expect((await second).text).toBe("问 2");
+      expect(userMessages(document()).map((m) => m.text)).toEqual(["问 1"]);
+      await expect.poll(() => runner.status).toBe("idle");
+      const disk = new PiTspBridge();
+      await disk.hydrateFromSessionFile(sessionFile);
+      expect(userMessages(disk.document).map((m) => m.text)).toEqual(["问 1"]);
+    } finally {
+      await runner.dispose();
+    }
+  });
+
+  it("撤回后的后台重开卡在启动上：dispose 不被它拖住，也不留进程", async () => {
+    const dir = await makeTempDir();
+    const sessionFile = await seedRewindSession(dir, "rewind-dispose.jsonl", 3);
+    let record = rewindRecord(dir, sessionFile, "task_dispose");
+    let releaseSecondLaunch: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseSecondLaunch = resolve;
+    });
+    let launches = 0;
+    const runner = new PiTaskRunner(
+      record,
+      { id: record.projectId, name: "Dispose", path: dir },
+      {
+        buildPiLaunch: () => {
+          launches += 1;
+          const launch = { ...FAKE_LAUNCH, env: { ...FAKE_LAUNCH.env, PI_CODING_AGENT_DIR: dir } };
+          return launches === 1 ? Promise.resolve(launch) : gate.then(() => launch);
+        },
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    try {
+      await runner.start();
+      await runner.rewindTo("u3");
+      // 后台重开已经发起（卡在 buildPiLaunch 的门上）。
+      await expect.poll(() => launches).toBe(2);
+      const startedAt = Date.now();
+      // 删任务 / 退出应用：后台重开还卡在启动上，close 的超时到了就往下走（#closing 让那次启动自己中止）。
+      await runner.dispose();
+      expect(Date.now() - startedAt).toBeLessThan(6_000);
+      releaseSecondLaunch();
+      await expect.poll(() => runner.hasProcess).toBe(false);
     } finally {
       releaseSecondLaunch();
       await runner.dispose();
@@ -754,7 +878,6 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
         expect(userMessages(document())).toHaveLength(20);
         rewinding = true;
         const pending = runner.rewindTo("u10");
-        await expect(runner.rewindTo("u1")).rejects.toThrow("a rewind is already in progress");
         if (scenario === "撤回后启动失败") {
           // 重开失败不该把撤回本身变成失败：文件已经截断、界面停在撤回点，错误由任务状态报。
           const restored = await pending;

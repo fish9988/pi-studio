@@ -284,6 +284,34 @@ describe("旧会话看得到新加的 provider / 模型", () => {
 });
 
 describe("旧会话（没有进程）的思考档位跟模型目录", () => {
+  it("活进程：目录里给当前模型补了 xhigh，选它之前先重开一次，胶囊与真实档位一致", async () => {
+    const dir = await makeTempDir();
+    const service = new FakeServiceCatalog(dir);
+    await service.write([SOL_PLAIN]);
+    const h = makeHarness(dir, service, { provider: "probe", modelId: "sol-xhigh" });
+
+    try {
+      await h.runner.start();
+      expect((await h.runner.listModels()).map((m) => m.key.modelId)).toEqual(["sol-xhigh"]);
+      expect(h.runner.state.thinkingLevels).toEqual(["off", "minimal", "low", "medium", "high"]);
+      expect(await h.spawns()).toBe(1);
+
+      // 设置页刚给这个模型补了 xhigh / max。
+      await service.write([SOL_EXPLICIT]);
+      // 打开选择器只合并目录，不重开（新能力在列表里已经能看到）。
+      expect((await h.runner.listModels()).map((m) => m.key.modelId)).toEqual(["sol-xhigh"]);
+      expect(await h.spawns()).toBe(1);
+
+      // 真的选 xhigh：Pi 不校验档位，不重开就会"界面选了、请求还是旧的"，所以在用户这条链路上重开一次。
+      await h.runner.setThinkingLevel("xhigh");
+      expect(await h.spawns()).toBe(2);
+      expect(h.runner.state.thinkingLevel).toBe("xhigh");
+      expect(h.runner.state.thinkingLevels).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
+    } finally {
+      await h.runner.dispose();
+    }
+  });
+
   it("目录里给模型补了 xhigh / max 的 thinkingLevelMap：胶囊按新目录显示这些档", async () => {
     const dir = await makeTempDir();
     const service = new FakeServiceCatalog(dir);

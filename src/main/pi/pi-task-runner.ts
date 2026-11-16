@@ -625,7 +625,10 @@ export class PiTaskRunner {
   }
 
   async close(timeoutMs = 5_000): Promise<void> {
-    if (this.#rewinding !== null) await this.#rewinding.catch(() => {});
+    const rewinding = this.#rewinding;
+    // 撤回的后台重开可能卡在启动上：等它，但不超过 timeoutMs。超时后 #closeInternal 置 #closing，
+    // 那次启动会在下一个 #assertNotClosing 处自己中止——删任务 / 退出应用不能被它拖住。
+    if (rewinding !== null) await waitWithTimeout(rewinding, timeoutMs);
     await this.#closeInternal(timeoutMs);
   }
 
@@ -819,14 +822,19 @@ export class PiTaskRunner {
     } else if (res.kind === "interrupt") {
       void this.stop();
     } else if (res.kind === "rewind" && res.entryId !== undefined) {
-      void this.rewindTo(res.entryId).then(({ text, images }) => {
-        if (text !== "" || (images !== undefined && images.length > 0)) {
-          this.#host.onComposerPrefill?.(this.id, {
-            text,
-            ...(images !== undefined && images.length > 0 ? { images } : {}),
-          });
-        }
-      });
+      void this.rewindTo(res.entryId)
+        .then(({ text, images }) => {
+          if (text !== "" || (images !== undefined && images.length > 0)) {
+            this.#host.onComposerPrefill?.(this.id, {
+              text,
+              ...(images !== undefined && images.length > 0 ? { images } : {}),
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          // 会话树里点撤回失败：报到任务状态，别变成一条没人处理的拒绝。
+          log.warn(`task ${this.id} rewind from the session tree failed`, { message: errorMessage(error) });
+        });
     }
   }
 
@@ -887,6 +895,28 @@ export class PiTaskRunner {
     }
   }
 
+  /**
+   * 目录（`models.json`）给这个模型声明了活进程还不认识的思考档位（刚补的 `thinkingLevelMap`）：空闲时重开一次。
+   * Pi 的 `set_thinking_level` 不校验档位，不重开的话界面上选了 `xhigh`、请求仍按旧映射发（胶囊与真实档位不一致）。
+   * 重开只能发生在用户自己按键的链路上（选模型 / 选档位），不能在打开选择器时做。
+   * @returns 重开后的 client；没重开（不需要 / 不是空闲）时 null。
+   */
+  async #restartForCapabilities(levels: readonly string[], key: ModelKey): Promise<PiRpcClient | null> {
+    if (!this.restartable) return null;
+    const declared = this.#catalog.find((m) => m.key.provider === key.provider && m.key.modelId === key.modelId);
+    const wants = declared?.thinkingEfforts ?? null;
+    if (wants === null || !wants.some((effort) => !levels.includes(effort))) return null;
+    try {
+      await this.restart();
+      return this.#requireClient();
+    } catch (error) {
+      log.warn(`task ${this.id} restarting pi for new model capabilities failed`, {
+        message: errorMessage(error),
+      });
+      return null;
+    }
+  }
+
   async setModel(key: ModelKey): Promise<void> {
     await this.start();
     let client = this.#requireClient();
@@ -901,7 +931,15 @@ export class PiTaskRunner {
       client = this.#requireClient();
       updated = await client.setModel(key.provider, key.modelId);
     }
-    const { levels } = await client.getAvailableThinkingLevels();
+    const { levels: processLevels } = await client.getAvailableThinkingLevels();
+    let levels = processLevels;
+    // 目录里给这个模型补了进程还不认识的档位（刚写的 thinkingLevelMap）：重开一次让它真的生效。
+    const upgraded = await this.#restartForCapabilities(levels, key);
+    if (upgraded !== null) {
+      client = upgraded;
+      await client.setModel(key.provider, key.modelId);
+      levels = (await client.getAvailableThinkingLevels()).levels;
+    }
     const efforts = extractEfforts(levels);
     this.#model = toModelOption(updated, efforts);
     this.#thinkingLevels = toThinkingLevelsList(levels, updated);
@@ -913,7 +951,13 @@ export class PiTaskRunner {
 
   async setThinkingLevel(level: ThinkingLevel): Promise<void> {
     await this.start();
-    const client = this.#requireClient();
+    let client = this.#requireClient();
+    // Pi 的 `set_thinking_level` 不校验档位：进程还不认识目录里新声明的档位时，界面上选了也白选，先重开一次。
+    const key = this.#model?.key ?? this.#record.model;
+    if (key !== null && key !== undefined) {
+      const { levels } = await client.getAvailableThinkingLevels();
+      client = (await this.#restartForCapabilities(levels, key)) ?? client;
+    }
     const wireLevel = level === "inherit" ? "medium" : level;
     await client.setThinkingLevel(wireLevel);
     this.#thinkingLevel = level;
@@ -1219,7 +1263,9 @@ export class PiTaskRunner {
   }
 
   rewindTo(entryId: string, known?: RewindTarget, _summarize = false, revertFiles = false): Promise<RewindResult> {
-    if (this.#rewinding !== null) return Promise.reject(new Error("a rewind is already in progress"));
+    // 上一次撤回（含它的后台重开）还没做完：排队等它，而不是拒绝——"/已撤回"之后马上再撤一条是正常的操作。
+    const running = this.#rewinding;
+    if (running !== null) return running.then(() => this.rewindTo(entryId, known, _summarize, revertFiles));
     const result = this.#rewindTo(entryId, known, revertFiles);
     // `#rewinding` 覆盖整段（含后台重开进程），`start` / `close` / 并发撤回都等它；
     // 但调用方只等“文件已截断、对话已刷新”就返回，不等重开（那是几百毫秒到几秒）。
@@ -1241,6 +1287,7 @@ export class PiTaskRunner {
 
   async #rewindTo(entryId: string, known?: RewindTarget, revertFiles = false): Promise<RewindResult> {
     this.#assertTurnFinished();
+    if (this.#initialHydration !== null) await this.#initialHydration;
 
     // 不去先起进程：截断只需要会话文件。没进程的任务（被回收过）也能直接撤，不用为它白起一次。
     const beforeFile = this.#currentSessionFile();

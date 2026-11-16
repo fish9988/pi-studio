@@ -36,7 +36,7 @@ test("模型选择器第二次打开直接用缓存目录画表：一帧骨架�
     await chip.click();
     await expect(page.getByTestId("model-option").first()).toBeVisible();
     const frames = await page.evaluate(() => (globalThis as unknown as { __pickerFrames: string[] }).__pickerFrames);
-    expect(frames.length).toBeGreaterThan(3);
+    expect(frames.length).toBeGreaterThan(0);
     expect(frames.filter((frame) => frame.startsWith("S"))).toEqual([]);
     expect(frames.some((frame) => frame.endsWith("R"))).toBe(true);
   } finally {

@@ -211,7 +211,9 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
     props.request?.scope === "roles" ? "dialog" : "popover",
   );
   // 第一帧就用上次读到的目录画完整表（不先画骨架屏），主进程的结果到了再替换。
-  const [models, setModels] = useState<ModelOption[] | null>(() => cachedModelList());
+  // 角色范围（“给某个角色选模型”）是另一份列表，不用缓存，否则首帧可能闪出不属于它的模型。
+  const cacheable = props.request?.scope !== "roles";
+  const [models, setModels] = useState<ModelOption[] | null>(() => (cacheable ? cachedModelList() : null));
   const [insights, setInsights] = useState<ModelInsights | null>(null);
   const [enabledPatterns, setEnabledPatterns] = useState<string[]>([]);
   const [query, setQuery] = useState(props.request?.query ?? "");
@@ -240,7 +242,7 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
       (list) => {
         if (!current) return;
         setModels(list);
-        rememberModelList(list);
+        if (cacheable) rememberModelList(list);
         window.studio
           .getModelInsights(
             props.projectId,
