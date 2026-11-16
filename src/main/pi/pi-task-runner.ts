@@ -214,6 +214,8 @@ interface ActiveBtwProcess {
   cancelled: boolean;
 }
 
+type RewindResult = { text: string; images?: PromptImage[]; summarized: boolean };
+
 export class PiTaskRunner {
   readonly id: TaskId;
   #record: TaskRecord;
@@ -269,6 +271,7 @@ export class PiTaskRunner {
   #provisionalTitle: string | null = null;
   #adoptedTitle: string | null = null;
   #initialHydration: Promise<void> | null = null;
+  #rewinding: Promise<RewindResult> | null = null;
 
   #btwRecords: readonly BtwHistoryRecord[] = [];
   #activeBtw: ActiveBtwProcess | null = null;
@@ -468,6 +471,11 @@ export class PiTaskRunner {
   // ───────── Lifecycle (`start`, `close`, `restart`, `dispose`) ─────────
 
   start(): Promise<void> {
+    if (this.#rewinding !== null) return this.#rewinding.then(() => this.start());
+    return this.#ensureStarted();
+  }
+
+  #ensureStarted(): Promise<void> {
     if (this.#disposed) return Promise.reject(new Error("task was removed"));
     if (this.#client !== null && this.#client.alive && this.#machine.status !== "starting") {
       return Promise.resolve();
@@ -617,6 +625,11 @@ export class PiTaskRunner {
   }
 
   async close(timeoutMs = 5_000): Promise<void> {
+    if (this.#rewinding !== null) await this.#rewinding.catch(() => {});
+    await this.#closeInternal(timeoutMs);
+  }
+
+  async #closeInternal(timeoutMs = 5_000): Promise<void> {
     this.#closing = true;
     const starting = this.#starting;
     if (starting !== null) {
@@ -659,6 +672,7 @@ export class PiTaskRunner {
   }
 
   async rename(title: string): Promise<void> {
+    if (this.#rewinding !== null) await this.#rewinding;
     this.#provisionalTitle = null;
     this.#adoptedTitle = null;
     this.#record = await this.#host.persist(this.id, { title });
@@ -1221,15 +1235,19 @@ export class PiTaskRunner {
     return { sourceFile, entryId: resolvedEntryId, target };
   }
 
-  async rewindTo(
-    entryId: string,
-    known?: RewindTarget,
-    _summarize = false,
-    revertFiles = false,
-  ): Promise<{ text: string; images?: PromptImage[]; summarized: boolean }> {
+  rewindTo(entryId: string, known?: RewindTarget, _summarize = false, revertFiles = false): Promise<RewindResult> {
+    if (this.#rewinding !== null) return Promise.reject(new Error("a rewind is already in progress"));
+    this.#rewinding = Promise.resolve()
+      .then(() => this.#rewindTo(entryId, known, revertFiles))
+      .finally(() => {
+        this.#rewinding = null;
+      });
+    return this.#rewinding;
+  }
+
+  async #rewindTo(entryId: string, known?: RewindTarget, revertFiles = false): Promise<RewindResult> {
     this.#assertTurnFinished();
-    await this.start();
-    const client = this.#requireClient();
+    await this.#ensureStarted();
 
     const beforeFile = this.#currentSessionFile();
     const targetBefore =
@@ -1239,6 +1257,10 @@ export class PiTaskRunner {
             .then((entries) => findUserEntry(entries, entryId))
             .catch(() => null)
         : null);
+
+    if (targetBefore === null) {
+      throw new Error(`entry "${entryId}" is not a user message`);
+    }
 
     if (revertFiles && beforeFile !== null) {
       const leafOverride = this.#leafOverride !== null ? this.#leafOverride.leafId : undefined;
@@ -1251,24 +1273,25 @@ export class PiTaskRunner {
       throw new Error("this task has no session file yet");
     }
 
-    // 就地回退（不是分叉）：把会话文件截到这条用户消息之前，再让 pi 重新读同一个文件。
-    // pi 的 `fork` 会复制出一份新会话文件，那就是“多出一个一模一样的会话”，不是回退。
+    // 先等旧进程退出，再截断：扩展的 session_shutdown 可能追加条目，其父节点仍是旧叶子。
+    // 在截断之后 switch_session 会让这些追加条目指向已删除的节点，重载时整段历史就会消失。
+    await this.#closeInternal();
+    // 分叉启动时会话路径可能仍在异步持久化；重开前明确使用已经打开的这份文件。
+    if (this.#record.sessionFile !== beforeFile || this.#record.forkFrom) {
+      this.#record = await this.#host.persist(this.id, { sessionFile: beforeFile, forkFrom: null });
+    }
     await rewindSessionFileBefore(beforeFile, entryId);
     this.#leafOverride = null;
-    const switched = await client.switchSession(beforeFile);
-    if (switched.cancelled) {
-      throw new Error("rewind was cancelled by an extension");
-    }
-
-    const state = await client.getState();
-    await this.#applyRpcState(client, state);
-    await this.#persistSessionFile();
+    // 截断一旦落盘就同步文档，后续启动失败也不能留下已撤掉的消息。
+    await this.#bridge.hydrateFromSessionFile(beforeFile);
+    await this.#readSessionFile();
+    await this.#ensureStarted();
 
     const newFile = this.#currentSessionFile();
     if (newFile !== null) {
       await this.#bridge.hydrateFromSessionFile(newFile);
     } else {
-      const { messages } = await client.getMessages();
+      const { messages } = await this.#requireClient().getMessages();
       this.#bridge.hydrateFromMessages(messages);
     }
 
@@ -1297,6 +1320,7 @@ export class PiTaskRunner {
   }
 
   async labelEntry(entryId: string, label: string | null): Promise<void> {
+    if (this.#rewinding !== null) await this.#rewinding;
     this.#assertTurnFinished();
     const file = this.#currentSessionFile();
     if (file === null) {

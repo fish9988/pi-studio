@@ -336,6 +336,15 @@ function runRpcServer(opts) {
     return full;
   }
 
+  // 模拟真实扩展在 session_shutdown 中用旧会话的叶子追加状态。
+  function shutdownEntry() {
+    if (process.env["FAKE_PI_SHUTDOWN_ENTRY"] !== "1" || opts.noSession || !sessionFile) return null;
+    return {
+      file: sessionFile,
+      entry: { type: "custom", id: shortId(), parentId: leafId, customType: "shutdown-state", data: {} },
+    };
+  }
+
   // Initialize session state on startup
   if (!opts.noSession) {
     if (opts.forkFrom && existsSync(opts.forkFrom)) {
@@ -1025,6 +1034,7 @@ function runRpcServer(opts) {
           sendResponse(id, type, false, undefined, "sessionPath is required");
           return;
         }
+        const shutdown = shutdownEntry();
         if (existsSync(targetPath)) {
           loadSessionFromDisk(targetPath);
         } else {
@@ -1042,6 +1052,8 @@ function runRpcServer(opts) {
           };
           writeFileSync(sessionFile, `${JSON.stringify(header)}\n`, "utf8");
         }
+        // Pi 先打开新会话，再触发旧会话的 session_shutdown；旧叶子此时可能已被宿主截掉。
+        if (shutdown) appendFileSync(shutdown.file, `${JSON.stringify(shutdown.entry)}\n`, "utf8");
         sendResponse(id, type, true, { cancelled: false });
         break;
       }
@@ -1264,6 +1276,8 @@ function runRpcServer(opts) {
   });
 
   process.stdin.on("end", () => {
+    const shutdown = shutdownEntry();
+    if (shutdown) appendFileSync(shutdown.file, `${JSON.stringify(shutdown.entry)}\n`, "utf8");
     process.exit(0);
   });
 }

@@ -33,6 +33,7 @@
 - `PiTspBridge` 负责两条路径：
   1. **实时流式路径**：将 `PiRpcEvent` 增量转换为 `TspDocMessage` 批次推送给前端。
   2. **离线水合路径**：冷启动或切换历史会话时直接流式解析 `~/.pi/agent/sessions/**/*.jsonl`（兼容 v3 树状 `id`/`parentId` 条目、分支回退、压缩摘要与工具结果），无需先拉起 `pi` 子进程即可秒开历史记录。
+- **就地撤回的写入顺序**：`PiTaskRunner.rewindTo` 必须先等旧 Pi 进程退出，再截断同一个会话文件，随后重开进程；整段操作期间 `start()` 等待撤回完成，避免并发发送提前加载旧历史。Pi 1.5.2 的 `switchSession` 会先打开文件再触发旧会话的 `session_shutdown`，扩展此时可能追加仍指向旧叶子的条目；先截断再切换会留下断链，使历史显示为空。截断落盘后立即重新水合文档，即使后续启动失败也保持界面与文件一致（隔离的 fake-pi 集成回归与 Electron E2E 验证）。
 - **宿主标签清洗（`src/shared/ui/clean-title.ts`）**：会话标题提取时自动剥离 `<t3_code_instructions>`、`<system-reminder>`、`<USER_REQUEST>` 等外部宿主注入的闭合或截断 XML 块，避免污染侧栏标题。
 
 ## 4. 配置文件映射与安全边界（`src/main/pi/pi-config.ts`）

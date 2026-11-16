@@ -9,6 +9,13 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-16
+
+### Fixed
+
+- Fixed earlier messages appearing empty after undoing from the middle of a conversation; earlier history is preserved and the selected message text and images return to the composer.
+- Fixed messages sent during undo causing history to disappear again, and stale undone messages remaining visible if the session process fails to restart.
+
 ## [0.6.2] - 2026-11-15
 
 ### Fixed

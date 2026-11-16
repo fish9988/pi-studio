@@ -1,10 +1,10 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Project, ProjectId, TaskId, TaskState, TspBatch } from "../src/shared/ipc.ts";
-import { applyMessage, createDocument, type TspDocMessage } from "../src/shared/tsp/document.ts";
+import { applyMessage, createDocument, restoreDocument, type TspDocMessage } from "../src/shared/tsp/document.ts";
 import { trailingErrorCardId } from "../src/shared/tsp/error-turn.ts";
 import { listAgents } from "../src/shared/tsp/agent-hub.ts";
 import { lastAnswerText } from "../src/shared/tsp/last-answer.ts";
@@ -590,6 +590,132 @@ describe("PiTspBridge — live streaming RPC events & extension UI dialogs", () 
 });
 
 describe("PiService & PiTaskRunner integration with fake-pi", () => {
+  it.each(["正常撤回", "撤回时并发发送", "撤回后启动失败"])(
+    "%s：前 9 轮历史、续发和重新打开均一致",
+    async (scenario) => {
+      const dir = await makeTempDir();
+      const sessionFile = path.join(dir, "rewind.jsonl");
+      const lines = [JSON.stringify({ type: "session", version: 3, id: "rewind-session", cwd: dir })];
+      for (let i = 1; i <= 20; i++) {
+        lines.push(
+          JSON.stringify({
+            type: "message",
+            id: `u${i}`,
+            parentId: i === 1 ? null : `a${i - 1}`,
+            message: {
+              role: "user",
+              content: [
+                { type: "text", text: `问题 ${i}` },
+                ...(i === 10 ? [{ type: "image", mimeType: "image/png", data: ONE_PIXEL_PNG_BASE64 }] : []),
+              ],
+            },
+          }),
+          JSON.stringify({
+            type: "message",
+            id: `a${i}`,
+            parentId: `u${i}`,
+            message: { role: "assistant", content: [{ type: "text", text: `回答 ${i}` }] },
+          }),
+        );
+      }
+      await writeFile(sessionFile, `${lines.join("\n")}\n`, "utf8");
+      let record: TaskRecord = {
+        id: "task_rewind" as TaskId,
+        projectId: "proj_rewind" as ProjectId,
+        title: "",
+        archived: false,
+        sessionFile,
+        worktreePath: null,
+        worktreeBranch: null,
+        worktreeBase: null,
+        cwd: dir,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        model: null,
+        thinkingLevel: null,
+      };
+      let launches = 0;
+      let rewinding = false;
+      let queuedPrompt: Promise<void> | null = null;
+      const runner = new PiTaskRunner(
+        record,
+        { id: record.projectId, name: "Rewind", path: dir },
+        {
+          buildPiLaunch: () => {
+            launches++;
+            if (scenario === "撤回后启动失败" && launches === 2)
+              return Promise.reject(new Error("simulated launch failure"));
+            return Promise.resolve({
+              ...FAKE_LAUNCH,
+              env: { ...FAKE_LAUNCH.env, PI_CODING_AGENT_DIR: dir, FAKE_PI_SHUTDOWN_ENTRY: "1" },
+            });
+          },
+          acquireSlot: () => Promise.resolve(),
+          persist: (_id, patch) => {
+            record = { ...record, ...patch };
+            return Promise.resolve(record);
+          },
+          isForeground: () => true,
+          onState: (state) => {
+            if (scenario === "撤回时并发发送" && rewinding && state.status === "stopped" && queuedPrompt === null) {
+              queuedPrompt = runner.sendPrompt({ text: "撤回期间的新问题", whenBusy: "steer" });
+            }
+          },
+          onTspBatch: () => {},
+        },
+      );
+      const document = () => restoreDocument(runner.tspSnapshot().document);
+      try {
+        await runner.start();
+        expect(userMessages(document())).toHaveLength(20);
+        rewinding = true;
+        const pending = runner.rewindTo("u10");
+        await expect(runner.rewindTo("u1")).rejects.toThrow("a rewind is already in progress");
+        if (scenario === "撤回后启动失败") {
+          await expect(pending).rejects.toThrow("simulated launch failure");
+          expect(runner.status).toBe("error");
+        } else {
+          const restored = await pending;
+          expect(restored.text).toBe("问题 10");
+          expect(restored.images).toEqual([{ mimeType: "image/png", data: ONE_PIXEL_PNG_BASE64 }]);
+        }
+        rewinding = false;
+        const expected = Array.from({ length: 9 }, (_, i) => `问题 ${i + 1}`);
+        if (scenario === "撤回时并发发送") {
+          expect(queuedPrompt).not.toBeNull();
+          await queuedPrompt;
+          await expect.poll(() => runner.status).toBe("idle");
+          expected.push("撤回期间的新问题");
+        } else {
+          expect(lastAnswerText(document())).toBe("回答 9");
+        }
+        expect(userMessages(document()).map((m) => m.text)).toEqual(expected);
+        expect(record.sessionFile).toBe(sessionFile);
+        expect((await readdir(dir)).filter((name) => name.endsWith(".jsonl"))).toEqual(["rewind.jsonl"]);
+        const diskBridge = new PiTspBridge();
+        await diskBridge.hydrateFromSessionFile(sessionFile);
+        expect(userMessages(diskBridge.document).map((m) => m.text)).toEqual(expected);
+        await runner.sendPrompt({ text: "重新提问", whenBusy: "steer" });
+        await expect.poll(() => runner.status).toBe("idle");
+        await runner.restart();
+        await diskBridge.hydrateFromSessionFile(sessionFile);
+        expect(userMessages(diskBridge.document).map((m) => m.text)).toEqual([...expected, "重新提问"]);
+        const backup = (await readdir(dir)).find((name) => name.includes(".rewound-"));
+        expect(backup).toBeDefined();
+        expect(await readFile(path.join(dir, backup!), "utf8")).toContain('"id":"u10"');
+        // 首条消息也走同一条进程退出路径，文件只剩头时不会复活已撤回的历史。
+        const first = await runner.rewindTo("u1");
+        expect(first.text).toBe("问题 1");
+        expect(userMessages(document())).toHaveLength(0);
+        await runner.restart();
+        await diskBridge.hydrateFromSessionFile(sessionFile);
+        expect(userMessages(diskBridge.document)).toHaveLength(0);
+      } finally {
+        await runner.dispose();
+      }
+    },
+  );
+
   it("runs PiService catalog queries and PiTaskRunner prompt + side-question end-to-end", async () => {
     const dir = await makeTempDir();
     const service = new PiService(() => Promise.resolve(FAKE_LAUNCH), { cwd: dir });
