@@ -116,11 +116,6 @@ function modelSignature(model: ModelOption): string {
   ].join("|");
 }
 
-/** 整份目录的指纹（按签名排序，和顺序无关）。 */
-export function catalogSignature(models: readonly ModelOption[]): string {
-  return models.map(modelSignature).sort().join("\n");
-}
-
 /** 服务进程（现读 models.json）的目录里，每个模型及其能力活进程都有：这个进程的模型快照还够新。 */
 export function catalogCovers(processCatalog: readonly ModelOption[], freshCatalog: readonly ModelOption[]): boolean {
   const known = new Set(processCatalog.map(modelSignature));
@@ -251,8 +246,6 @@ export class PiTaskRunner {
   /** readContext 时刷新的合并后预留 token 数（全局 → 项目级 → 当前模型覆盖）；null = 还没算过。 */
   #compactionReserveTokens: number | null = null;
   #catalog: ModelOption[] = [];
-  /** 为了哪份目录指纹重开过进程：同一份目录重开后还差（例如按需发现的模型）就不再反复重开。 */
-  #restartedCatalog: string | null = null;
   #newTaskDefault: { model: ModelOption | null; thinkingLevel: ThinkingLevel | null } = {
     model: null,
     thinkingLevel: null,
@@ -271,7 +264,9 @@ export class PiTaskRunner {
   #provisionalTitle: string | null = null;
   #adoptedTitle: string | null = null;
   #initialHydration: Promise<void> | null = null;
-  #rewinding: Promise<RewindResult> | null = null;
+  #rewinding: Promise<void> | null = null;
+  /** 撤回后台重开进程（含重新读回会话）：`start` / `close` 等它，但不阻塞撤回本身的返回。 */
+  #rewindRestart: Promise<void> | null = null;
 
   #btwRecords: readonly BtwHistoryRecord[] = [];
   #activeBtw: ActiveBtwProcess | null = null;
@@ -471,8 +466,13 @@ export class PiTaskRunner {
   // ───────── Lifecycle (`start`, `close`, `restart`, `dispose`) ─────────
 
   start(): Promise<void> {
-    if (this.#rewinding !== null) return this.#rewinding.then(() => this.start());
-    return this.#ensureStarted();
+    const rewinding = this.#rewinding;
+    if (rewinding === null) return this.#ensureStarted();
+    // 撤回还没做完（含后台重开进程）：等它结束再起；后台重开自己失败了也不能把这件事带挂。
+    return rewinding.then(
+      () => this.#ensureStarted(),
+      () => this.#ensureStarted(),
+    );
   }
 
   #ensureStarted(): Promise<void> {
@@ -852,14 +852,17 @@ export class PiTaskRunner {
   /**
    * 这个任务的模型选择器列表。Pi 进程只在启动时读一次 `models.json`（`ModelRuntime.create` → `ModelConfig.load`），
    * `get_available_models` 是那一刻的快照：新增了 provider / 模型（或者给模型补了 xhigh/max 的 thinkingLevelMap）之后，
-   * 还跑着的旧会话只能看到旧目录。这里拿服务进程现读的目录比一下，空闲就把进程重开（同一个会话文件）。
+   * 还跑着的旧会话只能看到旧目录。
+   *
+   * 菜单要秒开，所以这里只合并目录、**从不重开进程**：空闲时重开一次要 0.4–3 秒，把它放在打开列表的链路上，
+   * 选择器就会停在那张骨架上。选中活进程不认识的模型时 `set_model` 会说 Model not found，由 `setModel` 重开一次再设。
    */
   async listModels(): Promise<ModelOption[]> {
     const client = this.#client;
-    if (client === null || !client.alive) return this.#refreshCatalog(true);
+    if (client === null || !client.alive) return this.#refreshCatalog(false);
 
     const processCatalog = await this.#readProcessCatalog(client);
-    if (processCatalog === null) return this.#refreshCatalog(true);
+    if (processCatalog === null) return this.#catalog.length > 0 ? this.#catalog : this.#refreshCatalog(false);
 
     // 先拿启动缓存里的目录比（指纹没变就不起服务进程）；缓存没盯上变化时（刚改完 models.json）再现读。
     const cached = await this.#refreshCatalog(false);
@@ -869,29 +872,8 @@ export class PiTaskRunner {
     }
 
     const fresh = await this.#refreshCatalog(true);
-    if (fresh.length === 0 || catalogCovers(processCatalog, fresh)) {
-      this.#catalog = processCatalog;
-      return processCatalog;
-    }
-
-    const signature = catalogSignature(fresh);
-    if (this.restartable && this.#restartedCatalog !== signature) {
-      try {
-        await this.restart();
-        this.#restartedCatalog = signature;
-        const restarted = this.#client;
-        const reloaded = restarted !== null && restarted.alive ? await this.#readProcessCatalog(restarted) : null;
-        if (reloaded !== null) {
-          this.#catalog = mergeModelCatalogs(reloaded, fresh);
-          return this.#catalog;
-        }
-      } catch (error) {
-        log.warn(`task ${this.id} restart to pick up new models failed`, { message: errorMessage(error) });
-      }
-    }
-
-    // 还在跑（不能重开），或者同一份目录重开过一次还是差：先把现读的目录显示出来，选新模型时会再重开一次。
-    this.#catalog = mergeModelCatalogs(processCatalog, fresh);
+    // 现读的目录和活进程快照合并：新加的模型立刻能选（选中时 setModel 会重开进程），进程独有的（按需加载）也不丢。
+    this.#catalog = mergeModelCatalogs(processCatalog, fresh.length > 0 ? fresh : cached);
     return this.#catalog;
   }
 
@@ -924,8 +906,9 @@ export class PiTaskRunner {
     this.#model = toModelOption(updated, efforts);
     this.#thinkingLevels = toThinkingLevelsList(levels, updated);
     this.#record = await this.#host.persist(this.id, { model: key });
-    await this.#syncStats(client);
+    // 先把模型发出去让胶囊立刻变；统计数字晚几毫秒无所谓，但不要在切模型的链路上等它。
     this.#publish();
+    void this.#syncStats(client);
   }
 
   async setThinkingLevel(level: ThinkingLevel): Promise<void> {
@@ -1237,40 +1220,49 @@ export class PiTaskRunner {
 
   rewindTo(entryId: string, known?: RewindTarget, _summarize = false, revertFiles = false): Promise<RewindResult> {
     if (this.#rewinding !== null) return Promise.reject(new Error("a rewind is already in progress"));
-    this.#rewinding = Promise.resolve()
-      .then(() => this.#rewindTo(entryId, known, revertFiles))
+    const result = this.#rewindTo(entryId, known, revertFiles);
+    // `#rewinding` 覆盖整段（含后台重开进程），`start` / `close` / 并发撤回都等它；
+    // 但调用方只等“文件已截断、对话已刷新”就返回，不等重开（那是几百毫秒到几秒）。
+    this.#rewinding = result
+      .then(
+        () => this.#rewindRestart,
+        () => undefined,
+      )
+      .then(
+        () => undefined,
+        () => undefined,
+      )
       .finally(() => {
         this.#rewinding = null;
+        this.#rewindRestart = null;
       });
-    return this.#rewinding;
+    return result;
   }
 
   async #rewindTo(entryId: string, known?: RewindTarget, revertFiles = false): Promise<RewindResult> {
     this.#assertTurnFinished();
-    await this.#ensureStarted();
 
+    // 不去先起进程：截断只需要会话文件。没进程的任务（被回收过）也能直接撤，不用为它白起一次。
     const beforeFile = this.#currentSessionFile();
+    if (beforeFile === null) {
+      throw new Error("this task has no session file yet");
+    }
+
     const targetBefore =
       known ??
-      (beforeFile !== null
-        ? await readSessionEntries(beforeFile)
-            .then((entries) => findUserEntry(entries, entryId))
-            .catch(() => null)
-        : null);
+      (await readSessionEntries(beforeFile)
+        .then((entries) => findUserEntry(entries, entryId))
+        .catch(() => null));
 
     if (targetBefore === null) {
       throw new Error(`entry "${entryId}" is not a user message`);
     }
 
-    if (revertFiles && beforeFile !== null) {
+    if (revertFiles) {
       const leafOverride = this.#leafOverride !== null ? this.#leafOverride.leafId : undefined;
       await revertSessionFileChangesFromFile(beforeFile, entryId, this.cwd, leafOverride).catch((err: unknown) => {
         log.warn("revertSessionFileChangesFromFile failed", err);
       });
-    }
-
-    if (beforeFile === null) {
-      throw new Error("this task has no session file yet");
     }
 
     // 先等旧进程退出，再截断：扩展的 session_shutdown 可能追加条目，其父节点仍是旧叶子。
@@ -1285,15 +1277,18 @@ export class PiTaskRunner {
     // 截断一旦落盘就同步文档，后续启动失败也不能留下已撤掉的消息。
     await this.#bridge.hydrateFromSessionFile(beforeFile);
     await this.#readSessionFile();
-    await this.#ensureStarted();
 
-    const newFile = this.#currentSessionFile();
-    if (newFile !== null) {
-      await this.#bridge.hydrateFromSessionFile(newFile);
-    } else {
-      const { messages } = await this.#requireClient().getMessages();
-      this.#bridge.hydrateFromMessages(messages);
-    }
+    // 重开进程（启动 + 握手 + 读回会话）放到后台：界面此时已经回到撤回点，输入框也拿到了原文。
+    // 期间发新消息会经 `start()` 等它；起不来时 `start_failed` 照常报到界面，历史仍停在撤回点。
+    this.#rewindRestart = this.#ensureStarted()
+      .then(async () => {
+        const newFile = this.#currentSessionFile();
+        if (newFile !== null) await this.#bridge.hydrateFromSessionFile(newFile);
+      })
+      .catch((error: unknown) => {
+        log.warn(`task ${this.id} restarting pi after rewind failed`, { message: errorMessage(error) });
+        throw error;
+      });
 
     const restoredImages = targetBefore?.images;
     return {

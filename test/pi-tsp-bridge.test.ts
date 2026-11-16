@@ -590,6 +590,90 @@ describe("PiTspBridge — live streaming RPC events & extension UI dialogs", () 
 });
 
 describe("PiService & PiTaskRunner integration with fake-pi", () => {
+  it("撤回不等重开进程：文件截断 + 对话回到撤回点时，新进程还没起来", async () => {
+    const dir = await makeTempDir();
+    const sessionFile = path.join(dir, "rewind-fast.jsonl");
+    const lines = [JSON.stringify({ type: "session", version: 3, id: "rewind-fast", cwd: dir })];
+    for (let i = 1; i <= 4; i++) {
+      lines.push(
+        JSON.stringify({
+          type: "message",
+          id: `u${i}`,
+          parentId: i === 1 ? null : `a${i - 1}`,
+          message: { role: "user", content: [{ type: "text", text: `问 ${i}` }] },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: `a${i}`,
+          parentId: `u${i}`,
+          message: { role: "assistant", content: [{ type: "text", text: `答 ${i}` }] },
+        }),
+      );
+    }
+    await writeFile(sessionFile, `${lines.join("\n")}\n`, "utf8");
+    let record: TaskRecord = {
+      id: "task_fast" as TaskId,
+      projectId: "proj_fast" as ProjectId,
+      title: "",
+      archived: false,
+      sessionFile,
+      worktreePath: null,
+      worktreeBranch: null,
+      worktreeBase: null,
+      cwd: dir,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      model: null,
+      thinkingLevel: null,
+    };
+    // 第二次起进程故意卡住：撤回必须在这之前就把结果交出去。
+    let releaseSecondLaunch: () => void = () => {};
+    const secondLaunchGate = new Promise<void>((resolve) => {
+      releaseSecondLaunch = resolve;
+    });
+    let launches = 0;
+    const runner = new PiTaskRunner(
+      record,
+      { id: record.projectId, name: "Fast", path: dir },
+      {
+        buildPiLaunch: () => {
+          launches += 1;
+          const launch = { ...FAKE_LAUNCH, env: { ...FAKE_LAUNCH.env, PI_CODING_AGENT_DIR: dir } };
+          return launches === 1 ? Promise.resolve(launch) : secondLaunchGate.then(() => launch);
+        },
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    const document = () => restoreDocument(runner.tspSnapshot().document);
+    try {
+      await runner.start();
+      const restored = await runner.rewindTo("u3");
+
+      // 撤回已经生效：原文拿回来了，对话只剩前两轮。
+      expect(restored.text).toBe("问 3");
+      expect(userMessages(document()).map((m) => m.text)).toEqual(["问 1", "问 2"]);
+      expect(await readFile(sessionFile, "utf8")).not.toContain('"id":"u3"');
+      // 而重开还卡在那道门上：撤回确实没等它。
+      expect(launches).toBe(2);
+      expect(runner.status).toBe("starting");
+
+      releaseSecondLaunch();
+      await runner.start();
+      expect(runner.status).toBe("idle");
+      expect(userMessages(document()).map((m) => m.text)).toEqual(["问 1", "问 2"]);
+    } finally {
+      releaseSecondLaunch();
+      await runner.dispose();
+    }
+  });
+
   it.each(["正常撤回", "撤回时并发发送", "撤回后启动失败"])(
     "%s：前 9 轮历史、续发和重新打开均一致",
     async (scenario) => {
@@ -672,8 +756,10 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
         const pending = runner.rewindTo("u10");
         await expect(runner.rewindTo("u1")).rejects.toThrow("a rewind is already in progress");
         if (scenario === "撤回后启动失败") {
-          await expect(pending).rejects.toThrow("simulated launch failure");
-          expect(runner.status).toBe("error");
+          // 重开失败不该把撤回本身变成失败：文件已经截断、界面停在撤回点，错误由任务状态报。
+          const restored = await pending;
+          expect(restored.text).toBe("问题 10");
+          await expect.poll(() => runner.status).toBe("error");
         } else {
           const restored = await pending;
           expect(restored.text).toBe("问题 10");
@@ -695,6 +781,8 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
         const diskBridge = new PiTspBridge();
         await diskBridge.hydrateFromSessionFile(sessionFile);
         expect(userMessages(diskBridge.document).map((m) => m.text)).toEqual(expected);
+        // 进程起不来时撤回结果照旧成立：文件已截断、对话停在撤回点。
+        if (scenario === "撤回后启动失败") return;
         await runner.sendPrompt({ text: "重新提问", whenBusy: "steer" });
         await expect.poll(() => runner.status).toBe("idle");
         await runner.restart();
@@ -707,6 +795,8 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
         const first = await runner.rewindTo("u1");
         expect(first.text).toBe("问题 1");
         expect(userMessages(document())).toHaveLength(0);
+        // 首条撤回同样不等重开：等后台把进程起好再重启一次验证。
+        await runner.start();
         await runner.restart();
         await diskBridge.hydrateFromSessionFile(sessionFile);
         expect(userMessages(diskBridge.document)).toHaveLength(0);

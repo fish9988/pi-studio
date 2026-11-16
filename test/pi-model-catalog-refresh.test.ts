@@ -215,7 +215,7 @@ describe("服务进程（草稿与设置页读的目录）在模型表输入变�
 });
 
 describe("旧会话看得到新加的 provider / 模型", () => {
-  it("列表比活进程的模型快照新：空闲时重开进程（同一个会话文件）再列，新模型可见", async () => {
+  it("列表比活进程的模型快照新：合并现读的目录但不重开进程（打开选择器不能卡住），选中后再重开", async () => {
     const dir = await makeTempDir();
     const service = new FakeServiceCatalog(dir);
     await service.write([SOL_PLAIN]);
@@ -228,9 +228,14 @@ describe("旧会话看得到新加的 provider / 模型", () => {
 
       await service.write([SOL_PLAIN, LEGACY_PLAIN]);
 
+      // 打开选择器：新模型立刻在列表里，但活进程原封不动（重开一次 0.4–3 秒）。
       const models = await h.runner.listModels();
       expect(models.map((m) => m.key.modelId)).toEqual(["sol-xhigh", "legacy"]);
-      // 新模型来自重开后的进程：列表就是 Pi 会给的那份，不是服务进程拼出来的。
+      expect(await h.spawns()).toBe(1);
+
+      // 真的选中它时才重开一次（set_model 会说 Model not found，兜底重开再设）。
+      await h.runner.setModel({ provider: "probe", modelId: "legacy" });
+      expect(h.runner.state.model?.key.modelId).toBe("legacy");
       expect(await h.spawns()).toBe(2);
     } finally {
       await h.runner.dispose();
@@ -257,7 +262,7 @@ describe("旧会话看得到新加的 provider / 模型", () => {
     }
   });
 
-  it("同一个会话重开一次之后还差（按需发现的模型）：不再反复重开", async () => {
+  it("按需发现的模型（进程永远看不到）：列表照样合并显示，但不为它反复重开进程", async () => {
     const dir = await makeTempDir();
     const service = new FakeServiceCatalog(dir);
     await service.write([SOL_PLAIN]);
@@ -270,9 +275,8 @@ describe("旧会话看得到新加的 provider / 模型", () => {
       await service.write([SOL_PLAIN, { ...LEGACY_PLAIN, hidden: true }]);
 
       expect((await h.runner.listModels()).map((m) => m.key.modelId)).toEqual(["sol-xhigh", "legacy"]);
-      expect(await h.spawns()).toBe(2);
       expect((await h.runner.listModels()).map((m) => m.key.modelId)).toEqual(["sol-xhigh", "legacy"]);
-      expect(await h.spawns()).toBe(2);
+      expect(await h.spawns()).toBe(1);
     } finally {
       await h.runner.dispose();
     }

@@ -26,6 +26,7 @@ import { Reveal } from "../../ui/Reveal.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { showView } from "../../store/index.ts";
 import { ModelDetails } from "./ModelDetails.tsx";
+import { cachedModelList, rememberModelList } from "./model-list-cache.ts";
 import {
   groupModels,
   modelContextCell,
@@ -209,7 +210,8 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
   const [viewMode, setViewMode] = useState<"popover" | "dialog">(
     props.request?.scope === "roles" ? "dialog" : "popover",
   );
-  const [models, setModels] = useState<ModelOption[] | null>(null);
+  // 第一帧就用上次读到的目录画完整表（不先画骨架屏），主进程的结果到了再替换。
+  const [models, setModels] = useState<ModelOption[] | null>(() => cachedModelList());
   const [insights, setInsights] = useState<ModelInsights | null>(null);
   const [enabledPatterns, setEnabledPatterns] = useState<string[]>([]);
   const [query, setQuery] = useState(props.request?.query ?? "");
@@ -238,6 +240,7 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
       (list) => {
         if (!current) return;
         setModels(list);
+        rememberModelList(list);
         window.studio
           .getModelInsights(
             props.projectId,
@@ -252,7 +255,8 @@ function ModelPickerBody(props: ModelPickerProps & { open: boolean }) {
           );
       },
       (error: unknown) => {
-        if (current) setModels([]);
+        // 已经有目录时不要把它清成空表：主进程偶发失败不该让菜单变成"没有模型"。
+        if (current) setModels((previous) => previous ?? []);
         report(error);
       },
     );
