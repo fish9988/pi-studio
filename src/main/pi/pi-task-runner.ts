@@ -832,7 +832,7 @@ export class PiTaskRunner {
           }
         })
         .catch((error: unknown) => {
-          // 会话树里点撤回失败：报到任务状态，别变成一条没人处理的拒绝。
+          // 会话树里点撤回失败：只记日志（那次点击本来就没有界面反馈，不能假装报到了任务状态）。
           log.warn(`task ${this.id} rewind from the session tree failed`, { message: errorMessage(error) });
         });
     }
@@ -895,26 +895,25 @@ export class PiTaskRunner {
     }
   }
 
+  /** 目录（`models.json`）给这个模型声明的思考档位；目录里没这个模型时 null。 */
+  #declaredEfforts(key: ModelKey): readonly string[] | null {
+    const model = this.#catalog.find((m) => m.key.provider === key.provider && m.key.modelId === key.modelId);
+    return model?.thinkingEfforts ?? null;
+  }
+
   /**
-   * 目录（`models.json`）给这个模型声明了活进程还不认识的思考档位（刚补的 `thinkingLevelMap`）：空闲时重开一次。
-   * Pi 的 `set_thinking_level` 不校验档位，不重开的话界面上选了 `xhigh`、请求仍按旧映射发（胶囊与真实档位不一致）。
+   * 目录里给这个模型补了进程还不认识的档位（刚写的 `thinkingLevelMap`）：空闲时重开一次进程让它读到新映射。
+   * Pi 的 `set_thinking_level` 不校验档位，不重开的话界面上选了 `xhigh`、请求仍按旧映射发。
    * 重开只能发生在用户自己按键的链路上（选模型 / 选档位），不能在打开选择器时做。
-   * @returns 重开后的 client；没重开（不需要 / 不是空闲）时 null。
+   * 重开失败直接抛：调用方不能拿一个已经关掉的进程继续往下走。
+   * @returns 重开后的 client；不需要重开（或不是空闲）时 null。
    */
-  async #restartForCapabilities(levels: readonly string[], key: ModelKey): Promise<PiRpcClient | null> {
+  async #restartForDeclaredEfforts(levels: readonly string[], key: ModelKey): Promise<PiRpcClient | null> {
     if (!this.restartable) return null;
-    const declared = this.#catalog.find((m) => m.key.provider === key.provider && m.key.modelId === key.modelId);
-    const wants = declared?.thinkingEfforts ?? null;
-    if (wants === null || !wants.some((effort) => !levels.includes(effort))) return null;
-    try {
-      await this.restart();
-      return this.#requireClient();
-    } catch (error) {
-      log.warn(`task ${this.id} restarting pi for new model capabilities failed`, {
-        message: errorMessage(error),
-      });
-      return null;
-    }
+    const declared = this.#declaredEfforts(key);
+    if (declared === null || !declared.some((effort) => !levels.includes(effort))) return null;
+    await this.restart();
+    return this.#requireClient();
   }
 
   async setModel(key: ModelKey): Promise<void> {
@@ -934,10 +933,10 @@ export class PiTaskRunner {
     const { levels: processLevels } = await client.getAvailableThinkingLevels();
     let levels = processLevels;
     // 目录里给这个模型补了进程还不认识的档位（刚写的 thinkingLevelMap）：重开一次让它真的生效。
-    const upgraded = await this.#restartForCapabilities(levels, key);
+    const upgraded = await this.#restartForDeclaredEfforts(levels, key);
     if (upgraded !== null) {
       client = upgraded;
-      await client.setModel(key.provider, key.modelId);
+      updated = await client.setModel(key.provider, key.modelId);
       levels = (await client.getAvailableThinkingLevels()).levels;
     }
     const efforts = extractEfforts(levels);
@@ -952,11 +951,23 @@ export class PiTaskRunner {
   async setThinkingLevel(level: ThinkingLevel): Promise<void> {
     await this.start();
     let client = this.#requireClient();
-    // Pi 的 `set_thinking_level` 不校验档位：进程还不认识目录里新声明的档位时，界面上选了也白选，先重开一次。
     const key = this.#model?.key ?? this.#record.model;
-    if (key !== null && key !== undefined) {
+
+    // Pi 的 `set_thinking_level` 不校验档位：进程还不认识这一档时，设了也按旧映射发，胶囊和实际就分家了。
+    // 只在用户真的选了这一档时处理：目录声明了它 → 空闲就重开一次让映射生效；正在跑 → 明说这一档现在还生效不了。
+    if (key !== null && level !== "inherit") {
       const { levels } = await client.getAvailableThinkingLevels();
-      client = (await this.#restartForCapabilities(levels, key)) ?? client;
+      if (!levels.includes(level) && this.#declaredEfforts(key)?.includes(level) === true) {
+        if (!this.restartable) {
+          throw new Error(`这一档思考强度要重开会话才能生效，等当前回复结束后再选（${key.provider}/${key.modelId}）`);
+        }
+        await this.restart();
+        client = this.#requireClient();
+        const after = (await client.getAvailableThinkingLevels()).levels;
+        if (!after.includes(level)) {
+          throw new Error(`pi 进程没有读到这个模型的 ${level} 档（models.json 的 thinkingLevelMap），没有生效`);
+        }
+      }
     }
     const wireLevel = level === "inherit" ? "medium" : level;
     await client.setThinkingLevel(wireLevel);

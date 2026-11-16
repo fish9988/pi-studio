@@ -789,7 +789,7 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
       const startedAt = Date.now();
       // 删任务 / 退出应用：后台重开还卡在启动上，close 的超时到了就往下走（#closing 让那次启动自己中止）。
       await runner.dispose();
-      expect(Date.now() - startedAt).toBeLessThan(6_000);
+      expect(Date.now() - startedAt).toBeLessThan(4_000);
       releaseSecondLaunch();
       await expect.poll(() => runner.hasProcess).toBe(false);
     } finally {

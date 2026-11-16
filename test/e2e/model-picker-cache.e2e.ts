@@ -26,9 +26,12 @@ test("模型选择器第二次打开直接用缓存目录画表：一帧骨架�
       };
       g.__pickerFrames = [];
       const tick = () => {
-        const skeleton = g.document.querySelector('[data-testid="model-skeleton"]') !== null;
-        const row = g.document.querySelector('[data-testid="model-option"]') !== null;
-        g.__pickerFrames.push(`${skeleton ? "S" : "-"}${row ? "R" : "-"}`);
+        // 从「选择器真的出现在 DOM 里」的第一帧开始算，之前是点击还没生效。
+        if (g.document.querySelector('[data-testid="model-picker"]') !== null) {
+          const skeleton = g.document.querySelector('[data-testid="model-skeleton"]') !== null;
+          const row = g.document.querySelector('[data-testid="model-option"]') !== null;
+          g.__pickerFrames.push(`${skeleton ? "S" : "-"}${row ? "R" : "-"}`);
+        }
         if (g.__pickerFrames.length < 60) g.requestAnimationFrame(tick);
       };
       g.requestAnimationFrame(tick);
@@ -37,6 +40,8 @@ test("模型选择器第二次打开直接用缓存目录画表：一帧骨架�
     await expect(page.getByTestId("model-option").first()).toBeVisible();
     const frames = await page.evaluate(() => (globalThis as unknown as { __pickerFrames: string[] }).__pickerFrames);
     expect(frames.length).toBeGreaterThan(0);
+    // 缓存命中时第一帧就是完整列表：不是"等一会儿才有行"，而是压根没画过骨架屏。
+    expect(frames[0]?.endsWith("R")).toBe(true);
     expect(frames.filter((frame) => frame.startsWith("S"))).toEqual([]);
     expect(frames.some((frame) => frame.endsWith("R"))).toBe(true);
   } finally {
