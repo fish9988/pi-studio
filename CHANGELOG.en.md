@@ -9,6 +9,8 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-16
+
 ### Fixed
 
 - Undoing a conversation is now immediate: the conversation jumps back to the undo point and the message text and images return to the composer right away, while the Pi process restarts in the background; the next message sent waits for it automatically.
