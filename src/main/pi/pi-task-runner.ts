@@ -506,9 +506,14 @@ export class PiTaskRunner {
     this.#agentLifecycleSeq = 0;
     this.#apply({ type: "start" });
 
-    let client: PiRpcClient | null = null;
     // 看门狗：启动链上有几处没有上限的等待（回收名额、发现 pi、读默认模型），任一处不回就会把任务永远留在
-    // starting。到点先落 error（用户可以重试），再把半启动的进程收掉。
+    // starting。到点**让这次启动直接失败**（而不是只改状态）：`#starting` 才会被清掉，
+    // 之后 `start()` / 发消息才会真的重试，而不是静默地等一个永不回来的 promise。
+    let abandon: (error: Error) => void = () => {};
+    const timedOut = new Promise<never>((_, reject) => {
+      abandon = (error: Error) => reject(error);
+    });
+    const timeoutError = new Error(`start timed out after ${START_TIMEOUT_MS}ms`);
     const watchdog = setTimeout(() => {
       this.#startAbandoned = true;
       if (this.#machine.status === "starting") {
@@ -522,9 +527,43 @@ export class PiTaskRunner {
       }
       this.#closing = true;
       void this.#client?.close(0);
+      abandon(timeoutError);
     }, START_TIMEOUT_MS);
 
+    const started: { client: PiRpcClient | null } = { client: null };
     try {
+      await Promise.race([this.#runStart(started), timedOut]);
+    } catch (error) {
+      const client = started.client;
+      if (client !== null) {
+        if (this.#client === client) this.#client = null;
+        // 清理失败不能把下面落终态这一步也带垮（那正是“启动中…”挂几小时的来源）。
+        await client.close(500).catch((closeError: unknown) => {
+          log.warn(`task ${this.id} closing a half-started pi process failed`, { message: errorMessage(closeError) });
+        });
+      }
+      // 看门狗已经落过 error 了：清理不能把它降级成 stopped。
+      if (this.#startAbandoned) throw error;
+      if (this.#closing || this.#disposed) {
+        this.#apply({ type: "stopped" });
+        throw error;
+      }
+      const taskError = this.#classifyStartError(error);
+      log.warn(`task ${this.id} failed to start pi RPC`, taskError);
+      this.#apply({ type: "start_failed", error: taskError });
+      throw error;
+    } finally {
+      clearTimeout(watchdog);
+      // 注意：`#startAbandoned` 不在里重置 —— 半启动进程的退出事件可能比这里晚，
+      // 那条路靠它才能不把“启动超时”降级成“已停止”。下一次 `#startInternal` 开头会重置。
+      this.#settleInterruptedStart();
+    }
+  }
+
+  /** 真正起进程的那一段（被看门狗 race）：时到没回来就直接作废，不让 `#starting` 永远挂着。 */
+  async #runStart(started: { client: PiRpcClient | null }): Promise<void> {
+    let client: PiRpcClient | null = null;
+    {
       if (this.#initialHydration !== null) {
         await this.#initialHydration;
         this.#initialHydration = null;
@@ -599,6 +638,7 @@ export class PiTaskRunner {
       });
 
       this.#client = client;
+      started.client = client;
 
       const state = await client.getState();
       this.#assertNotClosing();
@@ -634,28 +674,6 @@ export class PiTaskRunner {
       }
       this.#syncDialogAndWorkingFromDoc();
       void this.#refreshCatalog(false);
-    } catch (error) {
-      if (client !== null) {
-        if (this.#client === client) this.#client = null;
-        // 清理失败不能把下面落终态这一步也带垮（那正是“启动中…”挂几小时的来源）。
-        await client.close(500).catch((closeError: unknown) => {
-          log.warn(`task ${this.id} closing a half-started pi process failed`, { message: errorMessage(closeError) });
-        });
-      }
-      // 看门狗已经落过 error 了：清理不能把它降级成 stopped。
-      if (this.#startAbandoned) throw error;
-      if (this.#closing || this.#disposed) {
-        this.#apply({ type: "stopped" });
-        throw error;
-      }
-      const taskError = this.#classifyStartError(error);
-      log.warn(`task ${this.id} failed to start pi RPC`, taskError);
-      this.#apply({ type: "start_failed", error: taskError });
-      throw error;
-    } finally {
-      clearTimeout(watchdog);
-      this.#startAbandoned = false;
-      this.#settleInterruptedStart();
     }
   }
 
@@ -766,13 +784,24 @@ export class PiTaskRunner {
     // 冷启动要 0.6–3 秒（Pi 加载扩展），所以先把这条消息画进对话再去等进程：
     // 否则按 Enter 后整屏没有反应，看起来像没发出去。启动失败时把这张卡撤回去。
     const optimistic = this.#machine.working ? null : this.#bridge.appendOptimisticUserMessage(body, piImages);
+    const echoCardId = optimistic?.cardId ?? null;
+    /** 这条消息还没发出去：把乐观卡片撤回去（已经被 Pi 回认的不会删）。 */
+    const rollbackEcho = (): void => {
+      if (echoCardId !== null) this.#bridge.rollbackOptimisticUserMessage(echoCardId, body);
+    };
     try {
       await this.start();
     } catch (error) {
-      if (optimistic !== null) this.#bridge.rollbackOptimisticUserMessage(optimistic.cardId, body);
+      rollbackEcho();
       throw error;
     }
-    const client = this.#requireClient();
+    let client: PiRpcClient;
+    try {
+      client = this.#requireClient();
+    } catch (error) {
+      rollbackEcho();
+      throw error;
+    }
 
     if (this.#record.title === "") {
       this.#provisionalTitle = titleFromPrompt(body);
@@ -790,7 +819,7 @@ export class PiTaskRunner {
     if (this.#bridge.hasActiveDialog) {
       this.sendTspEvent({ ev: "send", sf: PI_SURFACE_ID, id: "composer", text: body });
       if (!this.#machine.working) {
-        if (optimistic !== null) this.#bridge.rollbackOptimisticUserMessage(optimistic.cardId, body);
+        rollbackEcho();
         return;
       }
     }
@@ -801,7 +830,14 @@ export class PiTaskRunner {
       this.#lastStopAborted = false;
       this.#lastRunError = null;
       const lifecycleBefore = this.#agentLifecycleSeq;
-      const ack = await client.prompt(body, { images: piImages });
+      let ack;
+      try {
+        ack = await client.prompt(body, { images: piImages });
+      } catch (error) {
+        // 没发出去（模型不可用、进程半路死了）：卡片和待认表都不能留着，否则下次水合会把一条从未发出的消息补回历史。
+        rollbackEcho();
+        throw error;
+      }
       // On POSIX pipes, `response`, `agent_start`, and `agent_end` can coalesce into a single stdout chunk
       // and run synchronously before `await client.prompt(...)` resumes its microtask. Only apply optimistic
       // `agent_start` if no lifecycle event has fired since issuing `prompt`.
@@ -1386,6 +1422,8 @@ export class PiTaskRunner {
     }
     await rewindSessionFileBefore(beforeFile, entryId);
     this.#leafOverride = null;
+    // 还没发出去的乐观消息不在截断后的文件里：不能再被水合补回历史。
+    this.#bridge.discardPendingEchoes();
     // 截断一旦落盘就同步文档，后续启动失败也不能留下已撤掉的消息。
     await this.#bridge.hydrateFromSessionFile(beforeFile);
     await this.#readSessionFile();
@@ -2053,7 +2091,8 @@ export class PiTaskRunner {
     void this.#persistSessionFile();
 
     if (this.#closing) {
-      this.#apply({ type: "stopped" });
+      // 看门狗已经报过“启动超时”：子进程退出不能再把它降级成 stopped。
+      if (!this.#startAbandoned) this.#apply({ type: "stopped" });
       return;
     }
     if (this.#machine.status === "starting") return;

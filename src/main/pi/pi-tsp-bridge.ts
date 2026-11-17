@@ -1873,12 +1873,19 @@ export class PiTspBridge {
    * 不然用户下一次发同样的文本时会被 `handleMessageStart` 当成“已经画过”而吞掉。
    */
   rollbackOptimisticUserMessage(cardId: string, text: string): TspDocMessage[] {
-    const trimmed = text.trim();
-    const at = this.pendingOptimisticUsers.indexOf(trimmed);
-    if (at !== -1) this.pendingOptimisticUsers.splice(at, 1);
     const echo = this.pendingEchoes.findIndex((pending) => pending.cardId === cardId);
-    if (echo !== -1) this.pendingEchoes.splice(echo, 1);
+    // 已经不在待认表里了（Pi 已回认 / 已被撤回）：那是真消息，不能删。
+    if (echo === -1) return [];
+    this.pendingEchoes.splice(echo, 1);
+    const at = this.pendingOptimisticUsers.indexOf(text.trim());
+    if (at !== -1) this.pendingOptimisticUsers.splice(at, 1);
     return this.nodeExists(cardId) ? this.emitOps([["del", cardId]]) : [];
+  }
+
+  /** 丢掉所有还没被 Pi 回认的乐观用户消息（撤回后会话文件里没有它们，水合时不能再补回去）。 */
+  discardPendingEchoes(): void {
+    this.pendingEchoes = [];
+    this.pendingOptimisticUsers = [];
   }
 
   // ───────── Session File & Message History Hydration ─────────

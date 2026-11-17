@@ -838,7 +838,7 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
     }
   });
 
-  it("启动卡住超过看门狗：落 error 而不是一直停在“启动中”", async () => {
+  it("启动卡住超过看门狗：落 error（不被退出事件降级）且 #starting 被释放可以重试", async () => {
     vi.useFakeTimers();
     const dir = await makeTempDir();
     const sessionFile = await seedRewindSession(dir, "watchdog.jsonl", 1);
@@ -847,8 +847,14 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
       record,
       { id: record.projectId, name: "W", path: dir },
       {
-        // 永不返回：模拟“发现 pi / 抢名额”那类没有上限的等待。
-        buildPiLaunch: () => new Promise<never>(() => {}),
+        // 进程起来了但永远不回 RPC：超时那一刻 #client 已经存在（正是 #handleRpcExit 会踩到的那一半）。
+        buildPiLaunch: () =>
+          Promise.resolve({
+            command: process.execPath,
+            prefixArgs: ["-e", "process.stdin.resume()"],
+            env: { ELECTRON_RUN_AS_NODE: "1", PI_CODING_AGENT_DIR: dir },
+            displayPath: "stall",
+          }),
         acquireSlot: () => Promise.resolve(),
         persist: (_id, patch) => {
           record = { ...record, ...patch };
@@ -860,21 +866,62 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
       },
     );
     try {
-      void runner.start().catch(() => {});
-      await vi.advanceTimersByTimeAsync(0);
-      expect(runner.status).toBe("starting");
+      const started = runner.start().then(
+        () => "resolved",
+        (error: Error) => error.message,
+      );
       await vi.advanceTimersByTimeAsync(61_000);
       expect(runner.status).toBe("error");
+      vi.useRealTimers();
+      // 关键：`start()` 这个 promise 真的结束了，不会永远挂着。
+      expect(await started).toContain("start timed out");
       expect(runner.state.error?.message).toContain("启动超时");
+      // 半启动的进程被收掉后，退出事件不能把“启动超时”降级成“已停止”。
+      // 注意 `alive` 在 `close()` 时就为 false 了，得等子进程真的退掉（exit 回调）再断言。
+      await expect.poll(() => runner.hasProcess, { timeout: 5_000 }).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(runner.status).toBe("error");
+      // #starting 已经释放：再起一次是真的重试（这里仍会卡住，但状态回到 starting）。
+      void runner.start().catch(() => {});
+      await expect.poll(() => runner.status).toBe("starting");
     } finally {
       vi.useRealTimers();
       await runner.dispose();
     }
   });
 
+  it("启动失败：乐观卡片被撤回，不会留一条从没发出去的消息", async () => {
+    const dir = await makeTempDir();
+    const sessionFile = await seedRewindSession(dir, "echo-fail.jsonl", 1);
+    let record = rewindRecord(dir, sessionFile, "task_echo_fail");
+    const runner = new PiTaskRunner(
+      record,
+      { id: record.projectId, name: "EchoFail", path: dir },
+      {
+        buildPiLaunch: () => Promise.reject(new Error("boom")),
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    const document = () => restoreDocument(runner.tspSnapshot().document);
+    try {
+      await expect(runner.sendPrompt({ text: "发不出去", whenBusy: "steer" })).rejects.toThrow("boom");
+      expect(runner.status).toBe("error");
+      expect(userMessages(document()).map((m) => m.text)).toEqual(["问 1"]);
+    } finally {
+      await runner.dispose();
+    }
+  });
+
   it("乐观用户消息：重新水合后补回文档，Pi 回认同一条后不重复", () => {
     const bridge = new PiTspBridge();
-    bridge.appendOptimisticUserMessage("重新水合也别丢");
+    const { cardId } = bridge.appendOptimisticUserMessage("重新水合也别丢");
     expect(userMessages(bridge.document)).toHaveLength(1);
 
     // fork / 新建会话后会把文档按会话文件重建一遍（resetStreamingState 也清了去重表）。
@@ -907,6 +954,15 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
     // 已经回认过：再水合一次不能又补回去。
     bridge.hydrateFromSessionJsonl(JSON.stringify({ type: "session", version: 3, id: "echo", cwd: "/tmp" }));
     expect(userMessages(bridge.document)).toHaveLength(0);
+
+    // 回认后的 rollback（例如 prompt 报错）：那是真消息，不能删。
+    bridge.handleRpcEvent({
+      type: "message_start",
+      message: { role: "user", content: "重新水合也别丢", timestamp: Date.now() },
+    });
+    expect(userMessages(bridge.document)).toHaveLength(1);
+    expect(bridge.rollbackOptimisticUserMessage(cardId, "重新水合也别丢")).toEqual([]);
+    expect(userMessages(bridge.document)).toHaveLength(1);
   });
 
   it.each(["正常撤回", "撤回时并发发送", "撤回后启动失败"])(
