@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project, ProjectId, TaskId, TaskState, TspBatch } from "../src/shared/ipc.ts";
 import { applyMessage, createDocument, restoreDocument, type TspDocMessage } from "../src/shared/tsp/document.ts";
 import { trailingErrorCardId } from "../src/shared/tsp/error-turn.ts";
@@ -796,6 +796,117 @@ describe("PiService & PiTaskRunner integration with fake-pi", () => {
       releaseSecondLaunch();
       await runner.dispose();
     }
+  });
+
+  it("发送先回显：进程还没起来，这条消息已经在对话里；启动失败就撤掉", async () => {
+    const dir = await makeTempDir();
+    const sessionFile = await seedRewindSession(dir, "echo.jsonl", 1);
+    let record = rewindRecord(dir, sessionFile, "task_echo");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runner = new PiTaskRunner(
+      record,
+      { id: record.projectId, name: "Echo", path: dir },
+      {
+        buildPiLaunch: () =>
+          gate.then(() => ({ ...FAKE_LAUNCH, env: { ...FAKE_LAUNCH.env, PI_CODING_AGENT_DIR: dir } })),
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    const document = () => restoreDocument(runner.tspSnapshot().document);
+    try {
+      const sending = runner.sendPrompt({ text: "先回显再启动", whenBusy: "steer" });
+      // Pi 还卡在启动上（加载扩展要 1–3 秒），但对话里已经有这条消息了。
+      await expect.poll(() => userMessages(document()).map((m) => m.text)).toEqual(["问 1", "先回显再启动"]);
+      expect(runner.status).toBe("starting");
+      release();
+      await sending;
+      await expect.poll(() => runner.status).toBe("idle");
+      expect(userMessages(document()).map((m) => m.text)).toEqual(["问 1", "先回显再启动"]);
+    } finally {
+      release();
+      await runner.dispose();
+    }
+  });
+
+  it("启动卡住超过看门狗：落 error 而不是一直停在“启动中”", async () => {
+    vi.useFakeTimers();
+    const dir = await makeTempDir();
+    const sessionFile = await seedRewindSession(dir, "watchdog.jsonl", 1);
+    let record = rewindRecord(dir, sessionFile, "task_watchdog");
+    const runner = new PiTaskRunner(
+      record,
+      { id: record.projectId, name: "W", path: dir },
+      {
+        // 永不返回：模拟“发现 pi / 抢名额”那类没有上限的等待。
+        buildPiLaunch: () => new Promise<never>(() => {}),
+        acquireSlot: () => Promise.resolve(),
+        persist: (_id, patch) => {
+          record = { ...record, ...patch };
+          return Promise.resolve(record);
+        },
+        isForeground: () => true,
+        onState: () => {},
+        onTspBatch: () => {},
+      },
+    );
+    try {
+      void runner.start().catch(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runner.status).toBe("starting");
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(runner.status).toBe("error");
+      expect(runner.state.error?.message).toContain("启动超时");
+    } finally {
+      vi.useRealTimers();
+      await runner.dispose();
+    }
+  });
+
+  it("乐观用户消息：重新水合后补回文档，Pi 回认同一条后不重复", () => {
+    const bridge = new PiTspBridge();
+    bridge.appendOptimisticUserMessage("重新水合也别丢");
+    expect(userMessages(bridge.document)).toHaveLength(1);
+
+    // fork / 新建会话后会把文档按会话文件重建一遍（resetStreamingState 也清了去重表）。
+    bridge.hydrateFromSessionJsonl(
+      [
+        JSON.stringify({ type: "session", version: 3, id: "echo", cwd: "/tmp" }),
+        JSON.stringify({
+          type: "message",
+          id: "u1",
+          parentId: null,
+          message: { role: "user", content: [{ type: "text", text: "历史问题" }] },
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "a1",
+          parentId: "u1",
+          message: { role: "assistant", content: [{ type: "text", text: "历史回答" }] },
+        }),
+      ].join("\n"),
+    );
+    expect(userMessages(bridge.document).map((m) => m.text)).toEqual(["历史问题", "重新水合也别丢"]);
+
+    // Pi 回认这条消息：去重，不再多一张卡。
+    bridge.handleRpcEvent({
+      type: "message_start",
+      message: { role: "user", content: "重新水合也别丢", timestamp: Date.now() },
+    });
+    expect(userMessages(bridge.document).map((m) => m.text)).toEqual(["历史问题", "重新水合也别丢"]);
+
+    // 已经回认过：再水合一次不能又补回去。
+    bridge.hydrateFromSessionJsonl(JSON.stringify({ type: "session", version: 3, id: "echo", cwd: "/tmp" }));
+    expect(userMessages(bridge.document)).toHaveLength(0);
   });
 
   it.each(["正常撤回", "撤回时并发发送", "撤回后启动失败"])(

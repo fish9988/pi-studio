@@ -9,6 +9,12 @@ How to write it:
 
 ## [Unreleased]
 
+### Fixed
+
+- A conversation can no longer sit at "starting": a start that times out or is interrupted now reports an error you can retry, instead of hanging for hours.
+- Sending a message shows your message in the conversation right away instead of waiting for the Pi process to come up (1–3 seconds on a cold start); if the start fails, the message is withdrawn.
+- Auto-update no longer fails over and over: a half-downloaded installer is no longer treated as downloaded, a mismatch is re-downloaded, and installers of older versions are cleaned up (about 1 GB).
+
 ## [0.6.4] - 2026-11-16
 
 ### Fixed

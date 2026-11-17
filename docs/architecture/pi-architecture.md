@@ -36,6 +36,8 @@
 - **就地撤回的写入顺序**：`PiTaskRunner.rewindTo` 必须先等旧 Pi 进程退出，再截断同一个会话文件，随后重开进程；整段操作期间 `start()` 等待撤回完成，避免并发发送提前加载旧历史。Pi 1.5.2 的 `switchSession` 会先打开文件再触发旧会话的 `session_shutdown`，扩展此时可能追加仍指向旧叶子的条目；先截断再切换会留下断链，使历史显示为空。截断落盘后立即重新水合文档，即使后续启动失败也保持界面与文件一致（隔离的 fake-pi 集成回归与 Electron E2E 验证）。
 - **撤回不等重开进程**：`rewindTo` 只等到“旧进程已退出 + 文件已截断 + 对话已重新水合”就返回（启动 + 握手 + 再读会话放在 `#rewindRestart` 里后台跑），这样确认弹窗和输入框回填是两百毫秒级而不是一次进程启动的时长。`#rewinding` 仍然覆盖整段（含后台重开），`start()` / `close()` / 并发撤回都等它；用户撤回后立刻发新消息时，会先等后台进程就绪再发，不会加载到旧历史。
 - **打开模型选择器不重开进程**：`PiTaskRunner.listModels` 只把活进程快照与服务进程现读的目录合并后返回，从不在这里 `restart()`（空闲重开一次 0.4–3 秒，会卡住选择器）；新加的模型选中时 `set_model` 报 `Model not found`，由 `setModel` 重开一次再设。渲染进程用上次的目录先画表（`features/composer/model-list-cache.ts`），骨架屏只在真的一个模型都没有时出现。
+- **`starting` 必须是瞬时态**：`PiTaskRunner.#startInternal` 用 `finally` 保证不论怎么退出都落成 `idle`/`error`/`stopped`（看门狗 60 秒），`#ensureStarted` 遇到“状态还是 `starting` 但没在飞的启动”先自愈成 `stopped`。之前启动链上无上限的 `await`（抢名额、发现 pi、读默认模型）一旦不返回，任务就永远停在“启动中…”，而 `#startInternal` 开头的守卫又让 `start()` 直接报错，用户只能重开应用。
+- **发送先回显**：`sendPrompt` 在建进程之前就把用户消息画进对话（`appendOptimisticUserMessage` 返回卡片 id），启动失败用 `rollbackOptimisticUserMessage` 撤回；重新水合（fork / 新会话）时 `appendPendingEchoes` 把还没被 Pi 回认的卡片补回末尾，Pi 回认后从待认表里移除，不会重复。
 - **宿主标签清洗（`src/shared/ui/clean-title.ts`）**：会话标题提取时自动剥离 `<t3_code_instructions>`、`<system-reminder>`、`<USER_REQUEST>` 等外部宿主注入的闭合或截断 XML 块，避免污染侧栏标题。
 
 ## 4. 配置文件映射与安全边界（`src/main/pi/pi-config.ts`）

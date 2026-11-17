@@ -102,6 +102,8 @@ const EXPORT_TIMEOUT_MS = 30_000;
 const STDERR_LINES_IN_ERROR = 8;
 /** `compaction.reserveTokens` 的 schema 默认值：全局、项目级与模型覆盖都没配时用它。 */
 const DEFAULT_COMPACTION_RESERVE_TOKENS = 16_384;
+/** 启动一个 Pi 进程的上限：超了就落 error 并收掉半启动的进程，不把任务永远留在 "启动中"。 */
+const START_TIMEOUT_MS = 60_000;
 
 const modelKeyOf = (model: ModelOption): string => `${model.key.provider}/${model.key.modelId}`;
 
@@ -223,6 +225,8 @@ export class PiTaskRunner {
   #gen = 0;
   #starting: Promise<void> | null = null;
   #closing = false;
+  /** 看门狗已经把这次启动判超时：清理阶段不能再把状态降级成 stopped。 */
+  #startAbandoned = false;
   #disposed = false;
   #snapshotReleased = false;
 
@@ -480,7 +484,11 @@ export class PiTaskRunner {
     if (this.#client !== null && this.#client.alive && this.#machine.status !== "starting") {
       return Promise.resolve();
     }
-    this.#starting ??= this.#startInternal().finally(() => {
+    if (this.#starting !== null) return this.#starting;
+    // 状态还写着 starting 但没有在飞的启动：上一次启动异常退出留下的死状态（界面上就是“启动中…”挂住）。
+    // 先落地成 stopped 再起，让这个任务自己好起来，不用用户重启或重开。
+    if (this.#machine.status === "starting") this.#apply({ type: "stopped" });
+    this.#starting = this.#startInternal().finally(() => {
       this.#starting = null;
     });
     return this.#starting;
@@ -491,6 +499,7 @@ export class PiTaskRunner {
       throw new Error(`cannot start a task that is ${this.#machine.status}`);
     }
     this.#closing = false;
+    this.#startAbandoned = false;
     this.#stopRequested = false;
     this.#lastStopAborted = false;
     this.#lastRunError = null;
@@ -498,6 +507,23 @@ export class PiTaskRunner {
     this.#apply({ type: "start" });
 
     let client: PiRpcClient | null = null;
+    // 看门狗：启动链上有几处没有上限的等待（回收名额、发现 pi、读默认模型），任一处不回就会把任务永远留在
+    // starting。到点先落 error（用户可以重试），再把半启动的进程收掉。
+    const watchdog = setTimeout(() => {
+      this.#startAbandoned = true;
+      if (this.#machine.status === "starting") {
+        this.#apply({
+          type: "start_failed",
+          error: {
+            kind: "handshake_failed",
+            message: `Pi 启动超时（${Math.round(START_TIMEOUT_MS / 1000)} 秒），请再发一次或重开会话`,
+          },
+        });
+      }
+      this.#closing = true;
+      void this.#client?.close(0);
+    }, START_TIMEOUT_MS);
+
     try {
       if (this.#initialHydration !== null) {
         await this.#initialHydration;
@@ -611,8 +637,13 @@ export class PiTaskRunner {
     } catch (error) {
       if (client !== null) {
         if (this.#client === client) this.#client = null;
-        await client.close(500);
+        // 清理失败不能把下面落终态这一步也带垮（那正是“启动中…”挂几小时的来源）。
+        await client.close(500).catch((closeError: unknown) => {
+          log.warn(`task ${this.id} closing a half-started pi process failed`, { message: errorMessage(closeError) });
+        });
       }
+      // 看门狗已经落过 error 了：清理不能把它降级成 stopped。
+      if (this.#startAbandoned) throw error;
       if (this.#closing || this.#disposed) {
         this.#apply({ type: "stopped" });
         throw error;
@@ -621,7 +652,20 @@ export class PiTaskRunner {
       log.warn(`task ${this.id} failed to start pi RPC`, taskError);
       this.#apply({ type: "start_failed", error: taskError });
       throw error;
+    } finally {
+      clearTimeout(watchdog);
+      this.#startAbandoned = false;
+      this.#settleInterruptedStart();
     }
+  }
+
+  /** 启动函數无论如何退出，都不能把任务留在 starting —— 否则界面会一直显示“启动中…”。 */
+  #settleInterruptedStart(): void {
+    if (this.#machine.status !== "starting") return;
+    this.#apply({
+      type: "start_failed",
+      error: { kind: "handshake_failed", message: "Pi 启动没完成就被中断了，请再发一次或重开会话" },
+    });
   }
 
   async close(timeoutMs = 5_000): Promise<void> {
@@ -712,7 +756,22 @@ export class PiTaskRunner {
       this.#sessionFile = undefined;
     }
 
-    await this.start();
+    const piImages: PiImageContent[] =
+      input.images?.map((img) => ({
+        type: "image",
+        data: img.data,
+        mimeType: img.mimeType,
+      })) ?? [];
+
+    // 冷启动要 0.6–3 秒（Pi 加载扩展），所以先把这条消息画进对话再去等进程：
+    // 否则按 Enter 后整屏没有反应，看起来像没发出去。启动失败时把这张卡撤回去。
+    const optimistic = this.#machine.working ? null : this.#bridge.appendOptimisticUserMessage(body, piImages);
+    try {
+      await this.start();
+    } catch (error) {
+      if (optimistic !== null) this.#bridge.rollbackOptimisticUserMessage(optimistic.cardId, body);
+      throw error;
+    }
     const client = this.#requireClient();
 
     if (this.#record.title === "") {
@@ -722,13 +781,6 @@ export class PiTaskRunner {
       void client.setSessionName(this.#provisionalTitle).catch(() => {});
     }
 
-    const piImages: PiImageContent[] =
-      input.images?.map((img) => ({
-        type: "image",
-        data: img.data,
-        mimeType: img.mimeType,
-      })) ?? [];
-
     const now = Date.now();
     this.#touch(now);
     this.#lastActiveAt = now;
@@ -737,7 +789,10 @@ export class PiTaskRunner {
     // If an interactive extension dialog is open in `dock.dialog`, answer/deny it first.
     if (this.#bridge.hasActiveDialog) {
       this.sendTspEvent({ ev: "send", sf: PI_SURFACE_ID, id: "composer", text: body });
-      if (!this.#machine.working) return;
+      if (!this.#machine.working) {
+        if (optimistic !== null) this.#bridge.rollbackOptimisticUserMessage(optimistic.cardId, body);
+        return;
+      }
     }
 
     const isBusy = this.#machine.working;
@@ -745,7 +800,6 @@ export class PiTaskRunner {
       this.#stopRequested = false;
       this.#lastStopAborted = false;
       this.#lastRunError = null;
-      this.#bridge.appendOptimisticUserMessage(body, piImages);
       const lifecycleBefore = this.#agentLifecycleSeq;
       const ack = await client.prompt(body, { images: piImages });
       // On POSIX pipes, `response`, `agent_start`, and `agent_end` can coalesce into a single stdout chunk

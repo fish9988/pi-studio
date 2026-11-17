@@ -3,8 +3,9 @@
 // resources/app-update.yml（electron-builder.yml 的 publish：本仓库的 GitHub Releases），两个都没有就不检查。
 // 本机目录由 local-feed.ts 在 127.0.0.1 上提供，目录不存在时按未配置处理。开发版（没打包）一律不检查。
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { createReadStream, existsSync, statSync } from "node:fs";
+import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -50,6 +51,26 @@ export function getUpdateState(): UpdateState {
  */
 let ghFeedDir: string | null = null;
 
+/** 安装包文件名：`pi-studio-<版本>-setup.exe(.blockmap)`。 */
+const FEED_ASSET_RE = /^pi-studio-(.+?)-setup\.exe(\.blockmap)?$/i;
+
+/** 文件的 sha512（base64）是否等于 `latest.yml` 里写的那个；读不了也算不等。 */
+async function fileSha512Matches(file: string, expected: string): Promise<boolean> {
+  try {
+    const hash = createHash("sha512");
+    await new Promise<void>((resolve, reject) => {
+      const stream = createReadStream(file);
+      stream.on("error", reject);
+      hash.on("error", reject);
+      hash.on("finish", () => resolve());
+      stream.pipe(hash);
+    });
+    return hash.digest("base64") === expected;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 针对私有或公开 GitHub 仓库（fish9988/pi-studio）：
  * 若本机已登录 `gh` CLI，通过 `gh release view` / `gh release download` 将最新 Release 的 `latest.yml`
@@ -82,30 +103,47 @@ async function syncGithubReleaseFeedIfAvailable(): Promise<string | null> {
       { timeout: 15_000, windowsHide: true },
     );
 
+    // `gh release download` 可能只落了半个包（网络中断）：这种文件进了 feed 目录就会永远校验失败——
+    // 因为下面的循环只补“文件不存在”的，不重新下已有文件。所以按 latest.yml 的 size/sha512 校验，对不上就重下。
+    const latestText = await readFile(path.join(feedDir, "latest.yml"), "utf8").catch(() => "");
+    const expectedPath = /^\s*path:\s*(\S+)\s*$/m.exec(latestText)?.[1] ?? null;
+    const expectedSha = /^\s*sha512:\s*(\S+)\s*$/m.exec(latestText)?.[1] ?? null;
+    const expectedSize = (() => {
+      const match = /^\s*size:\s*(\d+)\s*$/m.exec(latestText);
+      return match === null ? null : Number(match[1]);
+    })();
+
     if (latestVer !== app.getVersion()) {
       for (const assetName of assetNames) {
-        if (/^pi-studio-.*-setup\.exe(?:\.blockmap)?$/i.test(assetName)) {
-          const targetFile = path.join(feedDir, assetName);
-          if (!existsSync(targetFile)) {
-            await execFileAsync(
-              "gh",
-              [
-                "release",
-                "download",
-                tag,
-                "--repo",
-                GITHUB_REPO,
-                "--pattern",
-                assetName,
-                "--dir",
-                feedDir,
-                "--clobber",
-              ],
-              { timeout: 180_000, windowsHide: true },
-            );
-          }
-        }
+        if (FEED_ASSET_RE.test(assetName) === false) continue;
+        const targetFile = path.join(feedDir, assetName);
+        const checkSha = expectedPath !== null && assetName === expectedPath && expectedSha !== null;
+        const checkSize = checkSha && expectedSize !== null;
+        const intact = async (): Promise<boolean> => {
+          if (!existsSync(targetFile)) return false;
+          if (checkSize && statSync(targetFile).size !== expectedSize) return false;
+          return checkSha && expectedSha !== null ? fileSha512Matches(targetFile, expectedSha) : true;
+        };
+        if (await intact()) continue;
+
+        // --clobber 会重下整份文件；先清掉半包的残留，失败时也不会把它当“已下载”留下来。
+        await rm(targetFile, { force: true });
+        await execFileAsync(
+          "gh",
+          ["release", "download", tag, "--repo", GITHUB_REPO, "--pattern", assetName, "--dir", feedDir, "--clobber"],
+          { timeout: 180_000, windowsHide: true },
+        );
+        if (await intact()) continue;
+        await rm(targetFile, { force: true });
+        log.warn(`update feed: ${assetName} from ${tag} does not match latest.yml; updates stay off`);
+        return null;
       }
+    }
+
+    // 旧版本的安装包留着只会占盘（每个 ~120MB），顺手清掉。
+    for (const name of await readdir(feedDir)) {
+      const version = FEED_ASSET_RE.exec(name)?.[1];
+      if (version !== undefined && version !== latestVer) await rm(path.join(feedDir, name), { force: true });
     }
     return feedDir;
   } catch {

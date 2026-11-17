@@ -857,6 +857,14 @@ export class PiTspBridge {
   private readonly subagentRecords = new Map<string, PiSubagentRecord>();
   private lastStreamAssistantId: string | null = null;
   private pendingOptimisticUsers: string[] = [];
+  /** 乐观用户消息的卡片描述：重新水合后要把它们补回文档（见 appendPendingEchoes）。 */
+  private pendingEchoes: {
+    cardId: string;
+    text: string;
+    images: readonly PiImageContent[];
+    entryId?: string;
+    timestamp: number;
+  }[] = [];
   private activeDialog: ActiveDialogState | null = null;
   private pendingCustomOther: { text: string; expiresAt: number } | null = null;
   private autoSubmitInputResponse: PiExtensionUiResponsePayload | null = null;
@@ -1839,19 +1847,38 @@ export class PiTspBridge {
 
   // ───────── Optimistic User Prompt Helper ─────────
 
-  appendOptimisticUserMessage(text: string, images: readonly PiImageContent[] = [], entryId?: string): TspDocMessage[] {
+  appendOptimisticUserMessage(
+    text: string,
+    images: readonly PiImageContent[] = [],
+    entryId?: string,
+  ): { cardId: string; messages: TspDocMessage[] } {
     this.pendingOptimisticUsers.push(text.trim());
     const blobMessages: TspDocMessage[] = [];
     const cardId = this.nextId("user");
+    const timestamp = Date.now();
+    this.pendingEchoes.push({ cardId, text, images, ...(entryId !== undefined ? { entryId } : {}), timestamp });
     const card = this.buildUserCardNode({
       cardId,
       text,
       images,
       entryId,
-      timestamp: Date.now(),
+      timestamp,
       blobMessagesOut: blobMessages,
     });
-    return this.emitOps([["add", cardId, "main", null, card]], blobMessages);
+    return { cardId, messages: this.emitOps([["add", cardId, "main", null, card]], blobMessages) };
+  }
+
+  /**
+   * 调回一条乐观用户消息（发出去之前启动就失败了）：删卡片、同时撤掉去重记录，
+   * 不然用户下一次发同样的文本时会被 `handleMessageStart` 当成“已经画过”而吞掉。
+   */
+  rollbackOptimisticUserMessage(cardId: string, text: string): TspDocMessage[] {
+    const trimmed = text.trim();
+    const at = this.pendingOptimisticUsers.indexOf(trimmed);
+    if (at !== -1) this.pendingOptimisticUsers.splice(at, 1);
+    const echo = this.pendingEchoes.findIndex((pending) => pending.cardId === cardId);
+    if (echo !== -1) this.pendingEchoes.splice(echo, 1);
+    return this.nodeExists(cardId) ? this.emitOps([["del", cardId]]) : [];
   }
 
   // ───────── Session File & Message History Hydration ─────────
@@ -2120,7 +2147,27 @@ export class PiTspBridge {
       }
     }
 
+    // 重新水合会把文档重建一遍（resetStreamingState 也清掉去重表）：还没被 Pi 回认的乐观用户消息
+    // （“先回显再等启动”）要原样补回去，否则用户刚发的那条会在历史上闪一下就不见。
+    this.appendPendingEchoes(ops, blobMessages);
+
     return this.emitOps(ops, blobMessages);
+  }
+
+  /** 把还没被 Pi 回认的乐观用户消息重新画到 main 末尾，并恢复去重表。 */
+  private appendPendingEchoes(ops: TspOp[], blobMessages: TspDocMessage[]): void {
+    for (const echo of this.pendingEchoes) {
+      const card = this.buildUserCardNode({
+        cardId: echo.cardId,
+        text: echo.text,
+        images: echo.images,
+        ...(echo.entryId !== undefined ? { entryId: echo.entryId } : {}),
+        timestamp: echo.timestamp,
+        blobMessagesOut: blobMessages,
+      });
+      ops.push(["add", echo.cardId, "main", null, card]);
+      this.pendingOptimisticUsers.push(echo.text.trim());
+    }
   }
 
   private appendHydratedAssistantMessage(
@@ -2528,6 +2575,9 @@ export class PiTspBridge {
       const optIdx = this.pendingOptimisticUsers.indexOf(trimmed);
       if (optIdx !== -1) {
         this.pendingOptimisticUsers.splice(optIdx, 1);
+        // 这张乐观卡已经是正式消息了：水合时不能再把它当“还没回认”补回去（会重复）。
+        const echoIdx = this.pendingEchoes.findIndex((pending) => pending.text.trim() === trimmed);
+        if (echoIdx !== -1) this.pendingEchoes.splice(echoIdx, 1);
         return [];
       }
       // Also deduplicate if the very last node in `main` is already an `omp.user` card with identical text.
