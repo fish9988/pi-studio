@@ -9,6 +9,8 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-17
+
 ### Fixed
 
 - A conversation can no longer sit at "starting": a start that times out or is interrupted now reports an error you can retry, instead of hanging for hours.
