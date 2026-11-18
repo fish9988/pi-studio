@@ -1,0 +1,237 @@
+/* Office 文档预览（docx / xlsx）：类名一律 office-pv- 前缀，颜色 / 间距 / 字号只取 tokens.css 的变量。
+ * docx 的内容节点和它注入的 <style> 都由渲染库生成（类名 office-pv-docx、office-pv-docx-wrapper），
+ * 那部分样式必须比库自带的默认样式优先：选择器带上 .office-pv-paper 父级，靠特异性盖过去，
+ * 不能指望文件顺序（库的 <style> 挂在 body 里，排在应用样式之后）。 */
+
+.office-pv-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+/* 加载中 / 读取失败 / 空表：居中的一行说明，不抢版面 */
+.office-pv-note {
+  margin: var(--space-6) var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* ───────── 顶部工具条 ───────── */
+
+.office-pv-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h-sm);
+  padding: var(--space-1) var(--space-2);
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.office-pv-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* 工具条自带一条下边框：表标签不再画自己的第二条横线，只要选中那道下划线 */
+.office-pv-tabs .ui-tabs {
+  gap: var(--space-3);
+  border-bottom: 0;
+}
+
+.office-pv-tabs .ui-tab {
+  flex: none;
+  height: var(--control-h-sm);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.office-pv-zoom {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-0-5);
+}
+
+.office-pv-meta {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ───────── 正文 ───────── */
+
+.office-pv-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 渲染中 / 渲染失败的浮层提示：压在正文底部，不挡住已经画出来的内容 */
+.office-pv-hint {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  left: var(--space-3);
+  margin: 0;
+  padding: var(--space-1-5) var(--space-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-2);
+  text-align: center;
+  background: var(--bg-glass-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(8px);
+}
+
+/* ───────── docx：纸面 ───────── */
+
+.office-pv-paper {
+  --office-pv-zoom: 1;
+
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-sunken);
+  overscroll-behavior: contain;
+}
+
+/* 库默认给外层铺灰底、30px 内边距：换成随主题的底，留白用 token。
+ * width: max-content + min-width: 100%：页比容器宽时外层跟着长高长宽（居中的页不会往左溢出到滚不到的地方），
+ * 页比容器窄时又铺满容器、由 align-items: center 居中。 */
+.office-pv-paper .office-pv-docx-wrapper {
+  box-sizing: border-box;
+  display: flex;
+  flex-flow: column;
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+  padding: var(--space-4);
+  background: transparent;
+  zoom: var(--office-pv-zoom);
+}
+
+/* 每一页纸：白底、深色字（文档按纸面配色排版，深色主题下也不跟着变；
+ * 底色用不跟随主题的浅色卡面 token，深浅主题下都读得清） */
+.office-pv-paper .office-pv-docx-wrapper > section.office-pv-docx {
+  margin-bottom: var(--space-4);
+  color: var(--fg-code-light);
+  background: var(--bg-code-light);
+  box-shadow: var(--shadow-2);
+}
+
+.office-pv-paper .office-pv-docx-wrapper > section.office-pv-docx:last-child {
+  margin-bottom: 0;
+}
+
+/* 纸面里的图片不超出页宽 */
+.office-pv-paper .office-pv-docx img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 纸面固定按浅色排版：深色主题下正文的颜色与表格线仍是文档自己的深色，不被主题的浅色文字带跑 */
+.office-pv-paper .office-pv-docx {
+  color-scheme: only light;
+}
+
+/* ───────── xlsx：表格 ───────── */
+
+.office-pv-grid-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-app);
+  overscroll-behavior: contain;
+}
+
+.office-pv-grid {
+  border-spacing: 0;
+  border-collapse: separate;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.office-pv-grid th,
+.office-pv-grid td {
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  vertical-align: top;
+  white-space: pre;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* 列标：横向滚动时盯住顶部 */
+.office-pv-grid-col {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+  text-align: center;
+  background: var(--bg-sunken);
+}
+
+/* 行号：纵向滚动时盯住左侧；和列标交叉的左上角要同时盯住两边 */
+.office-pv-grid-row {
+  position: sticky;
+  left: 0;
+  z-index: var(--z-sticky);
+  min-width: var(--space-10);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+  text-align: right;
+  background: var(--bg-sunken);
+}
+
+.office-pv-grid-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: calc(var(--z-sticky) + 1);
+  background: var(--bg-sunken);
+}
+
+.office-pv-grid tbody tr:hover td,
+.office-pv-grid tbody tr:hover .office-pv-grid-row {
+  background: var(--bg-hover);
+}
+
+/* 选中文字仍是主题的选中色（表格里大量数字，靠它看清选中的是哪一块） */
+.office-pv-grid td::selection,
+.office-pv-grid th::selection {
+  background: var(--selection-bg);
+}
+
+/* 截断提示：贴在表格下沿，横向滚动时也不跟着飘 */
+.office-pv-foot {
+  flex: none;
+  margin: 0;
+  padding: var(--space-1-5) var(--space-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  color: var(--text-3);
+  border-top: 1px solid var(--border-subtle);
+}

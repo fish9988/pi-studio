@@ -12,6 +12,7 @@ import { ArrowDown } from "../../icons.tsx";
 import { Markdown } from "../../markdown/index.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
 import { OverlayScrollbar } from "../../ui/OverlayScrollbar.tsx";
+import { SelectionTooltip } from "../conversation/SelectionTooltip.tsx";
 import { noteProgrammaticTop } from "../conversation/scroll-intent.ts";
 import { useStickToBottom, type StickToBottom } from "../conversation/use-stick-to-bottom.ts";
 import { ConversationLine } from "./ConversationLine.tsx";
@@ -266,6 +267,7 @@ function SurfaceBody({
             <div className="tsp-column-end" />
           </div>
         </div>
+        {mode === "inline" && <SelectionTooltip rootRef={column} taskId={taskId} quoteTarget={taskId} />}
         <OverlayScrollbar target={scroller} />
         <Dock taskId={taskId} sf={sf} ctx={ctx} />
         <div className="tsp-layer">

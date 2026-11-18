@@ -1,0 +1,122 @@
+/* MCP Apps 容器：顶部一行轻量栏 + 沙箱 iframe。内联模式按应用上报的高度伸缩（200–720px），全屏模式铺满。 */
+.mcp-app-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+}
+.mcp-app-host[hidden] {
+  display: none;
+}
+.mcp-app-host[data-display-mode="fullscreen"] {
+  flex: 1 1 auto;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.mcp-app-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  box-sizing: border-box;
+  min-height: var(--control-h-sm);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.mcp-app-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.mcp-app-server {
+  flex: none;
+  max-width: 12ch;
+  overflow: hidden;
+  padding: 0 var(--space-1-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+.mcp-app-status {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--text-disabled);
+}
+.mcp-app-status[data-state="loading"] {
+  background: var(--st-running);
+  animation: mcp-app-pulse var(--dur-breathe) var(--tick-breathe) infinite;
+  animation-play-state: var(--play-state);
+}
+.mcp-app-status[data-state="ready"] {
+  background: var(--st-done);
+}
+.mcp-app-status[data-state="error"] {
+  background: var(--st-error);
+}
+.mcp-app-reconnect {
+  margin-left: auto;
+}
+.mcp-app-frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+.mcp-app-host[data-display-mode="fullscreen"] .mcp-app-frame {
+  height: 100%;
+}
+.mcp-app-note {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.mcp-app-note-error {
+  color: var(--st-error);
+}
+/* 应用提交的消息：先摆成一条确认条，确认后才进对话或输入框。 */
+.mcp-app-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.mcp-app-confirm-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+@keyframes mcp-app-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

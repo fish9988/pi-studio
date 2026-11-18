@@ -24,6 +24,7 @@ import {
 import { isScratchChatCwd } from "../../../../shared/ui/sidebar-model.ts";
 import {
   closeFilePreview,
+  openFilePreview,
   previewFileInPanel,
   setPanelPage,
   setPreviewWidth,
@@ -69,6 +70,7 @@ export function FilePreviewPane({
   const previewPanel = usePreviewPanel();
   const previewRoot = previewPanel?.root ?? 0;
   const focusLine = previewPanel?.line;
+  const focusPage = previewPanel?.pageNum;
   const target = useMemo(() => filesTarget(panelKey), [panelKey]);
   const treeTarget = useMemo(() => withRoot(target, treeRoot), [target, treeRoot]);
   const previewTarget = useMemo(() => withRoot(target, previewRoot), [target, previewRoot]);
@@ -313,9 +315,23 @@ export function FilePreviewPane({
         reload={reload}
         selected={previewRoot === treeRoot ? path : null}
         onOpenFile={(rel) => previewFileInPanel(rel)}
+        onOpenFileInNewTab={(rel) => openFilePreview(panelKey, rel, { root: treeRoot > 0 ? treeRoot : undefined })}
       />
       {path !== null && (
-        <PreviewPage target={previewTarget} path={path} focusLine={focusLine} hidden={page !== "preview"} />
+        <PreviewPage
+          target={previewTarget}
+          path={path}
+          focusLine={focusLine}
+          focusPage={focusPage}
+          hidden={page !== "preview"}
+          onPinTab={() =>
+            openFilePreview(panelKey, path, {
+              line: focusLine,
+              page: focusPage,
+              root: previewRoot > 0 ? previewRoot : undefined,
+            })
+          }
+        />
       )}
     </section>
   );

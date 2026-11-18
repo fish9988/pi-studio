@@ -3,9 +3,10 @@
 // - 顶部动态多标签栏 + `+` 新建 Overview 标签 + 最大化/还原面板按钮 + 关闭（`×`）按钮；
 // - 默认页采用 Antigravity Overview 极简无框列表：全能搜索/URL 输入框 + 快捷导航区 + 实时状态区（Artifacts / Subagents / Background Tasks）；
 // - 代码变更评审（Review）、文件树与预览（Files）、内置终端（Terminal）、内置浏览器（Browser）、扩展插件（Extensions）全部在分栏标签中并排打开，绝不遮挡左侧聊天区。
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { GitStatus } from "../../../../shared/git.ts";
-import { parseDraftKey, type TaskId, type TerminalKey } from "../../../../shared/ipc.ts";
+import { draftKey, parseDraftKey, type DraftKey, type TaskId, type TerminalKey } from "../../../../shared/ipc.ts";
+import type { McpAppServerSnapshot } from "../../../../shared/mcp-apps.ts";
 import { AGENT_NODES, isAgentActive, listAgents, type HubAgent } from "../../../../shared/tsp/agent-hub.ts";
 import {
   AgentsPanel,
@@ -14,6 +15,7 @@ import {
   GitChangesPanel,
   RightTerminalPane,
 } from "../../app/lazy-views.tsx";
+import { lazyView } from "../../ui/lazy-view.ts";
 import { shortcutLabel } from "../../app/platform-keys.ts";
 import { useLocale, useT } from "../../i18n/use-t.ts";
 import {
@@ -26,7 +28,9 @@ import {
   Globe,
   Plus,
   Puzzle,
+  Restart,
   Search,
+  Sparkle,
   Terminal,
   Users,
 } from "../../icons.tsx";
@@ -37,12 +41,16 @@ import { openAgentsPanel, useAgentsPanel } from "../agents/agents-store.ts";
 import { openBrowserPanel } from "../browser/browser-store.ts";
 import { filesTarget } from "../file-preview/files-target.ts";
 import {
+  closePreviewTabAndRestoreFocus,
   openFilePreview,
   openFilesPanel,
   setPreviewWidth,
   usePreviewPanel,
   usePreviewWidth,
 } from "../file-preview/preview-store.ts";
+import { baseName } from "../file-preview/PreviewContent.tsx";
+import { PreviewPage } from "../file-preview/PreviewPage.tsx";
+import { withRoot } from "../file-preview/files-target.ts";
 import { useGitVersion } from "../git/git-store.ts";
 import { IntegrationsSection } from "../settings/IntegrationsSection.tsx";
 import { setTerminalOpen } from "../terminal/terminal-store.ts";
@@ -52,11 +60,15 @@ import {
   addDshStartTab,
   closeDshTab,
   collapseDshSidebar,
+  openDshMcpAppTab,
   openDshToolTab,
+  reorderDshTab,
   toggleDshExpanded,
   useDshWorkspace,
   type DshTabItem,
 } from "./dsh-workbench-store.ts";
+
+const mcpAppHostView = lazyView(() => import("../mcp-apps/McpAppHost.tsx").then((m) => m.McpAppHost));
 import { EMPTY_SESSION_FILES, extractSessionChanges, sameSessionChanges } from "./GitChangesPanel.tsx";
 import { openChangesPanel } from "./workbench-store.ts";
 import "../file-preview/file-preview.css";
@@ -122,10 +134,29 @@ function DshStartView({
   terminalTabs: readonly Extract<DshTabItem, { kind: "terminal" }>[];
 }) {
   const task = useTask(taskId);
+  const draft = parseDraftKey(panelKey);
+  const effectiveProjectId = task?.projectId ?? draft?.projectId ?? null;
   const gitVersion = useGitVersion(taskId ?? ("" as TaskId));
   const [gitChangedCount, setGitChangedCount] = useState(0);
   const [query, setQuery] = useState("");
   const [fileMatches, setFileMatches] = useState<string[]>([]);
+  const [mcpApps, setMcpApps] = useState<McpAppServerSnapshot[]>([]);
+  const [mcpAppsTick, setMcpAppsTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    window.studio
+      .listMcpApps(effectiveProjectId)
+      .then((list) => {
+        if (!cancelled) setMcpApps(list);
+      })
+      .catch(() => {
+        if (!cancelled) setMcpApps([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveProjectId, mcpAppsTick]);
 
   const target = useMemo(() => filesTarget(panelKey), [panelKey]);
   const urlCandidate = useMemo(() => normalizeNavigableUrl(query), [query]);
@@ -189,16 +220,30 @@ function DshStartView({
   };
 
   const handleOmniSubmit = () => {
+    const firstMatch = fileMatches[0];
     if (urlCandidate !== null && taskId !== null) {
       openBrowserAtUrl(urlCandidate);
       return;
     }
-    if (fileMatches.length > 0 && fileMatches[0]) {
-      openMatchedFile(fileMatches[0]);
+    if (firstMatch) {
+      openMatchedFile(firstMatch);
     }
   };
 
   const isRunningTask = task !== null && (task.status === "running" || task.status === "starting");
+
+  const t = useT();
+  const availableMcpApps = useMemo(
+    () =>
+      mcpApps.flatMap((srv) =>
+        srv.resources.map((res) => ({
+          server: srv.server,
+          uri: res.uri,
+          title: res.title || res.name || res.uri,
+        })),
+      ),
+    [mcpApps],
+  );
 
   return (
     <div className="dsh-wb-start" data-testid="dsh-start-launcher">
@@ -459,6 +504,50 @@ function DshStartView({
           </>
         )}
 
+        {availableMcpApps.length > 0 && (
+          <section
+            className="dsh-ov-section dsh-ov-card"
+            aria-label={t("preview.mcpAppsTitle")}
+            data-testid="dsh-start-mcp-apps"
+          >
+            <div className="dsh-ov-section-head">
+              <span>{t("preview.mcpAppsTitle")}</span>
+              <button
+                type="button"
+                className="dsh-ov-omni-clear"
+                title={t("preview.mcpAppsRefresh")}
+                aria-label={t("preview.mcpAppsRefresh")}
+                onClick={() => setMcpAppsTick((n) => n + 1)}
+              >
+                <Restart size={12} />
+              </button>
+            </div>
+            <div className="dsh-ov-live-list">
+              {availableMcpApps.map((appItem) => (
+                <button
+                  key={`${appItem.server}:${appItem.uri}`}
+                  type="button"
+                  className="dsh-ov-live-row"
+                  data-testid="dsh-start-mcp-app-item"
+                  onClick={() =>
+                    openDshMcpAppTab(panelKey, {
+                      server: appItem.server,
+                      uri: appItem.uri,
+                      title: appItem.title,
+                      projectId: effectiveProjectId,
+                      replaceTabId: tabId,
+                    })
+                  }
+                >
+                  <Sparkle size={13} />
+                  <span className="dsh-ov-live-title">{appItem.title}</span>
+                  <span className="dsh-ov-live-sub">{appItem.server}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="dsh-ov-section dsh-ov-card" aria-label="Background Tasks">
           <div className="dsh-ov-section-head">
             <span>{isZh ? "后台任务 · Background" : "Background Tasks"}</span>
@@ -506,6 +595,10 @@ function tabMeta(tab: DshTabItem, isZh: boolean) {
       return { label: isZh ? "概览" : "Overview", icon: <Compass size={13} /> };
     case "files":
       return { label: isZh ? "Files" : "Files", icon: <Folder size={13} /> };
+    case "preview":
+      return { label: baseName(tab.path), icon: <FileIcon size={13} /> };
+    case "mcp-app":
+      return { label: tab.title, icon: <Sparkle size={13} /> };
     case "terminal": {
       const base = tab.shellLabel ?? (isZh ? "终端" : "Terminal");
       return {
@@ -524,6 +617,49 @@ function tabMeta(tab: DshTabItem, isZh: boolean) {
   }
 }
 
+function StandalonePreviewTab({
+  tab,
+  target,
+  isCurrent,
+  onClose,
+}: {
+  tab: Extract<DshTabItem, { kind: "preview" }>;
+  target: ReturnType<typeof filesTarget>;
+  isCurrent: boolean;
+  onClose: () => void;
+}) {
+  const sectionRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (isCurrent) sectionRef.current?.focus({ preventScroll: true });
+  }, [isCurrent, tab.id]);
+
+  return (
+    <section
+      ref={sectionRef}
+      className="file-preview"
+      data-testid={isCurrent ? "file-preview" : undefined}
+      hidden={!isCurrent}
+      tabIndex={-1}
+      aria-label={tab.path}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <PreviewPage
+        target={withRoot(target, tab.root ?? 0)}
+        path={tab.path}
+        focusLine={tab.line}
+        focusPage={tab.page}
+        hidden={!isCurrent}
+      />
+    </section>
+  );
+}
+
 export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; taskId: TaskId | null }) {
   const t = useT();
   const isZh = useLocale() === "zh-CN";
@@ -533,12 +669,17 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
   const width = usePreviewWidth();
   const root = useRef<HTMLElement>(null);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [dragTabId, setDragTabId] = useState<string | null>(null);
+  const draftObj = parseDraftKey(panelKey);
+  const effectiveTaskId = taskId ?? (draftObj === undefined ? (panelKey as TaskId) : null);
+  const taskObj = useTask(effectiveTaskId);
 
   if (!ws.open || ws.tabs.length === 0) return null;
 
   const activeTab = ws.tabs.find((item) => item.id === ws.activeTabId) ?? ws.tabs[0]!;
   const isLoneStart = ws.tabs.length === 1 && activeTab.kind === "start";
-  const effectiveTaskId = taskId ?? (parseDraftKey(panelKey) === undefined ? (panelKey as TaskId) : null);
+  const quoteTarget: TaskId | DraftKey | null =
+    effectiveTaskId ?? (taskObj?.projectId ? draftKey(taskObj.projectId) : draftObj ? panelKey : null);
 
   const clampWidth = (value: number) => {
     const parent = root.current?.parentElement;
@@ -560,6 +701,10 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
   };
 
   const handleCloseTab = (tab: DshTabItem) => {
+    if (tab.kind === "preview") {
+      closePreviewTabAndRestoreFocus(panelKey, tab.id);
+      return;
+    }
     const removed = closeDshTab(panelKey, tab.id);
     if (removed?.kind === "terminal") {
       if (removed.terminalKey === panelKey) {
@@ -572,6 +717,13 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
 
   const previewPage = preview?.key === panelKey ? preview.page : "files";
   const previewPath = preview?.key === panelKey ? preview.path : null;
+  const previewTabs = ws.tabs.filter(
+    (item): item is Extract<DshTabItem, { kind: "preview" }> => item.kind === "preview",
+  );
+  const mcpAppTabs = ws.tabs.filter(
+    (item): item is Extract<DshTabItem, { kind: "mcp-app" }> => item.kind === "mcp-app",
+  );
+  const previewTargetBase = filesTarget(panelKey);
   const terminalTabs = ws.tabs.filter(
     (item): item is Extract<DshTabItem, { kind: "terminal" }> => item.kind === "terminal",
   );
@@ -618,10 +770,37 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
                     <div
                       role="tab"
                       tabIndex={0}
+                      draggable
                       aria-selected={isCurrent}
                       className="dsh-wb-tab"
                       data-active={isCurrent ? "" : undefined}
                       data-testid={`wb-tab-${tab.kind}`}
+                      title={tab.kind === "preview" ? tab.path : meta.label}
+                      onDragStart={(e) => {
+                        setDragTabId(tab.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", tab.id);
+                      }}
+                      onDragOver={(e) => {
+                        if (dragTabId !== null && dragTabId !== tab.id) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (dragTabId !== null && dragTabId !== tab.id) {
+                          reorderDshTab(panelKey, dragTabId, tab.id);
+                        }
+                        setDragTabId(null);
+                      }}
+                      onDragEnd={() => setDragTabId(null)}
+                      onAuxClick={(e) => {
+                        if (e.button === 1) {
+                          e.preventDefault();
+                          handleCloseTab(tab);
+                        }
+                      }}
                       onClick={() => activateDshTab(panelKey, tab.id)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -700,6 +879,15 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
           />
         )}
         {activeTab.kind === "files" && <FilePreviewPane panelKey={panelKey} page={previewPage} path={previewPath} />}
+        {previewTabs.map((pTab) => (
+          <StandalonePreviewTab
+            key={pTab.id}
+            tab={pTab}
+            target={previewTargetBase}
+            isCurrent={activeTab.id === pTab.id}
+            onClose={() => handleCloseTab(pTab)}
+          />
+        ))}
         {activeTab.kind === "changes" && effectiveTaskId !== null && <GitChangesPanel taskId={effectiveTaskId} />}
         {activeTab.kind === "agents" && effectiveTaskId !== null && (
           <AgentsPanel
@@ -722,6 +910,27 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
             onCloseTab={() => handleCloseTab(termTab)}
           />
         ))}
+        {mcpAppTabs.map((appTab) => {
+          const isCurrent = activeTab.id === appTab.id;
+          return (
+            <div
+              key={appTab.id}
+              hidden={!isCurrent}
+              className="mcp-app-tab-slot"
+              style={{ display: isCurrent ? "flex" : "none", flex: "1 1 auto", minHeight: 0 }}
+            >
+              <mcpAppHostView.View
+                projectId={appTab.projectId}
+                server={appTab.server}
+                uri={appTab.uri}
+                title={appTab.title}
+                taskId={effectiveTaskId}
+                quoteTarget={quoteTarget}
+                displayMode="fullscreen"
+              />
+            </div>
+          );
+        })}
       </div>
     </aside>
   );

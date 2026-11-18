@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import type { PreviewFile, ProjectFilesTarget } from "../../../../shared/ipc.ts";
 import { draftKey } from "../../../../shared/ipc.ts";
 import { useLocale, useT } from "../../i18n/use-t.ts";
-import { CopyIcon, External, FileIcon, Folder } from "../../icons.tsx";
+import { CopyIcon, External, FileIcon, Folder, Pin } from "../../icons.tsx";
 import { Button, Checkbox, IconButton, Segmented } from "../../ui/controls.tsx";
 import { reportError } from "../../ui/errors.ts";
 import { pushToast } from "../dialogs/index.ts";
@@ -58,12 +58,16 @@ export function PreviewPage({
   target,
   path,
   focusLine,
+  focusPage,
   hidden,
+  onPinTab,
 }: {
   target: ProjectFilesTarget;
   path: string;
   focusLine?: number | undefined;
+  focusPage?: number | undefined;
   hidden: boolean;
+  onPinTab?: (() => void) | undefined;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -287,6 +291,16 @@ export function PreviewPage({
               <span className="file-preview-at-glyph">@</span>
             </IconButton>
           )}
+          {onPinTab !== undefined && (
+            <IconButton
+              label={t("preview.pinPreviewTab")}
+              tip={t("preview.pinPreviewTab")}
+              testId="file-preview-pin-tab"
+              onClick={onPinTab}
+            >
+              <Pin size={13} />
+            </IconButton>
+          )}
           {file && (file.kind === "text" || file.kind === "html") && typeof file.text === "string" && (
             <IconButton
               label={isZh ? "复制文件内容" : "Copy file content"}
@@ -348,6 +362,9 @@ export function PreviewPage({
         {file && (
           <PreviewContent
             file={file}
+            target={target}
+            taskId={taskId}
+            quoteTarget={quoteTarget}
             ext={ext}
             name={name}
             source={source}
@@ -359,6 +376,7 @@ export function PreviewPage({
             isMermaid={isMermaid}
             jsonTree={isJson && jsonTree && focusLine === undefined}
             focusLine={focusLine}
+            focusPage={focusPage}
             onExternal={taskId === null ? null : () => run(file.canOpen ? "openTaskFile" : "revealTaskFile")}
           />
         )}

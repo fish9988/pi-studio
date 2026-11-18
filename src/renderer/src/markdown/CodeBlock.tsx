@@ -12,6 +12,7 @@ import { useSelectedTaskId, useSettings } from "../store/index.ts";
 import { currentLocale } from "../store/settings-store.ts";
 import { onThemeChange } from "../ui/theme-change.ts";
 import { extractHtmlArtifactTitle, isHtmlArtifactCodeBlock } from "./artifact-meta.ts";
+import { GenUiCard } from "./GenUiCard.tsx";
 import { useHighlighted } from "./highlight.ts";
 import { codeBlockUsesDark } from "./code-block-theme.ts";
 import { resolveLanguage } from "./highlight-languages.ts";
@@ -64,6 +65,7 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
     themes[resolveTheme(settings?.theme ?? "default", systemDark, settings?.colorMode ?? "system")].dark;
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(() => Boolean(standalone || focusLine !== undefined));
+  const [genUiOpen, setGenUiOpen] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
   /** 代码块自己的贴底跟随：用户手动上滑就放开，围栏闭合后也不再接管。 */
   const follow = useRef(true);
@@ -247,6 +249,15 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
             <button
               type="button"
               className="md-artifact-preview-btn"
+              aria-pressed={genUiOpen}
+              data-testid="codeblock-run-genui"
+              onClick={() => setGenUiOpen((value) => !value)}
+            >
+              <span>{genUiOpen ? t("preview.genUiCollapse") : t("preview.genUiRun")}</span>
+            </button>
+            <button
+              type="button"
+              className="md-artifact-preview-btn"
               aria-label={t("code.previewSidebar")}
               title={t("code.previewSidebar")}
               data-testid="codeblock-preview-sidebar"
@@ -394,6 +405,17 @@ export const CodeBlock = memo(function CodeBlock({ code, lang, closed, focusLine
             {copied ? t("common.copied") : ""}
           </span>
         </div>
+      )}
+      {isHtmlArtifact && genUiOpen && (
+        <GenUiCard
+          html={code}
+          title={artifactTitle}
+          stateKey={`${taskId ?? "draft"}:cb:${artifactTitle}:${code.length}`}
+          taskId={taskId}
+          quoteTarget={taskId}
+          onOpenSidebar={openSidebarPreview}
+          onViewSource={() => setExpanded((value) => !value)}
+        />
       )}
       {isCollapsed ? null : (
         <>

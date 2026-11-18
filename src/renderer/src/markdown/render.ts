@@ -2,6 +2,7 @@
 // 链接只放行 http/https（调用方给了 openFile 时再加本地文件链接），图片只放行 markdown-it 已校验的 data:image。无 JSX，方便在 Node 里测试。
 import type Katex from "katex";
 import { createElement as h, Fragment, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { parseVisualizeDirective, type VisualizeDirective } from "./gen-ui-directive.ts";
 import { blockTokens, type MarkdownBlock, type Token } from "./parse.ts";
 
 export interface RenderContext {
@@ -11,6 +12,8 @@ export interface RenderContext {
   openFile?: ((href: string) => void) | undefined;
   /** 代码块的渲染由调用方决定（高亮、复制按钮）；缺省是纯文本 <pre>。 */
   renderCode?(props: { code: string; lang: string; closed: boolean }): ReactNode;
+  /** `::visualize{...}` 可视化指令的渲染钩子。 */
+  renderVisualize?: ((directive: VisualizeDirective) => ReactNode) | undefined;
   /** 文字片段的渲染（TSP md.marks 在这里把字面标记包成 span）；缺省是原文。 */
   renderText?: ((text: string) => ReactNode) | undefined;
   /** KaTeX 按需加载（Markdown.tsx 的 useKatex）；还没加载完时公式先按原文显示在 code 里。 */
@@ -386,5 +389,9 @@ function renderBlockNode(
 
 /** 渲染一个顶层块。已闭合块的 src 不变，调用方用 React.memo 按 src 跳过重渲染。 */
 export function renderBlock(block: MarkdownBlock, ctx: RenderContext): ReactNode {
+  if (block.closed && ctx.renderVisualize) {
+    const directive = parseVisualizeDirective(block.src);
+    if (directive !== null) return ctx.renderVisualize(directive);
+  }
   return buildTree(blockTokens(block)).map((node, index) => renderBlockNode(node, index, ctx, block.closed));
 }

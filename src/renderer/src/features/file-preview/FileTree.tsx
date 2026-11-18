@@ -50,9 +50,18 @@ interface FileTreeProps {
   /** 预览页正在看的文件（相对路径），树里对应的行高亮。 */
   selected: string | null;
   onOpenFile(path: string): void;
+  onOpenFileInNewTab?(path: string): void;
 }
 
-export function FileTree({ target, memoryKey, active, reload, selected, onOpenFile }: FileTreeProps) {
+export function FileTree({
+  target,
+  memoryKey,
+  active,
+  reload,
+  selected,
+  onOpenFile,
+  onOpenFileInNewTab,
+}: FileTreeProps) {
   const t = useT();
   const locale = useLocale();
   const isZh = locale === "zh-CN";
@@ -290,6 +299,16 @@ export function FileTree({ target, memoryKey, active, reload, selected, onOpenFi
         icon: row.kind === "file" ? <FileIcon size={14} /> : <Folder size={14} />,
         onSelect: () => onRowClick(row),
       },
+      ...(row.kind === "file" && onOpenFileInNewTab !== undefined
+        ? [
+            {
+              id: "openNewTab",
+              label: t("preview.openInNewTab"),
+              icon: <External size={14} />,
+              onSelect: () => onOpenFileInNewTab(row.path),
+            } satisfies MenuEntry,
+          ]
+        : []),
       {
         id: "insertRef",
         label: isZh ? "引用到输入框 (@)" : "Insert @reference",
@@ -555,6 +574,7 @@ export function FileTree({ target, memoryKey, active, reload, selected, onOpenFi
             cursor={row.type === "node" && row.path === cursor}
             selected={row.type === "node" && row.path === selectedPath}
             onClick={onRowClick}
+            onOpenInNewTab={onOpenFileInNewTab}
             onContextMenu={openRowContextMenu}
           />
         ))}
@@ -579,10 +599,11 @@ interface TreeRowViewProps {
   cursor: boolean;
   selected: boolean;
   onClick(row: NodeRow): void;
+  onOpenInNewTab?: ((path: string) => void) | undefined;
   onContextMenu(row: NodeRow, event: MouseEvent<HTMLElement>): void;
 }
 
-function TreeRowView({ id, row, top, cursor, selected, onClick, onContextMenu }: TreeRowViewProps) {
+function TreeRowView({ id, row, top, cursor, selected, onClick, onOpenInNewTab, onContextMenu }: TreeRowViewProps) {
   const t = useT();
   const style = { top, "--depth": row.depth } as CSSProperties;
   if (row.type === "truncated") {
@@ -608,6 +629,12 @@ function TreeRowView({ id, row, top, cursor, selected, onClick, onContextMenu }:
       title={row.path}
       style={style}
       onClick={() => onClick(row)}
+      onAuxClick={(e) => {
+        if (e.button === 1 && row.kind === "file" && onOpenInNewTab !== undefined) {
+          e.preventDefault();
+          onOpenInNewTab(row.path);
+        }
+      }}
       onContextMenu={(e) => onContextMenu(row, e)}
     >
       <span className="file-tree-chevron" aria-hidden="true">
@@ -615,6 +642,20 @@ function TreeRowView({ id, row, top, cursor, selected, onClick, onContextMenu }:
       </span>
       {row.kind === "dir" ? <Folder size={14} /> : <FileIcon size={14} />}
       <span className="file-tree-name">{row.name}</span>
+      {row.kind === "file" && onOpenInNewTab !== undefined && (
+        <button
+          type="button"
+          className="file-tree-at-btn"
+          tabIndex={-1}
+          title={t("preview.openInNewTab")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenInNewTab(row.path);
+          }}
+        >
+          <External size={11} />
+        </button>
+      )}
       {row.kind === "file" && (
         <button
           type="button"

@@ -64,6 +64,20 @@ function BtwPanelBody({ taskId, open }: { taskId: TaskId; open: boolean }) {
     inputRef.current?.focus();
   }, [ui.focusNonce]);
 
+  const appliedPrefillNonce = useRef(0);
+  useEffect(() => {
+    const prefill = ui.prefill;
+    if (!prefill || prefill.nonce <= appliedPrefillNonce.current) return;
+    appliedPrefillNonce.current = prefill.nonce;
+    setText(prefill.text);
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(prefill.text.length, prefill.text.length);
+    });
+  }, [ui.prefill]);
+
   // 流式时粘底；用户往上翻了就不拽回来。
   useLayoutEffect(() => {
     const body = bodyRef.current;

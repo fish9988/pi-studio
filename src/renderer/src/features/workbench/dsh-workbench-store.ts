@@ -1,13 +1,30 @@
 // DSH 同款右侧多标签工作台状态（按任务 / 草稿键独立记忆）：
 // 支持「🧭 开始」启动页、工作区文件、内置终端（支持多标签）、浏览器、代码变更、Subagent，零切换抖动。
-import type { DraftKey, TaskId, TerminalKey } from "../../../../shared/ipc.ts";
+import type { DraftKey, ProjectId, TaskId, TerminalKey } from "../../../../shared/ipc.ts";
 import { createStore, useStoreValue } from "../../store/create-store.ts";
 
-export type DshToolKind = "start" | "files" | "terminal" | "browser" | "changes" | "agents" | "extensions";
+export type DshToolKind =
+  "start" | "files" | "preview" | "mcp-app" | "terminal" | "browser" | "changes" | "agents" | "extensions";
 
 export type DshTabItem =
   | { readonly id: string; readonly kind: "start" }
   | { readonly id: "files"; readonly kind: "files" }
+  | {
+      readonly id: string;
+      readonly kind: "preview";
+      readonly path: string;
+      readonly line?: number | undefined;
+      readonly page?: number | undefined;
+      readonly root?: number | undefined;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "mcp-app";
+      readonly server: string;
+      readonly uri: string;
+      readonly title: string;
+      readonly projectId: ProjectId | null;
+    }
   | {
       readonly id: string;
       readonly kind: "terminal";
@@ -132,7 +149,7 @@ export function activateDshTab(key: TerminalKey, tabId: string): void {
  */
 export function openDshToolTab(
   key: TerminalKey,
-  kind: Exclude<DshToolKind, "start">,
+  kind: Exclude<DshToolKind, "start" | "preview" | "mcp-app">,
   options: { replaceTabId?: string | undefined; forceNewTerminal?: boolean | undefined } = {},
 ): DshTabItem {
   const ws = getWorkspace(key);
@@ -196,6 +213,102 @@ export function openDshToolTab(
   return singletonTab;
 }
 
+const MAX_PREVIEW_TABS = 10;
+
+export function makePreviewTabId(filePath: string, root?: number): string {
+  const norm = filePath.replace(/\\/g, "/");
+  return `preview:${root ?? 0}:${norm}`;
+}
+
+export function openDshPreviewTab(
+  key: TerminalKey,
+  filePath: string,
+  options: {
+    line?: number | undefined;
+    page?: number | undefined;
+    root?: number | undefined;
+    replaceTabId?: string | undefined;
+  } = {},
+): Extract<DshTabItem, { kind: "preview" }> {
+  const ws = getWorkspace(key);
+  const tabId = makePreviewTabId(filePath, options.root);
+  const nextTab: Extract<DshTabItem, { kind: "preview" }> = {
+    id: tabId,
+    kind: "preview",
+    path: filePath,
+    line: options.line,
+    page: options.page,
+    root: options.root,
+  };
+  const replaceId =
+    options.replaceTabId ?? (ws.tabs.length === 1 && ws.tabs[0]?.kind === "start" ? ws.tabs[0].id : undefined);
+  const existingIdx = ws.tabs.findIndex((t) => t.id === tabId);
+  let nextTabs: readonly DshTabItem[];
+  if (existingIdx >= 0) {
+    nextTabs = ws.tabs.filter((t) => t.id !== replaceId || t.id === tabId).map((t) => (t.id === tabId ? nextTab : t));
+  } else if (replaceId !== undefined && ws.tabs.some((t) => t.id === replaceId)) {
+    nextTabs = ws.tabs.map((t) => (t.id === replaceId ? nextTab : t));
+  } else {
+    nextTabs = [...ws.tabs, nextTab];
+  }
+  const previewTabs = nextTabs.filter((t) => t.kind === "preview");
+  if (previewTabs.length > MAX_PREVIEW_TABS) {
+    const dropTarget = previewTabs.find((t) => t.id !== tabId);
+    if (dropTarget) nextTabs = nextTabs.filter((t) => t.id !== dropTarget.id);
+  }
+  setWorkspace(key, {
+    ...ws,
+    open: true,
+    tabs: nextTabs,
+    activeTabId: tabId,
+  });
+  return nextTab;
+}
+
+export function makeMcpAppTabId(server: string, uri: string): string {
+  return `mcp-app:${server}:${uri}`;
+}
+
+export function openDshMcpAppTab(
+  key: TerminalKey,
+  options: {
+    server: string;
+    uri: string;
+    title: string;
+    projectId: ProjectId | null;
+    replaceTabId?: string | undefined;
+  },
+): Extract<DshTabItem, { kind: "mcp-app" }> {
+  const ws = getWorkspace(key);
+  const tabId = makeMcpAppTabId(options.server, options.uri);
+  const nextTab: Extract<DshTabItem, { kind: "mcp-app" }> = {
+    id: tabId,
+    kind: "mcp-app",
+    server: options.server,
+    uri: options.uri,
+    title: options.title,
+    projectId: options.projectId,
+  };
+  const replaceId =
+    options.replaceTabId ?? (ws.tabs.length === 1 && ws.tabs[0]?.kind === "start" ? ws.tabs[0].id : undefined);
+  const existingIdx = ws.tabs.findIndex((t) => t.id === tabId);
+  let nextTabs: readonly DshTabItem[];
+  if (existingIdx >= 0) {
+    nextTabs = ws.tabs.filter((t) => t.id !== replaceId || t.id === tabId).map((t) => (t.id === tabId ? nextTab : t));
+  } else if (replaceId !== undefined && ws.tabs.some((t) => t.id === replaceId)) {
+    nextTabs = ws.tabs.map((t) => (t.id === replaceId ? nextTab : t));
+  } else {
+    nextTabs = [...ws.tabs, nextTab];
+  }
+  setWorkspace(key, {
+    ...ws,
+    open: true,
+    tabs: nextTabs,
+    activeTabId: tabId,
+  });
+  return nextTab;
+}
+
 export function updateDshTerminalLabel(key: TerminalKey, terminalKey: TerminalKey, shellLabel: string): void {
   const ws = getWorkspace(key);
   let changed = false;
@@ -226,8 +339,22 @@ export function closeDshTab(key: TerminalKey, tabId: string): DshTabItem | null 
   return removed;
 }
 
+/** 拖拽重排右侧工作台标签位置。 */
+export function reorderDshTab(key: TerminalKey, fromId: string, toId: string): void {
+  if (fromId === toId) return;
+  const ws = getWorkspace(key);
+  const fromIdx = ws.tabs.findIndex((t) => t.id === fromId);
+  const toIdx = ws.tabs.findIndex((t) => t.id === toId);
+  if (fromIdx < 0 || toIdx < 0) return;
+  const nextTabs = [...ws.tabs];
+  const [moved] = nextTabs.splice(fromIdx, 1);
+  if (!moved) return;
+  nextTabs.splice(toIdx, 0, moved);
+  setWorkspace(key, { ...ws, tabs: nextTabs });
+}
+
 /** 关闭某类单例或主终端标签（供旧版 closeFilePreview / closeBrowserPanel / setTerminalOpen(false) 兼容同步）。 */
-export function closeDshToolKind(key: TerminalKey, kind: Exclude<DshToolKind, "start">): void {
+export function closeDshToolKind(key: TerminalKey, kind: Exclude<DshToolKind, "start" | "preview" | "mcp-app">): void {
   const ws = getWorkspace(key);
   const target = ws.tabs.find((t) => t.kind === kind);
   if (!target) return;
@@ -271,7 +398,10 @@ export function useDshWorkspace(key: TerminalKey): DshWorkspaceState {
   return useStoreValue(store, (map) => map.get(key) ?? DEFAULT_CLOSED);
 }
 
-window.studio.onTaskRemoved((taskId) => {
+const studioGlobal = globalThis as unknown as {
+  studio?: { onTaskRemoved?: (cb: (taskId: TaskId) => void) => () => void };
+};
+studioGlobal.studio?.onTaskRemoved?.((taskId) => {
   if (!store.get().has(taskId)) return;
   const map = new Map(store.get());
   map.delete(taskId);

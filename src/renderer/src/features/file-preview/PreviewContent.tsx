@@ -1,11 +1,16 @@
-// 预览页的正文：md 渲染 / 图片与 SVG（带画布背景切换与尺寸信息）/ html 沙箱 iframe / CSV&TSV 表格 / JSON 结构树 / Mermaid 流程图 / 音视频 / 其余文本高亮源码。
+// 预览页的正文：md 渲染 / 图片与 SVG（带画布背景切换与尺寸信息）/ html 沙箱 iframe / PDF 交互阅读 / Office 文档 / CSV&TSV 表格 / JSON 结构树 / Mermaid 流程图 / 音视频 / 其余文本高亮源码。
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { PreviewFile } from "../../../../shared/ipc.ts";
+import type { DraftKey, PreviewFile, ProjectFilesTarget, TaskId } from "../../../../shared/ipc.ts";
 import { useLocale, useT } from "../../i18n/use-t.ts";
 import { Markdown } from "../../markdown/index.ts";
 import { CodeBlock } from "../../markdown/CodeBlock.tsx";
+import { lazyView } from "../../ui/lazy-view.ts";
+import { SelectionTooltip } from "../conversation/SelectionTooltip.tsx";
 import { injectHtmlPreviewShim } from "./html-preview.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
+
+const pdfViewer = lazyView(() => import("./PdfViewer.tsx").then((m) => m.PdfViewer));
+const officeViewer = lazyView(() => import("./OfficeViewer.tsx").then((m) => m.OfficeViewer));
 
 export function baseName(path: string): string {
   const parts = path.split(/[\\/]/).filter((part) => part !== "");
@@ -185,6 +190,9 @@ function JsonTreeView({ text }: { text: string }) {
 
 interface ContentProps {
   file: PreviewFile;
+  target: ProjectFilesTarget;
+  taskId: TaskId | null;
+  quoteTarget: TaskId | DraftKey | null;
   ext: string;
   name: string;
   source: boolean;
@@ -197,6 +205,7 @@ interface ContentProps {
   isMermaid?: boolean;
   jsonTree?: boolean;
   focusLine?: number | undefined;
+  focusPage?: number | undefined;
   onExternal: (() => void) | null;
 }
 
@@ -342,8 +351,31 @@ function HtmlPreview({ html, scripts, title }: { html: string; scripts: boolean;
   );
 }
 
+function MarkdownPreviewBox({
+  text,
+  path,
+  taskId,
+  quoteTarget,
+}: {
+  text: string;
+  path: string;
+  taskId: TaskId | null;
+  quoteTarget: TaskId | DraftKey | null;
+}) {
+  const mdRef = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={mdRef} className="file-preview-md" data-testid="file-preview-md">
+      <Markdown source={text} />
+      <SelectionTooltip rootRef={mdRef} taskId={taskId} quoteTarget={quoteTarget} sourceLabel={path} />
+    </div>
+  );
+}
+
 export function PreviewContent({
   file,
+  target,
+  taskId,
+  quoteTarget,
   ext,
   name,
   source,
@@ -355,12 +387,33 @@ export function PreviewContent({
   isMermaid = false,
   jsonTree = false,
   focusLine,
+  focusPage,
   onExternal,
 }: ContentProps) {
   const t = useT();
   switch (file.kind) {
     case "missing":
       return <p className="file-preview-note">{t("preview.missing")}</p>;
+    case "pdf":
+      return (
+        <pdfViewer.View
+          target={target}
+          path={file.path}
+          totalBytes={file.totalBytes ?? file.size}
+          initialPage={focusPage}
+          taskId={taskId}
+          quoteTarget={quoteTarget}
+        />
+      );
+    case "office":
+      return (
+        <officeViewer.View
+          target={target}
+          path={file.path}
+          officeKind={file.officeKind ?? (ext === "docx" ? "docx" : "xlsx")}
+          totalBytes={file.totalBytes ?? file.size}
+        />
+      );
     case "binary":
     case "too_large": {
       const isAudio = ext === "mp3" || ext === "wav" || ext === "ogg" || ext === "m4a";
@@ -397,11 +450,7 @@ export function PreviewContent({
     }
     case "text":
       if (isMarkdown && !source) {
-        return (
-          <div className="file-preview-md" data-testid="file-preview-md">
-            <Markdown source={file.text ?? ""} />
-          </div>
-        );
+        return <MarkdownPreviewBox text={file.text ?? ""} path={file.path} taskId={taskId} quoteTarget={quoteTarget} />;
       }
       if (isCsv && !source) {
         return <CsvTableView text={file.text ?? ""} delimiter={ext === "tsv" ? "\t" : ","} />;

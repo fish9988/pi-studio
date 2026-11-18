@@ -2,8 +2,17 @@
 // 文件树的展开状态按键记在 tree-state.ts（面板关了、切走任务再回来仍在）。
 import type { PreviewFile, TerminalKey } from "../../../../shared/ipc.ts";
 import { createStore, useStoreValue } from "../../store/create-store.ts";
-import { closeDshToolKind, isDshToolActive, openDshToolTab } from "../workbench/dsh-workbench-store.ts";
+import {
+  closeDshTab,
+  closeDshToolKind,
+  isDshToolActive,
+  openDshPreviewTab,
+  openDshToolTab,
+} from "../workbench/dsh-workbench-store.ts";
+import { parsePreviewPathFragment, type ParsedPreviewRef } from "./files-target.ts";
 import { selectedRoot } from "./roots-store.ts";
+
+export { parsePreviewPathFragment, type ParsedPreviewRef };
 
 export type PanelPage = "files" | "preview";
 
@@ -22,25 +31,66 @@ export interface PanelState {
   path: string | null;
   /** 可选跳转定位的源码行号（从 1 开始）。 */
   line?: number | undefined;
+  /** 可选跳转定位的 PDF 页码（从 1 开始）。 */
+  pageNum?: number | undefined;
   /** 预览的文件在哪个根里：缺省 = 任务目录，n = 第 n 个额外工作区目录（roots-store.ts）。 */
   root?: number | undefined;
 }
 
 const store = createStore<PanelState | null>(null);
 const inlineArtifacts = new Map<string, PreviewFile>();
+const tabReturnFocus = new Map<string, HTMLElement | null>();
 let returnFocus: HTMLElement | null = null;
+
+function captureActiveElement(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active !== document.body ? active : null;
+}
 
 function rememberFocus(): void {
   if (store.get() !== null) return;
-  const active = document.activeElement;
-  returnFocus = active instanceof HTMLElement && active !== document.body ? active : null;
+  returnFocus = captureActiveElement();
 }
 
-/** 在预览页打开一个文件（工具卡上的文件链接或聊天交付卡片），可选定位到指定行号。 */
-export function openFilePreview(key: TerminalKey, path: string, line?: number): void {
-  rememberFocus();
-  store.set({ key, page: "preview", path, line });
-  openDshToolTab(key, "files");
+export function restorePreviewTabFocus(tabId: string): void {
+  const target = tabReturnFocus.get(tabId) ?? null;
+  tabReturnFocus.delete(tabId);
+  if (target?.isConnected) target.focus();
+}
+
+export function closePreviewTabAndRestoreFocus(key: TerminalKey, tabId: string): void {
+  closeDshTab(key, tabId);
+  restorePreviewTabFocus(tabId);
+}
+
+/** 在独立多文件预览标签中打开文件（工具卡文件链接、Omnibox、文件树“新标签打开”等），支持 `#L行号` 与 `#page:页码`。 */
+export function openFilePreview(
+  key: TerminalKey,
+  rawPath: string,
+  lineOrOptions?:
+    | number
+    | {
+        line?: number | undefined;
+        page?: number | undefined;
+        root?: number | undefined;
+        replaceTabId?: string | undefined;
+      },
+): void {
+  const parsed = parsePreviewPathFragment(rawPath);
+  const opts = typeof lineOrOptions === "number" ? { line: lineOrOptions } : (lineOrOptions ?? {});
+  const line = opts.line ?? parsed.line;
+  const page = opts.page ?? parsed.page;
+  const trigger = captureActiveElement();
+  const tab = openDshPreviewTab(key, parsed.path, {
+    line,
+    page,
+    root: opts.root,
+    replaceTabId: opts.replaceTabId,
+  });
+  if (trigger && !tabReturnFocus.has(tab.id)) {
+    tabReturnFocus.set(tab.id, trigger);
+  }
 }
 
 /** 在右侧预览面板直接打开聊天中的内联交付物（SVG / HTML / Markdown 代码块或交付卡片）。 */
@@ -62,9 +112,7 @@ export function openInlineArtifact(key: TerminalKey, artifact: InlineArtifact): 
     preview = { kind: "text", path: artifact.name, size, text: artifact.content, canOpen: false };
   }
   inlineArtifacts.set(virtualPath, preview);
-  rememberFocus();
-  store.set({ key, page: "preview", path: virtualPath });
-  openDshToolTab(key, "files");
+  openFilePreview(key, virtualPath);
 }
 
 export function getInlineArtifact(path: string): PreviewFile | null {
@@ -97,12 +145,20 @@ export function setPanelPage(page: PanelPage): void {
   store.set({ ...current, page });
 }
 
-/** 文件树里选了一个文件：切到预览页显示它。 */
+/** 文件树里选了一个文件：切到预览页显示它（或独立预览标签打开）。 */
 export function previewFileInPanel(path: string, line?: number): void {
   const current = store.get();
   if (current === null) return;
+  const parsed = parsePreviewPathFragment(path);
   const root = selectedRoot(current.key);
-  store.set({ ...current, page: "preview", path, line, root: root > 0 ? root : undefined });
+  store.set({
+    ...current,
+    page: "preview",
+    path: parsed.path,
+    line: line ?? parsed.line,
+    pageNum: parsed.page,
+    root: root > 0 ? root : undefined,
+  });
 }
 
 export function closeFilePreview(): void {

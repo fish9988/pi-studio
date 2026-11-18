@@ -19,6 +19,9 @@
 .file-preview:focus {
   outline: none;
 }
+.file-preview[hidden] {
+  display: none;
+}
 
 /* 左边缘拖拽条：命中区 4px（浏览器面板的页面视图让开的就是这 4px，browser.css）；悬停 / 聚焦时中间亮一条 1px 线，不刷一整条色块（2026-10-29） */
 .file-preview-resizer {

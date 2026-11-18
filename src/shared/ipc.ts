@@ -62,6 +62,7 @@ import type { DocumentSnapshot, TspDocMessage } from "./tsp/document.ts";
 import type { OmpKeybinding } from "./tsp/omp-keybindings.ts";
 import type { ProviderKeyEnv } from "./provider-keys.ts";
 import type { TspEvent } from "./tsp/tsp.generated.ts";
+import type { McpAppReadResult, McpAppServerSnapshot, McpAppToolCallResult } from "./mcp-apps.ts";
 import type {
   PiBuiltinExtensionId,
   PiCloneResult,
@@ -125,15 +126,21 @@ export interface DirListing {
   truncated: boolean;
 }
 
+export type OfficePreviewKind = "docx" | "xlsx";
+
 /** 文件预览结果：path 是相对根目录（任务 cwd 或草稿的项目目录）的规范化路径（传入绝对路径但落在根内时会换算）。 */
 export interface PreviewFile {
-  kind: "text" | "image" | "html" | "binary" | "too_large" | "missing";
+  kind: "text" | "image" | "html" | "pdf" | "office" | "binary" | "too_large" | "missing";
   path: string;
   size: number;
   /** text / html 才有。 */
   text?: string;
   /** image 才有（data URL，svg 也走这里，渲染进程只能当图片显示）。 */
   dataUrl?: string;
+  /** office 才有。 */
+  officeKind?: OfficePreviewKind;
+  /** pdf / office 才有（字节总数，供分片拉取和尺寸显示）。 */
+  totalBytes?: number;
   /** 能否用系统默认应用直接打开（同 openTaskFile 的白名单）；否则只能在文件夹中显示。 */
   canOpen: boolean;
 }
@@ -1427,6 +1434,10 @@ export interface StudioInvokeApi {
    * 文本 > 2 MB、图片 > 20 MB 返回 too_large；文件不存在返回 missing（不 reject）。
    */
   readPreviewFile(target: ProjectFilesTarget, relPath: string): Promise<PreviewFile>;
+  /** 按偏移与长度分片读取可预览文件的原始字节（主要供 PDF Range Transport 按页拉取）。 */
+  readPreviewRange(target: ProjectFilesTarget, relPath: string, offset: number, length: number): Promise<Uint8Array>;
+  /** 读取 Office 等受支持二进制文档的完整原始字节（受大小上限约束）。 */
+  readPreviewBytes(target: ProjectFilesTarget, relPath: string): Promise<Uint8Array>;
   registerHtmlPreview(html: string): Promise<string>;
   releaseHtmlPreview(url: string): Promise<void>;
   /**
@@ -1768,6 +1779,17 @@ export interface StudioInvokeApi {
   deleteTask(taskId: TaskId): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   searchPiPlugins(query: string): Promise<PiMarketplacePlugin[]>;
+
+  // MCP Apps 交互插件容器
+  listMcpApps(projectId: ProjectId | null): Promise<McpAppServerSnapshot[]>;
+  readMcpAppResource(projectId: ProjectId | null, server: string, uri: string): Promise<McpAppReadResult>;
+  callMcpAppTool(
+    projectId: ProjectId | null,
+    server: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<McpAppToolCallResult>;
+  closeMcpAppServer(server: string): Promise<void>;
 }
 
 export interface StudioEventPayloads {
@@ -1949,6 +1971,8 @@ export const invokeNames = {
   refreshWorkspaceDirs: true,
   openTaskFolder: true,
   readPreviewFile: true,
+  readPreviewRange: true,
+  readPreviewBytes: true,
   registerHtmlPreview: true,
   releaseHtmlPreview: true,
   listDirectory: true,
@@ -2093,6 +2117,10 @@ export const invokeNames = {
   deleteTask: true,
   deleteSession: true,
   searchPiPlugins: true,
+  listMcpApps: true,
+  readMcpAppResource: true,
+  callMcpAppTool: true,
+  closeMcpAppServer: true,
 } satisfies Record<keyof StudioInvokeApi, true>;
 
 /** StudioEventPayloads 的全部事件名；订阅函数叫 `on` + 首字母大写的名字。 */

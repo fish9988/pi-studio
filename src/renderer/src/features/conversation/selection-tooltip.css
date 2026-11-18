@@ -1,0 +1,69 @@
+/* 划词浮条（见 SelectionTooltip.tsx）：挂在 body 上的浮层，left/top 由 computeTooltipPosition 算。
+ * above 时 top 是底边，靠 translateY(-100%) 贴到选区上方；below 时 top 是顶边。 */
+.sel-tip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-1);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass-strong);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(14px) saturate(150%);
+  user-select: none;
+  animation: sel-tip-in var(--dur-fast) var(--ease-out);
+}
+
+.sel-tip[data-placement="above"] {
+  transform: translateY(-100%);
+}
+
+.sel-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--control-h-xs);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.sel-tip-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.sel-tip-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.sel-tip-btn svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.sel-tip-btn:hover svg {
+  color: var(--text-2);
+}
+
+@keyframes sel-tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

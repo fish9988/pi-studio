@@ -1,0 +1,271 @@
+/* PDF 阅读器（features/file-preview/PdfViewer.tsx）：工具栏 + 单页画布与透明文本层 + 目录抽屉 + 划词浮层。
+   类名一律 pdf-pv- 前缀；颜色、圆角、间距、时长取 styles/tokens.css 的变量。
+   `.textLayer` 那套样式是 pdf.js 的 TextLayer 要求的（span 绝对定位、字号由 CSS 变量算），
+   这里按 pdf-pv-text 复刻一份，不整份引入 pdfjs-dist/web/pdf_viewer.css（那份还有整个 viewer 的样式）。 */
+
+.pdf-pv {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-sunken);
+}
+
+/* ───────── 工具栏 ───────── */
+
+.pdf-pv-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1-5) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+}
+
+.pdf-pv-spacer {
+  flex: 1 1 auto;
+}
+
+.pdf-pv-page-input {
+  flex: 0 0 auto;
+}
+
+.pdf-pv-total,
+.pdf-pv-count {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  white-space: nowrap;
+}
+
+.pdf-pv-count {
+  min-width: 4ch;
+  text-align: center;
+  color: var(--text-2);
+}
+
+.pdf-pv-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1-5) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+}
+
+/* ───────── 正文：目录抽屉 + 滚动区 ───────── */
+
+.pdf-pv-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pdf-pv-outline {
+  flex: 0 0 auto;
+  width: 208px;
+  overflow: auto;
+  padding: var(--space-1) var(--space-1) var(--space-2);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-overlay);
+}
+
+.pdf-pv-outline-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.pdf-pv-outline-item[data-depth="1"] {
+  padding-left: var(--space-4);
+}
+.pdf-pv-outline-item[data-depth="2"] {
+  padding-left: var(--space-6);
+}
+.pdf-pv-outline-item[data-depth="3"],
+.pdf-pv-outline-item[data-depth="4"],
+.pdf-pv-outline-item[data-depth="5"],
+.pdf-pv-outline-item[data-depth="6"] {
+  padding-left: var(--space-8);
+}
+
+.pdf-pv-outline-item:hover {
+  background: var(--bg-hover);
+}
+
+.pdf-pv-scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  outline: none;
+}
+
+.pdf-pv-scroll:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+
+.pdf-pv-stage {
+  /* PAGE_GAP：PdfViewer.tsx 算适应宽度时按同一个 16px 留白扣减。 */
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100%;
+}
+
+.pdf-pv-note {
+  margin: var(--space-6) var(--space-4);
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-sm);
+  text-align: center;
+}
+
+/* ───────── 页面：画布 + 文本层 ───────── */
+
+.pdf-pv-page {
+  position: relative;
+  flex: 0 0 auto;
+  /* pdf.js 的 TextLayer 用这几个变量算自己的宽高：round(down, var(--total-scale-factor) * 页面宽) */
+  --total-scale-factor: 1;
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  transform-origin: 0 0;
+  background: #fff;
+  box-shadow: var(--shadow-2);
+}
+
+.pdf-pv-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: #fff;
+}
+
+.pdf-pv-text {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 1;
+  /* pdf.js 在构造时把 --min-font-size 写到这个容器上，字号与反向缩放都在同一元素上换算（同 pdf_viewer.css）。
+     每个 span 自己带 --font-height / --scale-x / --rotate 内联值，下面几行只是没有时的初值。 */
+  --min-font-size: 1;
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+}
+
+/* 页面自身带 /Rotate 时，文本层的坐标系是未旋转的页面（pdf.js 按 rawDims 排版），要整体转回来。 */
+.pdf-pv-text[data-main-rotation="90"] {
+  transform: rotate(90deg) translateY(-100%);
+}
+.pdf-pv-text[data-main-rotation="180"] {
+  transform: rotate(180deg) translate(-100%, -100%);
+}
+.pdf-pv-text[data-main-rotation="270"] {
+  transform: rotate(270deg) translateX(-100%);
+}
+
+/* 无背景、无下划线的透明字：选中的是 PDF 里真实排好的文字，位置和画布严丝合缝。 */
+.pdf-pv-text :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  user-select: text;
+}
+
+.pdf-pv-text > :not(.markedContent),
+.pdf-pv-text .markedContent span:not(.markedContent) {
+  z-index: 1;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-pv-text .markedContent {
+  display: contents;
+}
+
+.pdf-pv-text ::selection {
+  background: var(--selection-bg);
+  color: transparent;
+}
+
+/* 双缓冲缩放的旧帧：停在原位置，新比例画完由 PdfViewer 撤掉。 */
+.pdf-pv-snapshot {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  background: #fff;
+  box-shadow: var(--shadow-2);
+}
+
+/* ───────── 划词浮层 ───────── */
+
+.pdf-pv-tip {
+  position: fixed;
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-1);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius-lg);
+  background: var(--bg-glass-strong);
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(12px);
+  white-space: nowrap;
+}
+
+.pdf-pv-tip[data-placement="above"] {
+  transform: translateY(-100%);
+}
+
+.pdf-pv-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.pdf-pv-tip-btn:hover {
+  background: var(--bg-hover);
+}

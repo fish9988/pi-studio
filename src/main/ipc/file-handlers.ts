@@ -10,8 +10,14 @@ import { listDirectory } from "../files/list-directory.ts";
 import { ProjectFileIndex, parseFileQuery } from "../files/project-files.ts";
 import { getTaskPool } from "../tasks/runtime.ts";
 import { chatsDir } from "../tasks/chats-dir.ts";
-import { readPreviewFile } from "../files/preview-file.ts";
-import { parseOneOf, parseProjectId, parseRecord, parseString, parseTaskId } from "./validate.ts";
+import {
+  previewRangeMaxBytes,
+  readPreviewBytes,
+  readPreviewFile,
+  readPreviewRange,
+  stripPreviewFragment,
+} from "../files/preview-file.ts";
+import { parseInteger, parseOneOf, parseProjectId, parseRecord, parseString, parseTaskId } from "./validate.ts";
 import { parseRootIndex, rootDir } from "../files/task-roots.ts";
 import { resolveInside, resolveInsideReal } from "./task-file-path.ts";
 
@@ -43,9 +49,81 @@ export async function targetCwd(target: ProjectFilesTarget): Promise<string> {
   return project.path;
 }
 
+async function resolvePreviewAndRun<T>(
+  parsed: ProjectFilesTarget,
+  raw: string,
+  fn: (rootCwd: string, targetPath: string) => Promise<T>,
+  isMissingResult: (res: T) => boolean,
+): Promise<T> {
+  const cwd = await targetCwd(parsed);
+  try {
+    const direct = await fn(cwd, raw);
+    if (!isMissingResult(direct)) return direct;
+    if (!path.isAbsolute(raw) && !raw.includes("..") && !raw.startsWith("~")) {
+      const matched = await index.findBySuffix(cwd, raw);
+      if (matched !== null) return fn(cwd, matched);
+      if (parsed.kind === "task" && parsed.root === undefined) {
+        const pool = await getTaskPool();
+        for (const wsDir of pool.taskWorkspaceDirs(parsed.taskId)) {
+          const wsDirect = await fn(wsDir, raw);
+          if (!isMissingResult(wsDirect)) return wsDirect;
+          const wsMatched = await index.findBySuffix(wsDir, raw);
+          if (wsMatched !== null) return fn(wsDir, wsMatched);
+        }
+      }
+    }
+    return direct;
+  } catch (err) {
+    if (parsed.kind !== "task" || parsed.root !== undefined) throw err;
+    let cleaned = raw
+      .trim()
+      .replace(/^file:\/\//i, "")
+      .replace(/^\/+(?=[A-Za-z]:[\\/])/, "");
+    try {
+      cleaned = decodeURIComponent(cleaned);
+    } catch {
+      // keep cleaned
+    }
+    cleaned = stripPreviewFragment(cleaned);
+    if (!path.isAbsolute(cleaned) && !path.win32.isAbsolute(cleaned)) throw err;
+
+    const pool = await getTaskPool();
+    const candidateRoots = [...pool.taskWorkspaceDirs(parsed.taskId), ...pool.listProjects().map((p) => p.path)];
+    for (const root of candidateRoots) {
+      try {
+        const res = await fn(root, cleaned);
+        if (!isMissingResult(res)) return res;
+      } catch {
+        // try next root
+      }
+    }
+
+    // 若该绝对路径是当前会话工具调用或输出里真实出现过的文件路径（如默认 chats 目录下跨目录读取/编辑的文件），允许直接预览该文件
+    try {
+      const snap = pool.getTspSnapshot(parsed.taskId);
+      const docJson = JSON.stringify(snap.document).replace(/\\\\/g, "/").toLowerCase();
+      const wantNorm = cleaned.replace(/\\/g, "/").toLowerCase();
+      if (docJson.includes(wantNorm)) {
+        const parentDir = path.dirname(cleaned);
+        const fileName = path.basename(cleaned);
+        const res = await fn(parentDir, fileName);
+        if (typeof res === "object" && res !== null && "kind" in res && "path" in res) {
+          return { ...(res as Record<string, unknown>), path: cleaned } as T;
+        }
+        return res;
+      }
+    } catch {
+      // fall through to throw original error
+    }
+    throw err;
+  }
+}
+
 export const fileHandlers: HandlerGroup<
   | "listProjectFiles"
   | "readPreviewFile"
+  | "readPreviewRange"
+  | "readPreviewBytes"
   | "registerHtmlPreview"
   | "releaseHtmlPreview"
   | "listDirectory"
@@ -62,66 +140,35 @@ export const fileHandlers: HandlerGroup<
   },
   async readPreviewFile(target, relPath) {
     const parsed = parseFilesTarget(target);
-    const cwd = await targetCwd(parsed);
     const raw = parseString(relPath, "relPath", 1024);
-    try {
-      const direct = await readPreviewFile(cwd, raw);
-      if (direct.kind !== "missing") return direct;
-      if (!path.isAbsolute(raw) && !raw.includes("..") && !raw.startsWith("~")) {
-        const matched = await index.findBySuffix(cwd, raw);
-        if (matched !== null) return readPreviewFile(cwd, matched);
-        if (parsed.kind === "task" && parsed.root === undefined) {
-          const pool = await getTaskPool();
-          for (const wsDir of pool.taskWorkspaceDirs(parsed.taskId)) {
-            const wsDirect = await readPreviewFile(wsDir, raw);
-            if (wsDirect.kind !== "missing") return wsDirect;
-            const wsMatched = await index.findBySuffix(wsDir, raw);
-            if (wsMatched !== null) return readPreviewFile(wsDir, wsMatched);
-          }
-        }
-      }
-      return direct;
-    } catch (err) {
-      if (parsed.kind !== "task" || parsed.root !== undefined) throw err;
-      let cleaned = raw
-        .trim()
-        .replace(/^file:\/\//i, "")
-        .replace(/^\/+(?=[A-Za-z]:[\\/])/, "");
-      try {
-        cleaned = decodeURIComponent(cleaned);
-      } catch {
-        // keep cleaned
-      }
-      cleaned = cleaned.replace(/#L\d+(?:-L?\d+)?.*$/i, "").replace(/(?<!^[A-Za-z]):\d+(?:[:-]\d+)?$/, "");
-      if (!path.isAbsolute(cleaned) && !path.win32.isAbsolute(cleaned)) throw err;
-
-      const pool = await getTaskPool();
-      const candidateRoots = [...pool.taskWorkspaceDirs(parsed.taskId), ...pool.listProjects().map((p) => p.path)];
-      for (const root of candidateRoots) {
-        try {
-          const res = await readPreviewFile(root, cleaned);
-          if (res.kind !== "missing") return res;
-        } catch {
-          // try next root
-        }
-      }
-
-      // 若该绝对路径是当前会话工具调用或输出里真实出现过的文件路径（如默认 chats 目录下跨目录读取/编辑的文件），允许直接预览该文件
-      try {
-        const snap = pool.getTspSnapshot(parsed.taskId);
-        const docJson = JSON.stringify(snap.document).replace(/\\\\/g, "/").toLowerCase();
-        const wantNorm = cleaned.replace(/\\/g, "/").toLowerCase();
-        if (docJson.includes(wantNorm)) {
-          const parentDir = path.dirname(cleaned);
-          const baseName = path.basename(cleaned);
-          const res = await readPreviewFile(parentDir, baseName);
-          return { ...res, path: cleaned };
-        }
-      } catch {
-        // fall through to throw original error
-      }
-      throw err;
-    }
+    return resolvePreviewAndRun(
+      parsed,
+      raw,
+      (rootCwd, targetPath) => readPreviewFile(rootCwd, targetPath),
+      (res) => res.kind === "missing",
+    );
+  },
+  async readPreviewRange(target, relPath, offset, length) {
+    const parsed = parseFilesTarget(target);
+    const raw = parseString(relPath, "relPath", 1024);
+    const off = parseInteger(offset, "offset", 0, Number.MAX_SAFE_INTEGER);
+    const len = parseInteger(length, "length", 1, previewRangeMaxBytes);
+    return resolvePreviewAndRun(
+      parsed,
+      raw,
+      (rootCwd, targetPath) => readPreviewRange(rootCwd, targetPath, off, len),
+      () => false,
+    );
+  },
+  async readPreviewBytes(target, relPath) {
+    const parsed = parseFilesTarget(target);
+    const raw = parseString(relPath, "relPath", 1024);
+    return resolvePreviewAndRun(
+      parsed,
+      raw,
+      (rootCwd, targetPath) => readPreviewBytes(rootCwd, targetPath),
+      () => false,
+    );
   },
   async listDirectory(target, relDir) {
     const cwd = await targetCwd(parseFilesTarget(target));

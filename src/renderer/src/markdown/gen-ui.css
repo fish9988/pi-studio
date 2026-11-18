@@ -1,0 +1,107 @@
+/* 内联 Gen UI 沙箱卡片（markdown/GenUiCard.tsx）：头部条 + 自适应高度的 iframe + 追问确认条。
+   只引用 tokens.css 的变量，类名一律 .gen-ui- 前缀。 */
+
+.gen-ui-card {
+  display: flex;
+  flex-direction: column;
+  margin: var(--space-4) 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.gen-ui-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--panel-head-h);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gen-ui-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gen-ui-saved {
+  flex: none;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  letter-spacing: var(--ls-label);
+  white-space: nowrap;
+}
+
+.gen-ui-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* 收起只藏内容，iframe 不卸载：卡片的脚本状态和滚动位置都还在。 */
+.gen-ui-body[data-collapsed] {
+  display: none;
+}
+
+.gen-ui-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: var(--bg-raised);
+  transition: height var(--dur-base) var(--ease-out);
+}
+
+.gen-ui-note {
+  margin: 0;
+  padding: var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-3);
+}
+
+/* 追问确认条：卡片里点"追问"先落在这里，用户点确认才真正发出去。 */
+.gen-ui-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-tool);
+}
+
+.gen-ui-confirm-hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text-2);
+}
+
+.gen-ui-confirm-prompt {
+  margin: 0;
+  max-height: calc(var(--lh-xs) * 3);
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gen-ui-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}

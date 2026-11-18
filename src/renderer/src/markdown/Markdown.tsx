@@ -6,6 +6,7 @@ import type { TFunction } from "../../../shared/i18n/index.ts";
 import { useT } from "../i18n/use-t.ts";
 import { reportError } from "../ui/errors.ts";
 import { CodeBlock } from "./CodeBlock.tsx";
+import { GenUiVisualize } from "./GenUiVisualize.tsx";
 import { splitMarks, type TextMark } from "./marks.ts";
 import { parseStreaming, stabilizeStreaming, type BlockParse, type MarkdownBlock } from "./parse.ts";
 import { renderBlock, type RenderContext } from "./render.ts";
@@ -121,6 +122,7 @@ function createContext(
       window.studio.openExternal(href).catch((error: unknown) => reportError(t, error));
     },
     renderCode: ({ code, lang, closed }): ReactNode => <CodeBlock code={code} lang={lang} closed={closed} />,
+    renderVisualize: attachmentChips ? undefined : (directive) => <GenUiVisualize directive={directive} />,
     renderText: attachmentChips
       ? (text) => renderAttachmentText(text, marks, onAttachmentClick)
       : marks === undefined || marks.length === 0

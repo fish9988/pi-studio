@@ -21,6 +21,7 @@ import { workspaceDirsHandlers } from "./workspace-dirs-handlers.ts";
 import { commandHandlers } from "./command-handlers.ts";
 import { integrationsHandlers } from "./integrations-handlers.ts";
 import { mcpHandlers } from "./mcp-handlers.ts";
+import { mcpAppsHandlers } from "./mcp-apps-handlers.ts";
 import { sessionInfoHandlers } from "./session-info-handlers.ts";
 import { agentsHandlers } from "./agents-handlers.ts";
 import { piHandlers } from "./pi-handlers.ts";
@@ -50,6 +51,7 @@ const handlers: InvokeHandlers = {
   ...commandHandlers,
   ...integrationsHandlers,
   ...mcpHandlers,
+  ...mcpAppsHandlers,
   ...sessionInfoHandlers,
   ...agentsHandlers,
   ...browserHandlers,

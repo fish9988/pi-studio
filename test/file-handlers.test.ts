@@ -125,4 +125,35 @@ describe("默认文件夹的根目录", () => {
     await fileHandlers.deleteFileEntry(target, "assets/logo.svg");
     expect((await fileHandlers.listDirectory(target, "assets")).entries).toEqual([]);
   });
+
+  it("支持 PDF Range 分片读取、Office 元信息与二进制字节读取（含越界校验）", async () => {
+    await mkdir(chats, { recursive: true });
+    const pdfPayload = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n", "utf8");
+    const docxPayload = Buffer.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
+    await writeFile(path.join(chats, "paper.pdf"), pdfPayload);
+    await writeFile(path.join(chats, "report.docx"), docxPayload);
+    await writeFile(path.join(chats, "sheet.xlsx"), docxPayload);
+
+    const pdfMeta = await fileHandlers.readPreviewFile(target, "paper.pdf#page:3");
+    expect(pdfMeta.kind).toBe("pdf");
+    expect(pdfMeta.path).toBe("paper.pdf");
+    expect(pdfMeta.totalBytes).toBe(pdfPayload.length);
+
+    const range = await fileHandlers.readPreviewRange(target, "paper.pdf", 5, 10);
+    expect(Buffer.from(range).toString("utf8")).toBe(pdfPayload.subarray(5, 15).toString("utf8"));
+
+    const docxMeta = await fileHandlers.readPreviewFile(target, "report.docx");
+    expect(docxMeta.kind).toBe("office");
+    expect(docxMeta.officeKind).toBe("docx");
+
+    const xlsxMeta = await fileHandlers.readPreviewFile(target, "sheet.xlsx");
+    expect(xlsxMeta.kind).toBe("office");
+    expect(xlsxMeta.officeKind).toBe("xlsx");
+
+    const rawBytes = await fileHandlers.readPreviewBytes(target, "report.docx");
+    expect(Buffer.from(rawBytes)).toEqual(docxPayload);
+
+    await expect(fileHandlers.readPreviewRange(target, "../outside.pdf", 0, 10)).rejects.toThrow();
+    await expect(fileHandlers.readPreviewBytes(target, "../outside.docx")).rejects.toThrow();
+  });
 });

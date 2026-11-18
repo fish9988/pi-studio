@@ -1,6 +1,12 @@
+import { readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
+import type { Plugin } from "vite";
+
+const require = createRequire(path.join(import.meta.dirname, "package.json"));
 
 const root = import.meta.dirname;
 
@@ -46,6 +52,58 @@ const katexWoff2Only = {
   },
 };
 
+const pdfJsAssetsPlugin = (): Plugin => {
+  const pkgDir = path.dirname(require.resolve("pdfjs-dist/package.json"));
+  const folders = [
+    { prefix: "pdfjs/cmaps", dir: path.join(pkgDir, "cmaps"), allow: (name: string) => name.endsWith(".bcmap") },
+    {
+      prefix: "pdfjs/standard_fonts",
+      dir: path.join(pkgDir, "standard_fonts"),
+      allow: (name: string) => /\.(pfb|ttf)$/i.test(name),
+    },
+  ];
+  return {
+    name: "pi-studio:pdfjs-assets",
+    async buildStart() {
+      for (const folder of folders) {
+        const entries = readdirSync(folder.dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isFile() || !folder.allow(entry.name)) continue;
+          this.emitFile({
+            type: "asset",
+            fileName: `${folder.prefix}/${entry.name}`,
+            source: await readFile(path.join(folder.dir, entry.name)),
+          });
+        }
+      }
+    },
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const reqPath = (request.url ?? "").split("?", 1)[0] ?? "";
+        for (const folder of folders) {
+          const marker = `/${folder.prefix}/`;
+          const idx = reqPath.indexOf(marker);
+          if (idx < 0) continue;
+          const fileName = reqPath.slice(idx + marker.length);
+          if (fileName === "" || fileName !== path.basename(fileName) || !folder.allow(fileName)) {
+            next();
+            return;
+          }
+          readFile(path.join(folder.dir, fileName))
+            .then((source) => {
+              response.statusCode = 200;
+              response.setHeader("Content-Type", "application/octet-stream");
+              response.end(source);
+            })
+            .catch((error: unknown) => next(error));
+          return;
+        }
+        next();
+      });
+    },
+  };
+};
+
 export default defineConfig({
   main: {
     build: {
@@ -63,7 +121,7 @@ export default defineConfig({
   },
   renderer: {
     root: path.join(root, "src", "renderer"),
-    plugins: [react(), injectCsp, katexWoff2Only],
+    plugins: [react(), injectCsp, katexWoff2Only, pdfJsAssetsPlugin()],
     // 高亮 worker 按需加载语言包（动态 import），iife 不支持拆包，只能用 ES 模块 worker。
     worker: { format: "es" },
     build: {

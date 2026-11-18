@@ -192,6 +192,68 @@ export async function listPiMcpServers(agentDir: string, projectDir?: string | n
   return items;
 }
 
+export interface McpRawServerConfig {
+  readonly name: string;
+  readonly scope: PiConfigScope;
+  readonly transport: "stdio" | "http";
+  readonly command?: string | undefined;
+  readonly args?: readonly string[] | undefined;
+  readonly cwd?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+  readonly url?: string | undefined;
+  readonly headers?: Readonly<Record<string, string>> | undefined;
+  readonly timeout?: number | undefined;
+}
+
+/** 仅主进程内部使用：读取已启用 MCP 服务器的完整配置（含 env 与 headers）。项目级同名服务器覆盖全局。 */
+export async function listEnabledMcpRawServers(
+  agentDir: string,
+  projectDir?: string | null,
+): Promise<McpRawServerConfig[]> {
+  const [{ root: globalRoot }, projectRes] = await Promise.all([
+    readMcpRoot(piMcpFilePath(agentDir, null, "global"), false),
+    projectDir && projectDir.trim() !== ""
+      ? readMcpRoot(piMcpFilePath(agentDir, projectDir, "project"), false)
+      : Promise.resolve(null),
+  ]);
+
+  const byName = new Map<string, McpRawServerConfig>();
+  const collect = (root: Record<string, unknown>, scope: PiConfigScope) => {
+    const servers = root["mcpServers"];
+    if (!isRecord(servers)) return;
+    for (const [name, raw] of Object.entries(servers)) {
+      if (!isRecord(raw) || raw["enabled"] === false) continue;
+      const item = parseMcpServerItem(name, scope, raw);
+      const env = isRecord(raw["env"])
+        ? Object.fromEntries(
+            Object.entries(raw["env"]).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+          )
+        : undefined;
+      const headers = isRecord(raw["headers"])
+        ? Object.fromEntries(
+            Object.entries(raw["headers"]).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+          )
+        : undefined;
+      byName.set(name, {
+        name,
+        scope,
+        transport: item.transport,
+        ...(item.command !== undefined ? { command: item.command } : {}),
+        ...(item.args !== undefined ? { args: item.args } : {}),
+        ...(item.cwd !== undefined ? { cwd: item.cwd } : {}),
+        ...(env !== undefined && Object.keys(env).length > 0 ? { env } : {}),
+        ...(item.url !== undefined ? { url: item.url } : {}),
+        ...(headers !== undefined && Object.keys(headers).length > 0 ? { headers } : {}),
+        ...(item.timeout !== undefined ? { timeout: item.timeout } : {}),
+      });
+    }
+  };
+
+  collect(globalRoot, "global");
+  if (projectRes !== null) collect(projectRes.root, "project");
+  return [...byName.values()];
+}
+
 function mergeSecretMap(
   existingRaw: unknown,
   incoming: Record<string, string> | undefined,
