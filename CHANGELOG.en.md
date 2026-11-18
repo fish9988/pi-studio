@@ -9,6 +9,17 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-18
+
+### Added
+
+- Built-in lightweight `visualize` skill loaded automatically per session: when explaining concepts, geometry, or dynamic controls, the model writes interactive HTML fragments (e.g. draggable tangent points and sliders) into an isolated visuals directory without cluttering your Git workspace, and embeds them via `::visualize`.
+- Added a centered modal expand view and theme-synced base control utilities & series palette (`--viz-series-1..6`) for inline Gen UI visuals.
+
+### Changed
+
+- Redesigned inline Gen UI cards into **chromeless, transparent natural-flow visuals**: removed outer borders, opaque card fills, and the persistent header bar so interactive diagrams blend seamlessly into the chat background, auto-sizing from 80 to 1400px with hover-revealed top-right frosted action pills.
+
 ## [0.7.0] - 2026-11-18
 
 ### Added
