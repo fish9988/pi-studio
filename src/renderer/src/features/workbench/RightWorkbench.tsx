@@ -3,7 +3,16 @@
 // - 顶部动态多标签栏 + `+` 新建 Overview 标签 + 最大化/还原面板按钮 + 关闭（`×`）按钮；
 // - 默认页采用 Antigravity Overview 极简无框列表：全能搜索/URL 输入框 + 快捷导航区 + 实时状态区（Artifacts / Subagents / Background Tasks）；
 // - 代码变更评审（Review）、文件树与预览（Files）、内置终端（Terminal）、内置浏览器（Browser）、扩展插件（Extensions）全部在分栏标签中并排打开，绝不遮挡左侧聊天区。
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 import type { GitStatus } from "../../../../shared/git.ts";
 import { draftKey, parseDraftKey, type DraftKey, type TaskId, type TerminalKey } from "../../../../shared/ipc.ts";
 import type { McpAppServerSnapshot } from "../../../../shared/mcp-apps.ts";
@@ -36,7 +45,7 @@ import {
 } from "../../icons.tsx";
 import { useTask } from "../../store/index.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
-import { sameAgents } from "../agents/agent-model.ts";
+import { dotStatus, sameAgents } from "../agents/agent-model.ts";
 import { openAgentsPanel, useAgentsPanel } from "../agents/agents-store.ts";
 import { openBrowserPanel } from "../browser/browser-store.ts";
 import { filesTarget } from "../file-preview/files-target.ts";
@@ -140,6 +149,9 @@ function DshStartView({
   const [gitChangedCount, setGitChangedCount] = useState(0);
   const [query, setQuery] = useState("");
   const [fileMatches, setFileMatches] = useState<string[]>([]);
+  // 全能框的下拉里当前高亮的一项（↓ / ↑ 移动，Enter 打开高亮的那个）
+  const [activeIndex, setActiveIndex] = useState(0);
+  const omniListId = useId();
   const [mcpApps, setMcpApps] = useState<McpAppServerSnapshot[]>([]);
   const [mcpAppsTick, setMcpAppsTick] = useState(0);
 
@@ -219,14 +231,50 @@ function DshStartView({
     setQuery("");
   };
 
-  const handleOmniSubmit = () => {
-    const firstMatch = fileMatches[0];
+  // 下拉项：URL 直达在内嵌浏览器打开，文件命中直接在预览页打开
+  const omniOptions = useMemo(() => {
+    const list: { key: string; kind: "url" | "file"; value: string; label: string }[] = [];
     if (urlCandidate !== null && taskId !== null) {
-      openBrowserAtUrl(urlCandidate);
+      list.push({
+        key: "url",
+        kind: "url",
+        value: urlCandidate,
+        label: isZh ? `在内置浏览器中打开 ${urlCandidate}` : `Open ${urlCandidate} in Browser`,
+      });
+    }
+    for (const relPath of fileMatches) {
+      list.push({ key: `file:${relPath}`, kind: "file", value: relPath, label: relPath });
+    }
+    return list;
+  }, [fileMatches, isZh, taskId, urlCandidate]);
+
+  const runOmniOption = (option: (typeof omniOptions)[number]) => {
+    if (option.kind === "url") openBrowserAtUrl(option.value);
+    else openMatchedFile(option.value);
+  };
+
+  const handleOmniSubmit = () => {
+    const option = omniOptions[activeIndex] ?? omniOptions[0];
+    if (option !== undefined) runOmniOption(option);
+  };
+
+  const onOmniKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (omniOptions.length === 0) return;
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      setActiveIndex((index) => Math.min(omniOptions.length - 1, Math.max(0, index + delta)));
       return;
     }
-    if (firstMatch) {
-      openMatchedFile(firstMatch);
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleOmniSubmit();
+      return;
+    }
+    if (event.key === "Escape" && query !== "") {
+      event.preventDefault();
+      event.stopPropagation();
+      setQuery("");
     }
   };
 
@@ -250,22 +298,23 @@ function DshStartView({
       <div className="dsh-ov-container">
         <div className="dsh-ov-omni-wrap">
           <div className="dsh-ov-omni">
-            <Search size={13} />
+            <Search size={13} className="dsh-ov-omni-ic" />
             <input
               type="text"
               className="dsh-ov-omni-input"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleOmniSubmit();
-                } else if (e.key === "Escape" && query) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setQuery("");
-                }
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setActiveIndex(0);
               }}
+              onKeyDown={onOmniKeyDown}
+              role="combobox"
+              aria-expanded={omniOptions.length > 0}
+              aria-controls={omniListId}
+              aria-autocomplete="list"
+              aria-activedescendant={
+                omniOptions.length > 0 ? `${omniListId}-${Math.min(activeIndex, omniOptions.length - 1)}` : undefined
+              }
               placeholder={
                 isZh ? "搜索项目文件，或输入 URL 回车浏览..." : "Search workspace files, or enter a URL to browse..."
               }
@@ -277,34 +326,41 @@ function DshStartView({
                 type="button"
                 className="dsh-ov-omni-clear"
                 aria-label={isZh ? "清空输入" : "Clear"}
-                onClick={() => setQuery("")}
+                onClick={() => {
+                  setQuery("");
+                  setActiveIndex(0);
+                }}
               >
                 <Close size={11} />
               </button>
             )}
           </div>
 
-          {(urlCandidate !== null || fileMatches.length > 0) && (
-            <div className="dsh-ov-omni-dropdown" role="listbox">
-              {urlCandidate !== null && taskId !== null && (
-                <button type="button" className="dsh-ov-omni-option" onClick={() => openBrowserAtUrl(urlCandidate)}>
-                  <Globe size={13} />
-                  <span className="dsh-ov-omni-option-main">
-                    {isZh ? `在内置浏览器中打开 ${urlCandidate}` : `Open ${urlCandidate} in Browser`}
-                  </span>
-                  <span className="dsh-ov-omni-kbd">Enter</span>
-                </button>
-              )}
-              {fileMatches.map((relPath) => (
-                <button
-                  key={relPath}
-                  type="button"
+          {omniOptions.length > 0 && (
+            <div
+              className="dsh-ov-omni-dropdown"
+              role="listbox"
+              id={omniListId}
+              aria-label={isZh ? "搜索结果" : "Results"}
+            >
+              {omniOptions.map((option, index) => (
+                <div
+                  key={option.key}
+                  id={`${omniListId}-${index}`}
+                  role="option"
+                  aria-selected={index === activeIndex}
                   className="dsh-ov-omni-option"
-                  onClick={() => openMatchedFile(relPath)}
+                  data-active={index === activeIndex ? "" : undefined}
+                  data-testid="dsh-start-omni-option"
+                  // 按下鼠标时不抢输入框焦点，键盘和鼠标落到同一套高亮上
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => runOmniOption(option)}
                 >
-                  <FileIcon size={13} />
-                  <span className="dsh-ov-omni-option-main">{relPath}</span>
-                </button>
+                  {option.kind === "url" ? <Globe size={13} /> : <FileIcon size={13} />}
+                  <span className="dsh-ov-omni-option-main">{option.label}</span>
+                  {option.kind === "url" && <span className="dsh-ov-omni-kbd">Enter</span>}
+                </div>
               ))}
             </div>
           )}
@@ -323,16 +379,16 @@ function DshStartView({
                   openDshToolTab(panelKey, "changes", { replaceTabId: tabId });
                 }}
               >
-                <div className="dsh-ov-tile-top">
-                  <span className="dsh-ov-tile-ic is-accent">
+                <span className="dsh-ov-tile-top">
+                  <span className="dsh-ov-tile-ic is-blue">
                     <Diff size={14} />
                   </span>
                   <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl Shift D")}</span>
-                </div>
-                <div className="dsh-ov-tile-foot">
+                </span>
+                <span className="dsh-ov-tile-foot">
                   <span className="dsh-ov-tile-title">{isZh ? "Review · 变更" : "Review"}</span>
                   {reviewBadgeCount > 0 && <span className="dsh-ov-badge">{reviewBadgeCount}</span>}
-                </div>
+                </span>
               </button>
             )}
 
@@ -345,15 +401,15 @@ function DshStartView({
                 openDshToolTab(panelKey, "files", { replaceTabId: tabId });
               }}
             >
-              <div className="dsh-ov-tile-top">
-                <span className="dsh-ov-tile-ic is-sky">
+              <span className="dsh-ov-tile-top">
+                <span className="dsh-ov-tile-ic is-blue">
                   <Folder size={14} />
                 </span>
                 <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl Shift E")}</span>
-              </div>
-              <div className="dsh-ov-tile-foot">
+              </span>
+              <span className="dsh-ov-tile-foot">
                 <span className="dsh-ov-tile-title">{isZh ? "Files · 文件" : "Files"}</span>
-              </div>
+              </span>
             </button>
 
             <button
@@ -370,15 +426,15 @@ function DshStartView({
                 }
               }}
             >
-              <div className="dsh-ov-tile-top">
-                <span className="dsh-ov-tile-ic is-mint">
+              <span className="dsh-ov-tile-top">
+                <span className="dsh-ov-tile-ic is-green">
                   <Terminal size={14} />
                 </span>
                 <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl `")}</span>
-              </div>
-              <div className="dsh-ov-tile-foot">
+              </span>
+              <span className="dsh-ov-tile-foot">
                 <span className="dsh-ov-tile-title">{isZh ? "Terminal · 终端" : "Terminal"}</span>
-              </div>
+              </span>
             </button>
 
             {taskId !== null && (
@@ -391,15 +447,15 @@ function DshStartView({
                   openDshToolTab(panelKey, "browser", { replaceTabId: tabId });
                 }}
               >
-                <div className="dsh-ov-tile-top">
-                  <span className="dsh-ov-tile-ic is-violet">
+                <span className="dsh-ov-tile-top">
+                  <span className="dsh-ov-tile-ic is-blue">
                     <Globe size={14} />
                   </span>
                   <span className="dsh-ov-tile-kbd">{shortcutLabel("Ctrl Shift B")}</span>
-                </div>
-                <div className="dsh-ov-tile-foot">
+                </span>
+                <span className="dsh-ov-tile-foot">
                   <span className="dsh-ov-tile-title">{isZh ? "Browser · 浏览" : "Browser"}</span>
-                </div>
+                </span>
               </button>
             )}
           </div>
@@ -412,7 +468,7 @@ function DshStartView({
               openDshToolTab(panelKey, "extensions", { replaceTabId: tabId });
             }}
           >
-            <span className="dsh-ov-tile-ic is-violet">
+            <span className="dsh-ov-tile-ic is-neutral">
               <Puzzle size={14} />
             </span>
             <span className="dsh-ov-nav-label">{isZh ? "扩展与技能 · Extensions" : "Extensions & Skills"}</span>
@@ -447,9 +503,13 @@ function DshStartView({
                         openDshToolTab(panelKey, "files", { replaceTabId: tabId });
                       }}
                     >
-                      <FileIcon size={13} />
-                      <span className="dsh-ov-live-title">{item.name}</span>
-                      {item.displayDir && <span className="dsh-ov-live-sub">{item.displayDir}</span>}
+                      <span className="dsh-ov-live-ic">
+                        <FileIcon size={13} />
+                      </span>
+                      <span className="dsh-ov-live-main">
+                        <span className="dsh-ov-live-title">{item.name}</span>
+                        {item.displayDir && <span className="dsh-ov-live-sub">{item.displayDir}</span>}
+                      </span>
                       {(item.added > 0 || item.removed > 0) && (
                         <span className="dsh-ov-live-stats">
                           {item.added > 0 && <span className="wb-stat-add">+{item.added}</span>}
@@ -480,21 +540,26 @@ function DshStartView({
               ) : (
                 <div className="dsh-ov-live-list">
                   {agents.slice(0, 6).map((agent) => {
-                    const active = isAgentActive(agent.status);
+                    // 橙 = 排队 / 挂起，绿 = 在跑或已完成，红 = 失败（和子代理面板的状态点同语义，但一览里不区分完成/运行）
+                    const dot =
+                      agent.status === "pending" || agent.status === "parked" ? "waiting" : dotStatus(agent.status);
                     return (
                       <button
                         key={agent.name}
                         type="button"
                         className="dsh-ov-live-row"
                         data-testid="dsh-start-agents"
+                        title={agent.task === "" ? agent.name : agent.task}
                         onClick={() => {
                           openAgentsPanel(taskId, agent.name);
                           openDshToolTab(panelKey, "agents", { replaceTabId: tabId });
                         }}
                       >
-                        <span className="dsh-ov-dot" data-state={active ? "running" : agent.status} />
-                        <span className="dsh-ov-live-title">{agent.name}</span>
-                        {agent.task && <span className="dsh-ov-live-sub">{agent.task}</span>}
+                        <span className="dsh-ov-dot" data-state={dot} aria-hidden="true" />
+                        <span className="dsh-ov-live-main">
+                          <span className="dsh-ov-live-title">{agent.name}</span>
+                          {agent.task !== "" && <span className="dsh-ov-live-sub">{agent.task}</span>}
+                        </span>
                       </button>
                     );
                   })}
@@ -514,7 +579,7 @@ function DshStartView({
               <span>{t("preview.mcpAppsTitle")}</span>
               <button
                 type="button"
-                className="dsh-ov-omni-clear"
+                className="dsh-ov-head-btn"
                 title={t("preview.mcpAppsRefresh")}
                 aria-label={t("preview.mcpAppsRefresh")}
                 onClick={() => setMcpAppsTick((n) => n + 1)}
@@ -539,9 +604,13 @@ function DshStartView({
                     })
                   }
                 >
-                  <Sparkle size={13} />
-                  <span className="dsh-ov-live-title">{appItem.title}</span>
-                  <span className="dsh-ov-live-sub">{appItem.server}</span>
+                  <span className="dsh-ov-live-ic">
+                    <Sparkle size={13} />
+                  </span>
+                  <span className="dsh-ov-live-main">
+                    <span className="dsh-ov-live-title">{appItem.title}</span>
+                    <span className="dsh-ov-live-sub">{appItem.server}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -561,9 +630,11 @@ function DshStartView({
             <div className="dsh-ov-live-list">
               {isRunningTask && (
                 <div className="dsh-ov-live-row dsh-ov-live-static">
-                  <span className="dsh-ov-dot" data-state="running" />
-                  <span className="dsh-ov-live-title">
-                    {isZh ? "主会话代理正在执行..." : "Primary agent running..."}
+                  <span className="dsh-ov-dot" data-state="running" aria-hidden="true" />
+                  <span className="dsh-ov-live-main">
+                    <span className="dsh-ov-live-title">
+                      {isZh ? "主会话代理正在执行..." : "Primary agent running..."}
+                    </span>
                   </span>
                 </div>
               )}
@@ -574,11 +645,15 @@ function DshStartView({
                   className="dsh-ov-live-row"
                   onClick={() => activateDshTab(panelKey, term.id)}
                 >
-                  <Terminal size={13} />
-                  <span className="dsh-ov-live-title">
-                    {term.shellLabel ?? (isZh ? `终端 ${term.index}` : `Terminal ${term.index}`)}
+                  <span className="dsh-ov-live-ic">
+                    <Terminal size={13} />
                   </span>
-                  <span className="dsh-ov-live-sub">{isZh ? "活跃会话" : "Active"}</span>
+                  <span className="dsh-ov-live-main">
+                    <span className="dsh-ov-live-title">
+                      {term.shellLabel ?? (isZh ? `终端 ${term.index}` : `Terminal ${term.index}`)}
+                    </span>
+                    <span className="dsh-ov-live-sub">{isZh ? "活跃会话" : "Active"}</span>
+                  </span>
                 </button>
               ))}
             </div>

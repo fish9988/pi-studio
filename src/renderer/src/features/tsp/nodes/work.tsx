@@ -168,6 +168,34 @@ function localizedToolTitle(name: string | undefined, rawTitle: TspText | undefi
   return rawTitle;
 }
 
+/** 节点上的 TspText 属性取出纯文本：非字符串且不是片段数组的一律当空（工具参数还在流式生成时会先给半截值）。 */
+function plainOf(value: unknown): string {
+  if (typeof value === "string") return value;
+  return Array.isArray(value) ? plainText(value as TspText) : "";
+}
+
+/**
+ * 一行摘要里的动作词（过程组的「正在工作 · 读取 xxx」用的就是它）：和工具行标题同一套中文化规则，返回纯文本。
+ * 抽出来是为了让摘要行不必重复一遍工具名的翻译表。
+ */
+export function toolActionText(name: string | undefined, title: TspText | undefined): string {
+  return plainOf(localizedToolTitle(name, title)).trim() || (name ?? "");
+}
+
+/**
+ * 一行摘要里的主目标：命令先剥掉 `cd <dir>;` 这类噪音并压成单行，路径原样，查询加引号。
+ * 只做纯文本、不带上色 —— 摘要行只留「动词 + 主目标」两段。
+ */
+export function toolTargetText(p: Readonly<Record<string, unknown>>): string {
+  const text = plainOf(p["target"]);
+  if (text.trim() === "") return "";
+  const kind = typeof p["targetKind"] === "string" ? p["targetKind"] : "text";
+  if (kind === "command") return stripCommandNoise(text).replace(/\s*\r?\n\s*/g, " ");
+  if (kind === "path") return text.trim();
+  if (kind === "pattern" || kind === "query") return `“${text.trim()}”`;
+  return text.replace(/\s+/g, " ").trim();
+}
+
 function openToolFile(p: Readonly<Record<string, unknown>>, ctx: TspContext): void {
   const href = asString(p.href);
   if (href !== undefined && /^file:\/\//i.test(href)) {
@@ -456,7 +484,12 @@ export function Tool(props: NodeProps) {
           )}
         </span>
         <span className="tsp-tool-line">
-          <span className="tsp-tool-title">
+          {/* 运行态的动词扫光：只动文字不动图标，一路点点点的工具行里不会多出一堆转圈动画。 */}
+          <span
+            className={
+              status === "running" || status === "pending" ? "tsp-tool-title tsp-fx-shimmer" : "tsp-tool-title"
+            }
+          >
             <TspSpans text={localizedToolTitle(asString(p.name), p.title as TspText | undefined)} />
           </span>
           {nodeRole(node) === ASK_TOOL_ROLE ? <AskTarget p={p} id={node.id} ctx={ctx} /> : <Target p={p} ctx={ctx} />}

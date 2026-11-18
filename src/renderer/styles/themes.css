@@ -1,50 +1,50 @@
 /* 其余 9 套双模式主题（18 张色板），每套都融合 Material 3 Expressive × Fluent 2 × Liquid Glass 表面语义。
    每张色板必须声明与 tokens.css 浅色基准块完全一致的 token 集合（test/themes.test.ts 逐键校验与 WCAG 对比度检测）。 */
 
-/* ───────── 1. Claude Code（Claude · Anthropic 陶土珊瑚暖纸） ───────── */
+/* ───────── 1. Claude Code（Claude · Anthropic 陶土橙 + 暖象牙 / 暖炭） ───────── */
 [data-theme="claude-light"] {
   color-scheme: light;
 
-  --bg-sidebar: #fafafa;
-  --bg-app: #ffffff;
+  --bg-sidebar: #f5f4ef;
+  --bg-app: #faf9f5;
   --bg-raised: #ffffff;
   --bg-overlay: #ffffff;
-  --bg-sunken: #f4f4f4;
-  --bg-tool: #f7f6f5;
+  --bg-sunken: #f2f0e9;
+  --bg-tool: #f4f2ec;
   --bg-code: #1a1918;
   --bg-code-head: #242220;
   --fg-code: #f5f2ef;
   --fg-code-muted: #a69e9a;
   --border-code: rgba(255, 255, 255, 0.14);
-  --bg-hover: rgba(22, 22, 22, 0.055);
-  --bg-active: rgba(217, 119, 87, 0.13);
-  --bg-scrim: rgba(22, 22, 22, 0.32);
-  --bg-bubble: #f4f2f3;
+  --bg-hover: rgba(29, 27, 24, 0.05);
+  --bg-active: rgba(184, 79, 46, 0.11);
+  --bg-scrim: rgba(29, 27, 24, 0.3);
+  --bg-bubble: #f1efe9;
 
-  --border-subtle: rgba(22, 22, 22, 0.07);
-  --border: rgba(22, 22, 22, 0.13);
-  --border-strong: rgba(22, 22, 22, 0.24);
+  --border-subtle: rgba(29, 27, 24, 0.07);
+  --border: rgba(29, 27, 24, 0.13);
+  --border-strong: rgba(29, 27, 24, 0.24);
 
-  --text: #161616;
-  --text-2: #5c5456;
-  --text-3: #6c6365;
-  --text-disabled: #8c8284;
+  --text: #1d1b18;
+  --text-2: #574f47;
+  --text-3: #70685e;
+  --text-disabled: #8b8279;
   --text-on-accent: #ffffff;
   --text-on-danger: #ffffff;
   --control-on: #ffffff;
 
   --accent: #b84f2e;
-  --accent-soft: rgba(217, 119, 87, 0.14);
-  --accent-gradient: linear-gradient(135deg, #d97757, #c46343);
+  --accent-soft: rgba(184, 79, 46, 0.12);
+  --accent-gradient: linear-gradient(135deg, #d97757, #b84f2e);
   --selection-bg: rgba(184, 79, 46, 0.18);
   --focus-ring: #b84f2e;
   --link: #184f95;
 
   --primary: #b84f2e;
-  --primary-hover: #a14224;
+  --primary-hover: #9e4227;
   --text-on-primary: #ffffff;
 
-  --st-running: #d97757;
+  --st-running: #b84f2e;
   --st-waiting: #b56c00;
   --st-waiting-text: #854f00;
   --st-waiting-soft: rgba(181, 108, 0, 0.12);
@@ -65,25 +65,25 @@
   --diff-del-bg: rgba(198, 40, 40, 0.09);
 
   --syn-keyword: #9a3412;
-  --syn-string: #15803d;
+  --syn-string: #116b36;
   --syn-number: #8f5300;
-  --syn-comment: #685f61;
+  --syn-comment: #675e55;
   --syn-func: #9e3d1e;
   --syn-type: #0e7490;
-  --syn-punct: #5c5456;
+  --syn-punct: #5c544c;
 
-  --shadow-1: 0 1px 3px rgba(22, 22, 22, 0.05);
-  --shadow-2: 0 8px 24px rgba(22, 22, 22, 0.08), 0 1px 3px rgba(22, 22, 22, 0.04);
-  --shadow-3: 0 24px 64px rgba(22, 22, 22, 0.14), 0 0 0 1px var(--border);
-  --shadow-modal: 0 24px 64px rgba(22, 22, 22, 0.14);
-  --shadow-composer: 0 10px 28px rgba(22, 22, 22, 0.07), 0 2px 6px rgba(22, 22, 22, 0.04);
+  --shadow-1: 0 1px 3px rgba(29, 27, 24, 0.05);
+  --shadow-2: 0 8px 24px rgba(29, 27, 24, 0.08), 0 1px 3px rgba(29, 27, 24, 0.04);
+  --shadow-3: 0 24px 64px rgba(29, 27, 24, 0.14), 0 0 0 1px var(--border);
+  --shadow-modal: 0 24px 64px rgba(29, 27, 24, 0.14);
+  --shadow-composer: 0 10px 28px rgba(29, 27, 24, 0.07), 0 2px 6px rgba(29, 27, 24, 0.04);
 
-  --scrollbar-thumb: rgba(22, 22, 22, 0.18);
-  --scrollbar-thumb-hover: rgba(22, 22, 22, 0.34);
+  --scrollbar-thumb: rgba(29, 27, 24, 0.18);
+  --scrollbar-thumb-hover: rgba(29, 27, 24, 0.34);
 
-  --sb-row-selected-bg: #f6e6e0;
+  --sb-row-selected-bg: #f2e8e1;
   --sb-row-selected-shadow: inset 0 0 0 1px rgba(184, 79, 46, 0.12);
-  --sb-running-dots: #d97757;
+  --sb-running-dots: #b84f2e;
   --sb-active-pill-bg: #ffffff;
   --sb-active-pill-border: rgba(184, 79, 46, 0.22);
   --sb-active-pill-fg: #7a2d15;
@@ -95,33 +95,33 @@
 [data-theme="claude-dark"] {
   color-scheme: dark;
 
-  --bg-sidebar: #1f1f1f;
-  --bg-app: #191919;
-  --bg-raised: #232323;
-  --bg-overlay: #282828;
-  --bg-sunken: #141414;
-  --bg-tool: #212121;
-  --bg-code: #141414;
-  --bg-code-head: #212121;
-  --fg-code: #fdfdfd;
-  --fg-code-muted: #9c9395;
+  --bg-sidebar: #161513;
+  --bg-app: #1b1a18;
+  --bg-raised: #242320;
+  --bg-overlay: #292825;
+  --bg-sunken: #121110;
+  --bg-tool: #211f1d;
+  --bg-code: #131211;
+  --bg-code-head: #1d1b19;
+  --fg-code: #f5f2ee;
+  --fg-code-muted: #9d948c;
   --border-code: rgba(255, 255, 255, 0.12);
-  --bg-hover: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(217, 119, 87, 0.18);
-  --bg-scrim: rgba(10, 10, 10, 0.64);
-  --bg-bubble: #292726;
+  --bg-hover: rgba(255, 255, 255, 0.055);
+  --bg-active: rgba(217, 119, 87, 0.16);
+  --bg-scrim: rgba(9, 8, 7, 0.66);
+  --bg-bubble: #2b2926;
 
   --border-subtle: rgba(255, 255, 255, 0.075);
   --border: rgba(255, 255, 255, 0.13);
   --border-strong: rgba(255, 255, 255, 0.24);
 
-  --text: #fdfdfd;
-  --text-2: #beb6b8;
-  --text-3: #9c9395;
-  --text-disabled: #7d7577;
-  --text-on-accent: #161616;
+  --text: #f7f4ef;
+  --text-2: #bdb6ae;
+  --text-3: #9c948c;
+  --text-disabled: #7d766e;
+  --text-on-accent: #16140f;
   --text-on-danger: #1a0707;
-  --control-on: #2b2b2b;
+  --control-on: #302d2a;
 
   --accent: #d97757;
   --accent-soft: rgba(217, 119, 87, 0.18);
@@ -132,7 +132,7 @@
 
   --primary: #d97757;
   --primary-hover: #eb9170;
-  --text-on-primary: #161616;
+  --text-on-primary: #16140f;
 
   --st-running: #d97757;
   --st-waiting: #e09a4d;
@@ -157,10 +157,10 @@
   --syn-keyword: #f472b6;
   --syn-string: #4ade80;
   --syn-number: #fcd34d;
-  --syn-comment: #9c9395;
+  --syn-comment: #9c948c;
   --syn-func: #e8926f;
   --syn-type: #7dd3fc;
-  --syn-punct: #beb6b8;
+  --syn-punct: #bdb6ae;
 
   --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.32);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.42), 0 0 0 1px var(--border-subtle);
@@ -168,15 +168,15 @@
   --shadow-modal: var(--shadow-3);
   --shadow-composer: 0 12px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px var(--border-subtle);
 
-  --scrollbar-thumb: rgba(253, 253, 253, 0.2);
-  --scrollbar-thumb-hover: rgba(253, 253, 253, 0.38);
+  --scrollbar-thumb: rgba(247, 244, 239, 0.2);
+  --scrollbar-thumb-hover: rgba(247, 244, 239, 0.38);
 
-  --sb-row-selected-bg: #2f2622;
+  --sb-row-selected-bg: #2c2420;
   --sb-row-selected-shadow: inset 0 0 0 1px rgba(217, 119, 87, 0.16);
   --sb-running-dots: #d97757;
-  --sb-active-pill-bg: #2f2622;
+  --sb-active-pill-bg: #2c2420;
   --sb-active-pill-border: rgba(217, 119, 87, 0.28);
-  --sb-active-pill-fg: #fdfdfd;
+  --sb-active-pill-fg: #f7f4ef;
 
   --accent-glow: none;
   --theme-art: url("./themes/claude-dark.svg");

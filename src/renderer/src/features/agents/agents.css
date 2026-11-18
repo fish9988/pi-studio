@@ -102,23 +102,29 @@
   display: flex;
   align-items: center;
   border-radius: var(--radius-md);
+  transition: background-color var(--dur-instant) var(--ease-out);
 }
 .agents-item:hover {
   background: var(--bg-hover);
 }
+/* 选中行和侧栏的任务选中同一套语言：淡靛蓝底 + 1px 内描边（深色主题下由 tokens 换成深靛蓝） */
 .agents-item[data-current="true"] {
-  background: var(--accent-soft);
+  background: var(--sb-row-selected-bg);
+  box-shadow: var(--sb-row-selected-shadow);
+}
+.agents-item[data-current="true"] .agents-row-name {
+  font-weight: var(--fw-strong);
 }
 .agents-row {
   display: flex;
   flex: 1;
   align-items: flex-start;
-  gap: var(--space-2-5);
+  gap: var(--space-2);
   min-width: 0;
-  padding: var(--space-2);
+  padding: var(--space-1-5) var(--space-2);
   font: inherit;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
   color: var(--text);
   text-align: left;
   background: transparent;
@@ -128,7 +134,7 @@
 }
 .agents-row .agents-dot {
   /* 和第一行文字的中线对齐 */
-  margin-top: calc((var(--lh-sm) - 8px) / 2);
+  margin-top: calc((var(--lh-xs) - 8px) / 2);
 }
 .agents-row:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -147,34 +153,44 @@
   gap: var(--space-1-5);
   min-width: 0;
 }
-/* 名字按自己的宽度，不被标签挤（最多占一行的 60%，再长才省略）；窄面板里先让标签省略：名字是这一行最要紧的（2026-10-29） */
+/* 名字按自己的宽度，不被标签挤（最多占一行的 55%，再长才省略）；窄面板里先让标签省略：名字是这一行最要紧的（2026-10-29） */
 .agents-row-name {
   flex: none;
-  max-width: 60%;
+  max-width: 55%;
   overflow: hidden;
   font-weight: var(--fw-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.agents-chip {
+/* 类型 / 后台标签排一起（两枚一起被挤掉，而不是各占一半名字的宽度） */
+.agents-tags {
+  display: inline-flex;
   flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-1);
   min-width: 0;
   overflow: hidden;
-  padding: 0 var(--space-1-5);
+}
+.agents-chip {
+  flex: none;
+  max-width: 14ch;
+  overflow: hidden;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  color: var(--text-2);
   font-size: var(--fs-2xs);
   line-height: var(--lh-2xs);
-  color: var(--text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: var(--bg-sunken);
-  border-radius: var(--radius-sm);
 }
 .agents-row-status {
   flex: none;
   margin-left: auto;
   padding-left: var(--space-2);
-  font-size: var(--fs-xs);
   color: var(--text-3);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
 }
 .agents-row-status[data-status="running"],
 .agents-row-status[data-status="pending"] {
@@ -210,11 +226,17 @@
 }
 .agents-row-line {
   overflow: hidden;
-  font-size: var(--fs-xs);
-  line-height: var(--lh-xs);
   color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 窄面板先收标签，名字和状态保得住 */
+@container (max-width: 320px) {
+  .agents-tags {
+    display: none;
+  }
 }
 
 /* 详情：列表下方，细线隔开，不再套卡片 */
@@ -222,9 +244,9 @@
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin-top: var(--space-2);
-  padding: var(--space-4) var(--space-2) var(--space-2);
+  padding: var(--space-3-5) var(--space-2) var(--space-1-5);
   border-top: 1px solid var(--border-subtle);
 }
 .agents-detail-head {
@@ -232,30 +254,72 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 .agents-detail-title {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: var(--space-1-5);
   min-width: 0;
 }
 .agents-detail-name {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  font-size: var(--fs-base);
-  line-height: var(--lh-base);
-  font-weight: var(--fw-strong);
   color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-strong);
+  line-height: var(--lh-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 模型是标签而不是一行正文：不给它和名字抢视线的字重与对比 */
 .agents-detail-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agents-detail-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+/* 运行中的当前工具：光晕点 + 工具名（等宽）+ 意图（单行省略） */
+.agents-live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  padding: var(--space-1-5) var(--space-2);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-2xs);
+}
+.agents-live-tool {
+  flex: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-weight: var(--fw-medium);
+}
+.agents-live-intent {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
   color: var(--text-3);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -266,9 +330,9 @@
 .agents-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3) var(--space-3);
+  gap: var(--space-2-5) var(--space-3);
   margin: 0;
-  padding: var(--space-3);
+  padding: var(--space-2-5) var(--space-3);
   background: var(--bg-sunken);
   border-radius: var(--radius-md);
 }
@@ -282,9 +346,9 @@
   min-width: 0;
 }
 .agents-stat dt {
-  font-size: var(--fs-xs);
-  line-height: var(--lh-xs);
-  color: var(--text-2);
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  line-height: var(--lh-2xs);
 }
 /* 值单行（“23% · 81K / 350K”这类长值也不折行，2026-10-25 仓库所有者）；面板很窄放不下时省略号，悬停 title 是全文 */
 .agents-stat dd {
@@ -420,18 +484,19 @@
 }
 .agents-act-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 8ch) auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 10ch) auto minmax(0, 1fr);
   gap: var(--space-2);
   align-items: baseline;
   width: 100%;
   padding: var(--space-1-5) var(--space-2);
   font: inherit;
   font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
   color: var(--text-2);
   text-align: left;
   background: none;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 .agents-act-row:hover {
@@ -443,6 +508,8 @@
 }
 .agents-act-time {
   color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
 }
 .agents-act-agent {
@@ -466,4 +533,14 @@
 }
 .agents-act-text b {
   font-weight: var(--fw-strong);
+}
+
+/* ───────── ZCode 界面风格：选中靠底色 + 左侧竖条，统计块用 1px 描边而不是色块 ───────── */
+:root[data-ui-style="zcode"] .agents-item[data-current="true"] {
+  background: var(--bg-active);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+:root[data-ui-style="zcode"] .agents-stats {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
 }

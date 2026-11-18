@@ -4,7 +4,9 @@ import type { sidebar as zhCN } from "../zh-CN/sidebar.ts";
 export const sidebar = {
   newTask: "New task",
   search: "Search",
-  searchHistory: "Sessions",
+  listTitle: "Task list",
+  sectionProjects: "Projects",
+  sectionTasks: "Tasks",
   historyOrder: "Arrange sessions",
   historyByFolder: "Folder",
   historyByTime: "Time",

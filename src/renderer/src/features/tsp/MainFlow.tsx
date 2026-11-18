@@ -7,8 +7,9 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import type { TaskId } from "../../../../shared/ipc.ts";
 import type { DocNode, DocSurface, TspDocument } from "../../../../shared/tsp/document.ts";
 import type { StatusNote } from "../../../../shared/tsp/status-notes.ts";
+import type { TspText } from "../../../../shared/tsp/tsp.generated.ts";
 import { useShellValue } from "../../app/shell-store.ts";
-import { ChevronDown, Code, External, FileIcon, Globe } from "../../icons.tsx";
+import { ChevronDown, Code, Diff, External, FileIcon, Globe } from "../../icons.tsx";
 import { openReview } from "../../store/review-store.ts";
 import { currentLocale, useSettings } from "../../store/settings-store.ts";
 import { openFilePreview, openInlineArtifact, type InlineArtifact } from "../file-preview/index.ts";
@@ -18,6 +19,7 @@ import { Clamp } from "./Clamp.tsx";
 import { formatElapsed } from "./fmt.ts";
 import { TspIcon } from "./icons.tsx";
 import type { TspContext } from "./node-props.ts";
+import { toolActionText, toolTargetText } from "./nodes/work.tsx";
 import { dropGroupFolds, groupFoldKey, useGroupFold } from "./process-fold.ts";
 import { ownsReadingPosition, subscribeReadingChanges } from "./reading-hold.ts";
 import { useSessionExtras } from "./session-extras-store.ts";
@@ -1012,10 +1014,10 @@ function DshDeliverableCard({ item, ctx }: { item: DeliverableItem; ctx: TspCont
   );
 }
 /**
- * 反重力（Antigravity）风格的「N files changed +M -K」圆角卡片面板（图 4）：
- * - 独立圆角卡片容器，顶栏左侧显示 N files changed +added -removed 折叠开关，右侧带「评审 / Review」按钮；
- * - 已归入变更列表（write / edit）的文件不再在上方重复渲染巨型卡片，消除图 1 中 CHANGELOG.md 重复出现两次的视觉冲突；
- * - 面板内每个单文件行默认收起 Diff（点击行展开单文件内联 Diff，点击文件名直接在右侧栏预览）。
+ * 轮级变更汇总胶囊（`N 个文件已变更 +M -K ⌄` + 右侧带图标的评审按钮）：
+ * - 一整行圆角条，左侧折开箭头 + 变更文件数 + 增删行数，右侧「评审 / Review」直接进变更面板；
+ * - 已归入变更列表（write / edit）的文件不再在上方重复渲染巨型卡片；
+ * - 面板内每个文件行显示灰色相对路径与红绿行号统计，点击行展开单文件内联 Diff，点击文件名直接在右侧栏预览。
  */
 function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly DeliverableItem[] }) {
   const autoCollapseDiffs = useSettings()?.autoCollapseDiffs ?? true;
@@ -1086,15 +1088,16 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
               onClick={() => setPanelOpen((v) => !v)}
               data-testid="tsp-ag-changes-toggle"
             >
+              <span className="tsp-chev" data-collapsed={!panelOpen || undefined} aria-hidden="true">
+                <ChevronDown size={12} />
+              </span>
               <span className="tsp-ag-count">
-                {changedFiles.length} {changedFiles.length === 1 ? "file changed" : "files changed"}
+                {changedFiles.length}{" "}
+                {zh ? "个文件已变更" : changedFiles.length === 1 ? "file changed" : "files changed"}
               </span>
               <span className="tsp-ag-totals">
-                <span className="tsp-dsh-file-stat tsp-dsh-file-add">+{totalAdded}</span>
-                <span className="tsp-dsh-file-stat tsp-dsh-file-del">-{totalRemoved}</span>
-              </span>
-              <span className="tsp-dsh-file-chev" data-open={panelOpen ? "" : undefined} aria-hidden="true">
-                <ChevronDown />
+                <span className="tsp-ag-add">+{totalAdded}</span>
+                <span className="tsp-ag-del">-{totalRemoved}</span>
               </span>
             </button>
             {panelOpen && changedFiles.length > 8 && (
@@ -1112,9 +1115,10 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
               type="button"
               className="tsp-ag-review-btn"
               onClick={onReviewClick}
+              title={zh ? "在右侧栏逐行评审本次变更" : "Review these changes"}
               data-testid="tsp-ag-changes-review"
             >
-              <FileIcon size={12} />
+              <Diff size={13} />
               <span>{zh ? "评审" : "Review"}</span>
             </button>
           </div>
@@ -1136,63 +1140,116 @@ function DeliverableShelf({ ctx, items }: { ctx: TspContext; items: readonly Del
   );
 }
 
-type ProcessActivityKind = "read" | "search" | "edit" | "command" | "web" | "subagent" | "plan";
+/**
+ * 过程步骤的语义类别：统计行据此把「调用了几次工具」翻译成用户看得懂的说法
+ * （读取了 4 个文件、搜索了 2 次、运行了 3 次命令）。
+ */
+type WorkStepKind = "read" | "search" | "edit" | "command" | "web" | "agent" | "plan" | "other";
 
-function classifyToolActivity(name: string): ProcessActivityKind | null {
-  const n = name.toLowerCase();
+function workStepKind(name: string | undefined): WorkStepKind {
+  const n = (name ?? "").toLowerCase();
   if (n === "read" || n === "read_file" || n === "view") return "read";
   if (n === "grep" || n === "glob" || n === "find" || n === "ls" || n === "search") return "search";
   if (n === "edit" || n === "write" || n === "ast_edit" || n === "apply_patch") return "edit";
-  if (n === "bash" || n === "eval" || n === "shell") return "command";
+  if (n === "bash" || n === "powershell" || n === "shell" || n === "eval") return "command";
   if (n === "web_search" || n === "fetch" || n === "browse") return "web";
-  if (n === "task" || n === "subagent") return "subagent";
+  if (n === "task" || n === "subagent" || n === "agent") return "agent";
   if (n === "todo") return "plan";
-  return null;
+  return "other";
 }
 
-function activityLabel(kind: ProcessActivityKind, zh: boolean): string {
-  switch (kind) {
-    case "read":
-      return zh ? "读取" : "Read";
-    case "search":
-      return zh ? "搜索" : "Search";
-    case "edit":
-      return zh ? "编辑" : "Edit";
-    case "command":
-      return zh ? "命令" : "Command";
-    case "web":
-      return zh ? "网络" : "Web";
-    case "subagent":
-      return zh ? "子代理" : "Subagent";
-    case "plan":
-      return zh ? "待办" : "Plan";
+/** 只有这几类才和相邻步骤并成一条统计行：编辑要就地看 diff、子代理要跟进度，都留在流里单独一行。 */
+function isMergeableStep(kind: WorkStepKind): boolean {
+  return kind === "read" || kind === "search" || kind === "command" || kind === "web";
+}
+
+interface WorkStepCounts {
+  read: number;
+  search: number;
+  edit: number;
+  command: number;
+  web: number;
+  agent: number;
+}
+
+function emptyWorkCounts(): WorkStepCounts {
+  return { read: 0, search: 0, edit: 0, command: 0, web: 0, agent: 0 };
+}
+
+function countWorkSteps(taskId: TaskId, sf: string, ids: readonly string[]): WorkStepCounts {
+  const counts = emptyWorkCounts();
+  for (const id of ids) {
+    const node = peekTspNode(taskId, sf, id);
+    if (node?.k !== "tool" || typeof node.p["name"] !== "string") continue;
+    const kind = workStepKind(node.p["name"]);
+    if (kind === "plan" || kind === "other") continue;
+    counts[kind] += 1;
   }
+  return counts;
+}
+
+/** 语义统计：`读取了 4 个文件、搜索了 2 次`；一个可说的步骤都没有时返回空串（调用方退回思考 / 工具次数）。 */
+function formatWorkStatistics(counts: WorkStepCounts, zh: boolean): string {
+  const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+  const parts: string[] = [];
+  if (counts.read > 0) parts.push(zh ? `读取了 ${counts.read} 个文件` : `Read ${plural(counts.read, "file", "files")}`);
+  if (counts.search > 0) parts.push(zh ? `搜索了 ${counts.search} 次` : plural(counts.search, "search", "searches"));
+  if (counts.command > 0)
+    parts.push(zh ? `运行了 ${counts.command} 次命令` : `Ran ${plural(counts.command, "command", "commands")}`);
+  if (counts.web > 0) parts.push(zh ? `浏览了 ${counts.web} 个网页` : plural(counts.web, "page", "pages"));
+  if (counts.edit > 0)
+    parts.push(zh ? `修改了 ${counts.edit} 个文件` : `Changed ${plural(counts.edit, "file", "files")}`);
+  if (counts.agent > 0)
+    parts.push(zh ? `派发 ${counts.agent} 个子代理` : plural(counts.agent, "subagent", "subagents"));
+  return parts.join(zh ? "、" : ", ");
+}
+
+/** 正在跑的那一步：过程组头在运行中显示的就是它（取最后一个 running / pending 的工具）。 */
+function activeStepText(taskId: TaskId, sf: string, ids: readonly string[]): string {
+  for (let i = ids.length - 1; i >= 0; i -= 1) {
+    const node = peekTspNode(taskId, sf, ids[i]!);
+    if (node?.k !== "tool") continue;
+    const status = node.p["status"];
+    if (status !== "running" && status !== "pending") continue;
+    const name = typeof node.p["name"] === "string" ? node.p["name"] : undefined;
+    const verb = toolActionText(name, node.p["title"] as TspText | undefined);
+    const target = toolTargetText(node.p);
+    return target === "" ? verb : `${verb} ${target}`;
+  }
+  return "";
 }
 
 type ProcessRenderItem =
   | { kind: "single"; id: string }
-  | {
-      kind: "explore-group";
-      key: string;
-      ids: readonly string[];
-      reads: number;
-      searches: number;
-      previewNames: string;
-    };
+  | { kind: "work-group"; key: string; ids: readonly string[]; counts: WorkStepCounts; previewNames: string };
 
-function foldExplorationIds(
-  taskId: TaskId,
-  sf: string,
-  ids: readonly string[],
-  enabled: boolean,
-): { items: readonly ProcessRenderItem[]; hasExploreRuns: boolean } {
-  const isExploreTool = (id: string): "read" | "search" | null => {
+/** 一组连续步骤里读过的文件名（折叠统计行右侧那串浅灰文字；超过三个只报剩余数量）。 */
+function readFileNames(taskId: TaskId, sf: string, ids: readonly string[]): string {
+  const names: string[] = [];
+  for (const id of ids) {
+    const node = peekTspNode(taskId, sf, id);
+    if (node?.k !== "tool") continue;
+    if (workStepKind(typeof node.p["name"] === "string" ? node.p["name"] : "") !== "read") continue;
+    const target = typeof node.p["target"] === "string" ? node.p["target"] : "";
+    const clean = target.replace(/(?::\d+(?:[-:]\d+)?|\s+\(\d+.*\))$/, "").trim();
+    const parts = clean.split(/[\\/]/).filter(Boolean);
+    const base = parts[parts.length - 1];
+    if (base !== undefined && base !== "" && !names.includes(base)) names.push(base);
+  }
+  const shown = names.slice(0, 3).join(", ");
+  return names.length > 3 ? `${shown} +${names.length - 3}` : shown;
+}
+
+/**
+ * 连续的工作步骤并成一条统计行：一组至少两步（read / search / command / web），中间夹着的思考算在同一组里。
+ * 运行中的那一步不进组 —— 命令输出、文件内容要当场看见，它自己留一行（动词扫光），并进组的只有已完成的步骤。
+ */
+function foldWorkIds(taskId: TaskId, sf: string, ids: readonly string[]): readonly ProcessRenderItem[] {
+  const completedStep = (id: string): WorkStepKind | null => {
     const node = peekTspNode(taskId, sf, id);
     if (!node || node.k !== "tool" || node.p["status"] !== "done") return null;
-    const name = typeof node.p["name"] === "string" ? node.p["name"].toLowerCase() : "";
-    if (name === "read" || name === "read_file") return "read";
-    if (name === "grep" || name === "glob" || name === "find" || name === "ls") return "search";
-    return null;
+    const kind = workStepKind(typeof node.p["name"] === "string" ? node.p["name"] : "");
+    return isMergeableStep(kind) ? kind : null;
   };
   const isThought = (id: string): boolean => {
     const node = peekTspNode(taskId, sf, id);
@@ -1200,87 +1257,82 @@ function foldExplorationIds(
     return typeof role === "string" && role.startsWith("omp.thinking");
   };
 
-  let hasExploreRuns = false;
   const out: ProcessRenderItem[] = [];
   let i = 0;
   while (i < ids.length) {
-    const firstKind = isExploreTool(ids[i]!);
-    if (firstKind === null) {
+    if (completedStep(ids[i]!) === null) {
       out.push({ kind: "single", id: ids[i]! });
       i += 1;
       continue;
     }
-    let j = i;
+    let scan = i;
     let lastToolIdx = i;
-    while (j < ids.length && (isExploreTool(ids[j]!) !== null || isThought(ids[j]!))) {
-      if (isExploreTool(ids[j]!) !== null) lastToolIdx = j;
-      j += 1;
+    while (scan < ids.length && (completedStep(ids[scan]!) !== null || isThought(ids[scan]!))) {
+      if (completedStep(ids[scan]!) !== null) lastToolIdx = scan;
+      scan += 1;
     }
     const runIds = ids.slice(i, lastToolIdx + 1);
-    let reads = 0;
-    let searches = 0;
-    const names: string[] = [];
-    for (const rid of runIds) {
-      const k = isExploreTool(rid);
-      if (k === "read") {
-        reads += 1;
-        const node = peekTspNode(taskId, sf, rid);
-        const target = typeof node?.p["target"] === "string" ? node.p["target"] : "";
-        const clean = target.replace(/(?::\d+(?:[-:]\d+)?|\s+\(\d+.*\))$/, "").trim();
-        const parts = clean.split(/[\\/]/).filter(Boolean);
-        const base = parts[parts.length - 1];
-        if (base && !names.includes(base)) names.push(base);
-      } else if (k === "search") {
-        searches += 1;
-      }
-    }
-    if (reads + searches >= 2) {
-      hasExploreRuns = true;
-      if (enabled) {
-        const previewNames = names.slice(0, 3).join(", ") + (names.length > 3 ? ` +${names.length - 3}` : "");
-        out.push({
-          kind: "explore-group",
-          key: `exp-${runIds[0]}`,
-          ids: runIds,
-          reads,
-          searches,
-          previewNames,
-        });
-        i = lastToolIdx + 1;
-        continue;
-      }
+    const counts = countWorkSteps(taskId, sf, runIds);
+    if (counts.read + counts.search + counts.command + counts.web >= 2) {
+      out.push({
+        kind: "work-group",
+        key: `work-${runIds[0]}`,
+        ids: runIds,
+        counts,
+        previewNames: readFileNames(taskId, sf, runIds),
+      });
+      i = lastToolIdx + 1;
+      continue;
     }
     out.push({ kind: "single", id: ids[i]! });
     i += 1;
   }
-  return { items: out, hasExploreRuns };
+  return out;
 }
 
-function ExplorationGroupRow({
+/** 统计行的图标取这一组里最「重」的那类步骤：命令 > 网页 > 搜索 > 读取。 */
+function workGroupIcon(counts: WorkStepCounts): string {
+  if (counts.command > 0) return "terminal";
+  if (counts.web > 0) return "globe";
+  if (counts.search > 0) return "search";
+  return "doc";
+}
+
+function WorkGroupRow({
   item,
   after,
   ctx,
 }: {
-  item: Extract<ProcessRenderItem, { kind: "explore-group" }>;
+  item: Extract<ProcessRenderItem, { kind: "work-group" }>;
   after: ReadonlyMap<string, StatusNote[]>;
   ctx: TspContext;
 }) {
   const [open, setOpen] = useState(false);
   const zh = currentLocale() === "zh-CN";
-  const parts: string[] = [];
-  if (item.reads > 0) parts.push(zh ? `读取 ${item.reads} 个文件` : `Read ${item.reads} files`);
-  if (item.searches > 0) parts.push(zh ? `搜索 ${item.searches} 次` : `${item.searches} searches`);
+  const statistics = formatWorkStatistics(item.counts, zh);
   return (
-    <div className="tsp-explore-group" data-open={open || undefined} data-testid="tsp-explore-group">
-      <button type="button" className="tsp-explore-group-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <span className="tsp-explore-group-title">{parts.join(zh ? " · " : " · ")}</span>
-        {item.previewNames !== "" && <span className="tsp-explore-group-preview">{item.previewNames}</span>}
-        <span className="tsp-chev" data-collapsed={!open || undefined}>
+    <div className="tsp-work-group" data-open={open || undefined} data-testid="tsp-work-group">
+      <button
+        type="button"
+        className="tsp-work-group-head"
+        aria-expanded={open}
+        aria-label={statistics}
+        onClick={() => setOpen((value) => !value)}
+        data-testid="tsp-work-group-summary"
+      >
+        <span className="tsp-work-group-ic" aria-hidden="true">
+          <TspIcon name={workGroupIcon(item.counts)} size={13} />
+        </span>
+        <span className="tsp-work-group-stats" title={statistics}>
+          {statistics}
+        </span>
+        {item.previewNames !== "" && <span className="tsp-work-group-preview">{item.previewNames}</span>}
+        <span className="tsp-chev" data-collapsed={!open || undefined} aria-hidden="true">
           <ChevronDown size={12} />
         </span>
       </button>
       {open && (
-        <div className="tsp-explore-group-children">
+        <div className="tsp-work-group-children">
           {item.ids.map((id) => (
             <Fragment key={id}>
               <TspNode id={id} ctx={ctx} />
@@ -1388,7 +1440,6 @@ function ProcessGroup({
   const isTrajectory = conversationView === "trajectory";
   const effectiveFolded = isTrajectory ? false : folded;
   const zh = currentLocale() === "zh-CN";
-  const label = formatProcessSummary(thoughts, tools);
   // turnIndex 为 -1（还没出现第一条用户消息）时没有对应的用量脚注，不要去读 turns[-1]。
   const extraTurnMs = useSessionExtras(ctx.taskId, (extras) =>
     turnIndex >= 0 ? (extras.turns[turnIndex]?.elapsedMs ?? 0) : 0,
@@ -1396,23 +1447,15 @@ function ProcessGroup({
   // 已结算耗时优先；没有就用本轮用量脚注里的耗时（它只在回合结束后刷新，所以走字的活交给 LiveProcessTime）。
   const baseMs = durationMs > 0 ? durationMs : extraTurnMs;
 
-  const activitiesText = (() => {
-    const counts = new Map<ProcessActivityKind, number>();
-    for (const id of ids) {
-      const node = peekTspNode(ctx.taskId, ctx.sf, id);
-      if (node?.k === "tool" && typeof node.p["name"] === "string") {
-        const k = classifyToolActivity(node.p["name"]);
-        if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([k]) => activityLabel(k, zh))
-      .join(" · ");
-  })();
+  const counts = countWorkSteps(ctx.taskId, ctx.sf, ids);
+  const statistics = formatWorkStatistics(counts, zh) || formatProcessSummary(thoughts, tools);
+  // 运行中直接报当前这一步（读取 package.json / 运行 npm test），结束后收拢成一条语义统计。
+  const runningStep = running ? activeStepText(ctx.taskId, ctx.sf, ids) : "";
+  const summaryDetail = runningStep !== "" ? runningStep : statistics;
+  // 计时器不到 100ms 不写（LiveProcessTime 自身也不画）：这段时间不把「已工作」和分隔号单独露出来。
+  const showTime = running || baseMs >= 100;
 
-  const { items: renderItems } = foldExplorationIds(ctx.taskId, ctx.sf, ids, false);
+  const renderItems = foldWorkIds(ctx.taskId, ctx.sf, ids);
 
   // ids 每批流式更新都是新数组：用 ref 读最新的，回调本身保持稳定（否则每批都换引用，依赖它的效应会被反复触发）。
   const idsRef = useRef(ids);
@@ -1499,6 +1542,7 @@ function ProcessGroup({
           type="button"
           className="tsp-process-summary"
           data-running={running || undefined}
+          data-settled={(!running && settled) || undefined}
           aria-expanded={!effectiveFolded}
           onClick={() => {
             if (!isTrajectory) applyFold("toggle");
@@ -1506,22 +1550,30 @@ function ProcessGroup({
           data-testid="tsp-process-summary"
         >
           {running ? <span className="tsp-process-live-dot" aria-hidden="true" /> : <ProcessCheckIcon />}
-          <span className="tsp-process-summary-text">{label}</span>
-          {effectiveFolded && activitiesText !== "" && (
-            <>
-              <span className="tsp-process-summary-sep" aria-hidden="true">
-                ·
-              </span>
-              <span className="tsp-process-summary-acts">{activitiesText}</span>
-            </>
+          {showTime && (
+            <span className="tsp-process-summary-text">
+              {running ? (zh ? "正在工作" : "Working") : zh ? "已工作" : "Worked"}
+            </span>
           )}
           <LiveProcessTime
             className="tsp-process-summary-time"
             baseMs={baseMs}
             running={running}
-            prefix=" · "
+            prefix=" "
             testId="tsp-process-summary-time"
           />
+          {summaryDetail !== "" && (
+            <>
+              {showTime && (
+                <span className="tsp-process-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+              )}
+              <span className="tsp-process-summary-acts" title={summaryDetail}>
+                {summaryDetail}
+              </span>
+            </>
+          )}
           {!isTrajectory && (
             <span className="tsp-process-summary-chev" aria-hidden="true">
               <ChevronDown size={12} />
@@ -1549,8 +1601,8 @@ function ProcessGroup({
             />
           )}
           {renderItems.map((item) =>
-            item.kind === "explore-group" ? (
-              <ExplorationGroupRow key={item.key} item={item} after={after} ctx={ctx} />
+            item.kind === "work-group" ? (
+              <WorkGroupRow key={item.key} item={item} after={after} ctx={ctx} />
             ) : (
               <Fragment key={item.id}>
                 <TspNode id={item.id} ctx={ctx} />

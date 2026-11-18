@@ -171,29 +171,44 @@ export function AgentDetail({ taskId, agent, busy }: { taskId: TaskId; agent: Hu
             </Badge>
           )}
         </span>
-        {canFocus(agent.status) && (
-          <Button
-            size="sm"
-            variant="primary"
-            testId="agents-focus"
-            disabled={busy}
-            onClick={() => void focusAgent(t, taskId, agent.name)}
-          >
-            {t("agents.focus")}
-          </Button>
-        )}
-        {canKill(agent.status) && <KillControl taskId={taskId} name={agent.name} busy={busy} />}
-        {canRevive(agent.status) && (
-          <Button
-            size="sm"
-            testId="agents-revive"
-            disabled={busy}
-            onClick={() => void reviveAgent(t, taskId, agent.name)}
-          >
-            {t("agents.revive")}
-          </Button>
-        )}
+        <span className="agents-detail-actions">
+          {canFocus(agent.status) && (
+            <Button
+              size="sm"
+              variant="primary"
+              testId="agents-focus"
+              disabled={busy}
+              onClick={() => void focusAgent(t, taskId, agent.name)}
+            >
+              {t("agents.focus")}
+            </Button>
+          )}
+          {canKill(agent.status) && <KillControl taskId={taskId} name={agent.name} busy={busy} />}
+          {canRevive(agent.status) && (
+            <Button
+              size="sm"
+              testId="agents-revive"
+              disabled={busy}
+              onClick={() => void reviveAgent(t, taskId, agent.name)}
+            >
+              {t("agents.revive")}
+            </Button>
+          )}
+        </span>
       </header>
+
+      {/* 运行中：正在用的工具 + 它的意图（就是列表第二行的实时版，详情里给一眼） */}
+      {isAgentActive(agent.status) && agent.tool !== null && (
+        <div className="agents-live" data-testid="agents-live" data-tool={agent.tool.name}>
+          <span className="agents-dot" data-status="running" aria-hidden="true" />
+          <span className="agents-live-tool">{agent.tool.name}</span>
+          {agent.tool.intent !== "" && (
+            <span className="agents-live-intent" title={agent.tool.intent}>
+              {agent.tool.intent}
+            </span>
+          )}
+        </div>
+      )}
 
       <dl className="agents-stats">
         {progress !== null && <Stat label={t("agents.progress")} value={`${progress}%`} />}

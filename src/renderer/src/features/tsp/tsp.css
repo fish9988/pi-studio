@@ -2167,17 +2167,13 @@
 .tsp-tool.st-error {
   --tsp-tool-c: var(--st-error);
 }
+/* 工具行一律扁平：不套卡片边框、不上实底，只留状态色和悬停高亮，让过程区看起来是一列对齐的单行。
+ * transition 保留：状态色（运行 / 出错）是淡入的，不是直接跳过去。 */
 .tsp-tool.card {
-  border-radius: var(--radius-lg);
-  background: var(--bg-tool);
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: none;
+  box-shadow: none;
   transition: background-color var(--dur-base) var(--ease-out);
-}
-.tsp-tool.card.st-running {
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-tool));
-}
-.tsp-tool.card.st-error {
-  background: var(--st-error-soft);
 }
 .tsp-tool-bar {
   display: none;
@@ -2246,9 +2242,12 @@
   align-items: center;
   gap: var(--space-2);
   min-height: var(--row-tool);
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-lg);
-  color: var(--text);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 .tsp-tool.inline > .tsp-tool-head {
   padding: 0;
@@ -2283,7 +2282,24 @@
 }
 .tsp-tool-title {
   flex: none;
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-regular);
+  color: var(--text-3);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.tsp-tool-head:hover .tsp-tool-title {
+  color: var(--text-2);
+}
+/* 折叠箭头平时不画：悬停、键盘聚焦或已经展开时才出现（展开状态要一直看得到收起入口） */
+.tsp-tool-head > .tsp-chev {
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.tsp-tool-head:hover > .tsp-chev,
+.tsp-tool-head:focus-visible > .tsp-chev,
+.tsp-tool-head > .tsp-chev:not([data-collapsed]) {
+  opacity: 1;
 }
 .tsp-tool-target {
   flex: 0 1 auto;
@@ -2330,7 +2346,7 @@
 }
 .tsp-tool-target .name {
   color: var(--text);
-  font-weight: var(--fw-strong);
+  font-weight: var(--fw-medium);
 }
 .tsp-tool-target .ln,
 .tsp-tool-target .q {
@@ -3435,46 +3451,43 @@
   animation: tsp-pulse var(--dur-breathe) var(--tick-breathe) infinite;
   animation-play-state: var(--play-state);
 }
-/* 过程摘要胶囊：`[●/✓] 执行 X 次思考，调用 Y 次工具 · 4.2s ⌄` */
+/* 过程摘要：一条安静的单行（`✓ 已工作 12s · 读取了 4 个文件`），不是按钮胶囊；只有悬停时才浮出一层浅底 */
 .tsp-process-summary {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 28px;
-  padding: 2px 12px;
-  margin-left: -2px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-tool) 78%, transparent);
-  color: var(--text-2);
+  gap: var(--space-1);
+  max-width: 100%;
+  min-height: 26px;
+  padding: 2px var(--space-1-5);
+  margin-left: calc(var(--space-1-5) * -1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: var(--fw-regular);
   cursor: pointer;
   transition:
     color var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
+    background-color var(--dur-fast) var(--ease-out);
 }
 .tsp-process-summary[data-running] {
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
-  color: var(--accent);
+  color: var(--text-2);
 }
 .tsp-process-summary:hover {
-  color: var(--text);
-  background: var(--bg-tool);
-  border-color: var(--border);
+  color: var(--text-2);
+  background: var(--bg-hover);
 }
-.tsp-process-summary:active {
-  transform: scale(0.985);
+.tsp-process-summary-text {
+  flex: none;
+  white-space: nowrap;
 }
 .tsp-process-summary-icon {
   display: inline-flex;
   flex: none;
-  color: var(--st-done);
+  color: var(--text-3);
 }
 .tsp-process-summary-sep {
   color: var(--text-3);
@@ -3499,21 +3512,21 @@
 .tsp-process-summary[aria-expanded="false"] .tsp-process-summary-chev {
   transform: rotate(-90deg);
 }
-/* 展开后的统一过程托盘 —— 保持左阅读轴与正文对齐（margin-inline 与 padding-inline 对冲），左缘挂快捷折叠轨 */
+/* 展开后的过程列表：不再套一层卡片底，和正文同底色；靠行距与左缘折叠轨分层 */
 .tsp-process-group-body {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
-  max-width: calc(100% + 16px);
-  margin-top: 6px;
-  margin-inline: -8px;
-  padding: 6px 8px;
-  background: color-mix(in srgb, var(--bg-tool) 76%, transparent);
-  box-shadow: var(--shadow-1);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  max-width: 100%;
+  margin-top: 2px;
+  margin-inline: 0;
+  padding: 2px 0;
+  background: none;
+  box-shadow: none;
+  border: 0;
+  border-radius: 0;
   animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
 .tsp-collapse-rail {
@@ -3598,152 +3611,82 @@
     transform: translateY(0);
   }
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-section[data-role^="omp.thinking"]
-  > .tsp-section-head {
+/* 过程区里的思考行与工具行：一条一行，只留间距和对齐；卡片底、边框、左侧状态竖条都不要 */
+.tsp-process-group-body .tsp-section[data-role^="omp.thinking"] > .tsp-section-head {
   width: 100%;
-  min-height: 28px;
-  padding: 3px 8px;
+  min-height: var(--row-tool);
+  padding: 3px var(--space-2);
   margin-left: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-style: normal;
   color: var(--text-3);
   transition:
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-section[data-role^="omp.thinking"]
-  > .tsp-section-head:hover {
+.tsp-process-group-body .tsp-section[data-role^="omp.thinking"] > .tsp-section-head:hover {
   background: var(--bg-hover);
   color: var(--text-2);
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-section[data-role^="omp.thinking"]
-  > .tsp-section-head
-  > .tsp-head {
+.tsp-process-group-body .tsp-section[data-role^="omp.thinking"] > .tsp-section-head > .tsp-head {
   flex: 0 1 auto;
   max-width: 100%;
   color: var(--text-3);
   font-weight: var(--fw-regular);
-  font-size: 13px;
+  font-size: var(--fs-sm);
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-section[data-role^="omp.thinking"]
-  > .tsp-section-body {
+.tsp-process-group-body .tsp-section[data-role^="omp.thinking"] > .tsp-section-body {
   animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children) > .tsp-tool {
-  background: transparent;
-  border-radius: 6px;
-  box-shadow: none;
-  transition: background-color var(--dur-base) var(--ease-out);
-}
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool
-  > .tsp-tool-bar {
+.tsp-process-group-body .tsp-tool-bar {
   display: none;
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool
-  > .tsp-tool-head {
-  min-height: 28px;
-  padding: 3px 8px;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--text-2);
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+.tsp-process-group-body .tsp-tool-head {
+  font-size: var(--fs-sm);
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool
-  > .tsp-tool-head:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool
-  > .tsp-tool-head
-  .tsp-tool-title {
-  font-weight: var(--fw-regular);
-  color: var(--text-2);
-}
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool
-  > .tsp-tool-head
-  > .tsp-tool-ic {
-  display: inline-flex;
+.tsp-process-group-body .tsp-tool-ic {
   color: var(--text-3);
-  opacity: 0.85;
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool
-  > .tsp-tool-head
-  .tsp-tool-title
-  + .tsp-tool-target::before {
-  content: "· ";
-  color: var(--text-3);
-  font-weight: var(--fw-regular);
-}
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool.collapsed
-  > .tsp-tool-body,
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool.collapsed
-  > .tsp-tool-clamp {
+.tsp-process-group-body .tsp-tool.collapsed > .tsp-tool-body,
+.tsp-process-group-body .tsp-tool.collapsed > .tsp-tool-clamp {
   display: none;
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool:not(.collapsed)
-  > .tsp-tool-body {
-  margin: 4px 0 6px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
+/* 展开的工具体：缩到动词下面，不带边框，底比正文沉一层 */
+.tsp-process-group-body .tsp-tool:not(.collapsed) > .tsp-tool-body {
+  margin: 2px 0 var(--space-1-5) 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: var(--bg-sunken);
   max-height: min(260px, 40vh);
   overflow-y: auto;
   animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
-:is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool.inline
-  > .tsp-tool-body {
+.tsp-process-group-body .tsp-tool.inline > .tsp-tool-body {
   padding: var(--space-1-5) var(--space-3) var(--space-2);
   box-shadow: none;
 }
-.tsp-explore-group-children,
+.tsp-work-group-children,
 .tsp-dsh-file-body,
 .tsp-ag-list {
   animation: tsp-fold-in var(--dur-fast) var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-    > .tsp-section[data-role^="omp.thinking"]
-    > .tsp-section-body,
-  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-    > .tsp-tool:not(.collapsed)
-    > .tsp-tool-body,
-  .tsp-explore-group-children,
+  .tsp-process-group-body .tsp-section[data-role^="omp.thinking"] > .tsp-section-body,
+  .tsp-process-group-body .tsp-tool:not(.collapsed) > .tsp-tool-body,
+  .tsp-work-group-children,
   .tsp-dsh-file-body,
   .tsp-ag-list {
     animation: none;
   }
 }
-:root[data-motion="reduced"]
-  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-section[data-role^="omp.thinking"]
-  > .tsp-section-body,
-:root[data-motion="reduced"]
-  :is(.tsp-process-group-body, .tsp-process-group-body > .tsp-explore-group > .tsp-explore-group-children)
-  > .tsp-tool:not(.collapsed)
-  > .tsp-tool-body,
-:root[data-motion="reduced"] .tsp-explore-group-children,
+:root[data-motion="reduced"] .tsp-process-group-body .tsp-section[data-role^="omp.thinking"] > .tsp-section-body,
+:root[data-motion="reduced"] .tsp-process-group-body .tsp-tool:not(.collapsed) > .tsp-tool-body,
+:root[data-motion="reduced"] .tsp-work-group-children,
 :root[data-motion="reduced"] .tsp-dsh-file-body,
 :root[data-motion="reduced"] .tsp-ag-list {
   animation: none;
 }
-/* ───────── 图 5 DSH 双列交付文件卡片 + 图 6 反重力（Antigravity）可展开/可搜索文件变更 Diff 面板 ───────── */
+/* ───────── 交付文件卡片网格 + 轮级变更汇总胶囊（可展开 / 可筛选的文件 Diff 列表） ───────── */
 .tsp-deliverables-host {
   --dsh-diff-add: var(--diff-add-fg);
   --dsh-diff-del: var(--diff-del-fg);
@@ -3753,7 +3696,7 @@
   margin-top: var(--space-2-5);
 }
 
-/* 图 5：DSH 2 列交付文件卡片网格 */
+/* 图 5：多类型交付文件卡片网格 */
 .tsp-dsh-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -3909,53 +3852,70 @@
   border-color: var(--border-strong);
 }
 
-/* 图 4：反重力（Antigravity）底部 N files changed +M -K 独立圆角卡片面板 */
+/* 轮级变更汇总：一整行圆角条（`⌄ 3 个文件已变更 +48 -12` + 右侧带图标的评审按钮），
+ * 展开后是逐个文件的 Diff 列表（灰色相对路径 + 红绿行号）。 */
 .tsp-ag-panel {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-tool) 78%, var(--bg-raised));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-tool) 74%, var(--bg-raised));
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 .tsp-ag-head {
   display: flex;
   align-items: center;
-  gap: var(--space-2-5);
-  min-height: 38px;
-  padding: 6px 10px 4px 12px;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-2);
   background: transparent;
-}
-.tsp-ag-panel[data-open] > .tsp-ag-head {
-  padding-bottom: 2px;
 }
 .tsp-ag-toggle {
   display: inline-flex;
+  flex: 1 1 auto;
   align-items: center;
-  gap: var(--space-2);
-  padding: 4px 6px;
-  margin-left: -6px;
+  gap: var(--space-1-5);
+  min-width: 0;
+  height: 40px;
+  padding: 0 var(--space-1);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
+  font-size: var(--fs-sm);
+  text-align: left;
   cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out);
 }
 .tsp-ag-toggle:hover {
-  background: var(--bg-hover);
   color: var(--text);
 }
+.tsp-ag-toggle > .tsp-chev {
+  color: var(--text-3);
+}
 .tsp-ag-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-2);
+  font-weight: var(--fw-medium);
 }
 .tsp-ag-totals {
   display: inline-flex;
+  flex: none;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--space-1-5);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.tsp-ag-add {
+  color: var(--diff-add-fg);
+}
+.tsp-ag-del {
+  color: var(--diff-del-fg);
 }
 .tsp-ag-search {
   width: min(172px, 32%);
@@ -3975,13 +3935,14 @@
 }
 .tsp-ag-review-btn {
   margin-left: auto;
+  flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  padding: 0 var(--space-2-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--bg-sunken) 65%, var(--bg-raised));
   color: var(--text-2);
   font: inherit;
@@ -4031,7 +3992,8 @@
 .tsp-ag-list {
   display: flex;
   flex-direction: column;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--border-subtle);
 }
 .tsp-ag-file {
   display: flex;
@@ -4400,7 +4362,7 @@
   pointer-events: none;
 }
 
-/* ─── Pi Desktop More 过程组控制栏、探索步骤聚合行、长用户消息折叠与回答底栏复制按钮 ─── */
+/* ─── 过程组控制栏、连续步骤聚合行、长用户消息折叠与回答底栏复制按钮 ─── */
 .tsp-process-head-row {
   display: flex;
   align-items: center;
@@ -4409,6 +4371,10 @@
   min-width: 0;
 }
 .tsp-process-summary-acts {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-3);
   font-size: var(--fs-xs);
 }
@@ -4441,54 +4407,76 @@
   border-color: var(--border);
   background: var(--bg-hover);
 }
-.tsp-explore-group {
+/* 连续步骤的聚合行：`[图标] 读取了 4 个文件、搜索了 2 次    a.ts, b.ts ⌄`；
+ * 展开后是一列缩进的工具行，左缘一根细导线把它们串在当前组下。 */
+.tsp-work-group {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.tsp-explore-group-head {
+.tsp-work-group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1-5);
   width: 100%;
-  min-height: 28px;
-  padding: 3px 8px;
+  min-height: var(--row-tool);
+  padding: 3px var(--space-2);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-3);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
-.tsp-explore-group-head:hover {
+.tsp-work-group-head:hover {
   background: var(--bg-hover);
+  color: var(--text-2);
 }
-.tsp-explore-group-title {
+.tsp-work-group-ic {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+}
+.tsp-work-group-stats {
   flex: none;
   color: var(--text-2);
   font-weight: var(--fw-regular);
+  white-space: nowrap;
 }
-.tsp-explore-group-preview {
-  flex: 1;
+.tsp-work-group-preview {
+  flex: 1 1 auto;
   min-width: 0;
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
 }
-.tsp-explore-group-head > .tsp-chev {
+.tsp-work-group-head > .tsp-chev {
   margin-left: auto;
+  opacity: 0;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
-.tsp-explore-group-children {
+.tsp-work-group-head:hover > .tsp-chev,
+.tsp-work-group-head:focus-visible > .tsp-chev,
+.tsp-work-group[data-open] > .tsp-work-group-head > .tsp-chev {
+  opacity: 1;
+}
+.tsp-work-group-children {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding-left: 8px;
-  border: 0;
+  gap: 1px;
+  margin-left: var(--space-1-5);
+  padding-left: var(--space-2-5);
+  border-left: 1px solid var(--border);
   background: transparent;
 }
 .tsp-ag-diff-btn {

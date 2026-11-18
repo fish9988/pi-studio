@@ -38,6 +38,7 @@ export const settings = {
   "uiStyle.expressive": "M3 Expressive",
   "uiStyle.liquid": "Liquid Glass",
   "uiStyle.claude": "Claude",
+  "uiStyle.zcode": "Modern Studio",
   codeBlockStyle: "Code block style",
   "codeBlockStyle.auto": "Auto",
   "codeBlockStyle.dark": "Dark terminal",

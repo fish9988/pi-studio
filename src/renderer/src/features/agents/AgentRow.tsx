@@ -14,8 +14,13 @@ export function AgentRow({ agent, selected, onSelect }: { agent: HubAgent; selec
     : cleanTask(agent.task);
   const progress = agentProgress(agent);
   const context = agentContextPercent(agent);
+  const kinds = [
+    agent.agent !== null && agent.agent !== "task" ? agent.agent : null,
+    agent.background ? t("agents.background") : null,
+  ].filter((kind): kind is string => kind !== null);
   return (
     <li className="agents-item" data-current={selected ? "true" : undefined}>
+      {/* 整行可点：一行 = 名字 / 标签 / Ctx / 状态，二行 = 单行截断的任务说明（悬停看全文） */}
       <button
         type="button"
         className="agents-row"
@@ -23,6 +28,7 @@ export function AgentRow({ agent, selected, onSelect }: { agent: HubAgent; selec
         data-name={agent.name}
         data-status={agent.status}
         aria-current={selected ? "true" : undefined}
+        title={line === "" ? agent.name : line}
         onClick={onSelect}
       >
         <span className="agents-dot" data-status={dotStatus(agent.status)} aria-hidden="true" />
@@ -31,8 +37,15 @@ export function AgentRow({ agent, selected, onSelect }: { agent: HubAgent; selec
             <span className="agents-row-name" title={agent.name}>
               {agent.name}
             </span>
-            {agent.agent !== null && agent.agent !== "task" && <span className="agents-chip">{agent.agent}</span>}
-            {agent.background && <span className="agents-chip">{t("agents.background")}</span>}
+            {kinds.length > 0 && (
+              <span className="agents-tags">
+                {kinds.map((kind) => (
+                  <span key={kind} className="agents-chip">
+                    {kind}
+                  </span>
+                ))}
+              </span>
+            )}
             {context !== null && (
               <span
                 className="agents-ctx"
@@ -70,11 +83,7 @@ export function AgentRow({ agent, selected, onSelect }: { agent: HubAgent; selec
               </span>
             )}
           </span>
-          {line !== "" && (
-            <span className="agents-row-line" title={line}>
-              {line}
-            </span>
-          )}
+          {line !== "" && <span className="agents-row-line">{line}</span>}
         </span>
       </button>
     </li>

@@ -1234,3 +1234,42 @@ html[data-platform="darwin"] .topbar-left {
   border-color: transparent;
   box-shadow: none;
 }
+
+/* ───────── 现代工作台（data-ui-style="zcode"）外壳 ─────────
+   顶栏是两段平贴的色块：左段跟侧栏同色、右段跟主区同色，在侧栏右缘用一条 0.5px 发丝线拼起来；
+   主区面板保持 12px 小圆角 + 发丝边框，不用投影浮起（扁平质感）；侧栏与主区分栏也是一条发丝线。
+   路径胶囊与工具组退成薄边小方块：不磨砂、不带投影。 */
+:root[data-ui-style="zcode"] .topbar {
+  background: var(--bg-sidebar);
+}
+:root[data-ui-style="zcode"] .topbar-left {
+  background: var(--bg-sidebar);
+  border-right: var(--hairline) solid var(--border);
+}
+:root[data-ui-style="zcode"] .topbar-main {
+  background: var(--bg-app);
+}
+/* 整窗背景图 / 毛玻璃 / 侧栏收起时顶栏本来就是磨砂或单层，再涂实色就把图或背景盖掉了 */
+:root[data-ui-style="zcode"]:is([data-backdrop-scope="window"], [data-glass]) .topbar-left,
+:root[data-ui-style="zcode"]:is([data-backdrop-scope="window"], [data-glass]) .topbar-main,
+:root[data-ui-style="zcode"] #app[data-sidebar="hidden"] .topbar-left {
+  background: transparent;
+  border-right-color: transparent;
+}
+:root[data-ui-style="zcode"] .sidebar-column {
+  border-right: var(--hairline) solid var(--border);
+}
+/* 扁平：只有一道发丝边框把面板从侧栏里分出，不给浮起阴影（悬浮效果留给菜单 / 对话框） */
+:root[data-ui-style="zcode"] .panel {
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: none;
+}
+:root[data-ui-style="zcode"] .crumb,
+:root[data-ui-style="zcode"] .topbar-tools {
+  background: var(--bg-raised);
+  backdrop-filter: none;
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}

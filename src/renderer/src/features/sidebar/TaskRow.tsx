@@ -1,4 +1,6 @@
-// 任务行（spec §4.2）：[状态点][标题][尾部]。选中用 --bg-raised 底 + 细描边，不改字重。
+// 任务行（spec §4.2）：[状态点][标题][尾部]。选中用 --bg-raised 底 + 3px 主题色左竖条，不改字重。
+// 标题超出时右侧渐隐（mask，见 sidebar.css 的 .sb-row-title），不画生硬的省略号。
+// 尾部平时只安静显示相对时间；悬停或键盘聚焦时相对时间淡出、标题平滑让出宽度，右侧浮出置顶 / 归档 / ⋯ 三个按钮。
 // memo：props 是任务对象（没变的任务在 store 里是同一个对象）、几个布尔值和稳定的 rows；尾部的相对时间各行自己从时钟里取，
 // 时钟一跳只有文字变了的行重画。运行中的行尾追加 2×2 四点交互动效。
 import { memo, useRef } from "react";
@@ -7,6 +9,8 @@ import { limits, type Locale, type SessionSummary, type TaskState } from "../../
 import { Branch, Dots, Pin } from "../../icons.tsx";
 import { IconButton } from "../../ui/controls.tsx";
 import { RunningFourDots, StatusDot } from "./StatusDot.tsx";
+import { ArchiveIcon } from "./icons.tsx";
+import { toggleItemPinned } from "./sidebar-prefs-store.ts";
 import { taskTail } from "../../../../shared/ui/task-time.ts";
 import { taskTitle } from "../../../../shared/ui/sidebar-model.ts";
 import { useCoarseClock } from "./task-time.ts";
@@ -105,6 +109,7 @@ export const TaskRow = memo(function TaskRow({
       className="sb-row"
       data-flip-key={task.id}
       data-menu=""
+      data-quick=""
       data-selected={selected}
       data-status={task.status}
       data-running={isRunning || undefined}
@@ -171,20 +176,40 @@ export const TaskRow = memo(function TaskRow({
           {isRunning && <RunningFourDots label={t("status.running")} />}
         </span>
       </button>
-      <IconButton
-        className="sb-row-more"
-        label={t("task.more")}
-        tabIndex={-1}
-        aria-haspopup="menu"
-        onClick={(event) => {
-          const box = event.currentTarget.getBoundingClientRect();
-          const mainBtn =
-            event.currentTarget.parentElement?.querySelector<HTMLElement>(".sb-row-main") ?? event.currentTarget;
-          rows.onOpenMenu(task, box.left, box.bottom + 4, mainBtn);
-        }}
-      >
-        <Dots />
-      </IconButton>
+      {/* 平时不占位：悬停 / 聚焦时浮在行尾，主按钮同时把右内边距让出来（见 sidebar.css 的 --sb-row-quick-w）。 */}
+      <span className="sb-row-actions">
+        <IconButton
+          className="sb-row-quick"
+          label={t(pinned === true ? "task.unpin" : "task.pin")}
+          pressed={pinned === true}
+          tabIndex={-1}
+          onClick={() => toggleItemPinned(task.id)}
+        >
+          <Pin size={12} />
+        </IconButton>
+        <IconButton
+          className="sb-row-quick"
+          label={t("task.archive")}
+          tabIndex={-1}
+          onClick={() => rows.onArchive(task)}
+        >
+          <ArchiveIcon />
+        </IconButton>
+        <IconButton
+          className="sb-row-more"
+          label={t("task.more")}
+          tabIndex={-1}
+          aria-haspopup="menu"
+          onClick={(event) => {
+            const box = event.currentTarget.getBoundingClientRect();
+            const mainBtn =
+              event.currentTarget.closest(".sb-row")?.querySelector<HTMLElement>(".sb-row-main") ?? event.currentTarget;
+            rows.onOpenMenu(task, box.left, box.bottom + 4, mainBtn);
+          }}
+        >
+          <Dots />
+        </IconButton>
+      </span>
     </div>
   );
 });

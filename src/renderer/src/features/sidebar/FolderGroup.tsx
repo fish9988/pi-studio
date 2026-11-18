@@ -105,6 +105,7 @@ export function FolderGroup(props: FolderGroupProps) {
       ) : (
         <div
           className="sb-group-head"
+          data-open={open ? "true" : undefined}
           onContextMenu={(event) => {
             event.preventDefault();
             props.onOpenProjectMenu(
@@ -179,18 +180,20 @@ export function FolderGroup(props: FolderGroupProps) {
               {folder.items.length}
             </span>
           </button>
-          <IconButton
-            className="sb-group-action sb-group-more"
-            tabIndex={-1}
-            label={t("sidebar.projectMenu")}
-            aria-haspopup="menu"
-            onClick={(event) => {
-              const box = event.currentTarget.getBoundingClientRect();
-              props.onOpenProjectMenu(folder, box.left, box.bottom + 4, event.currentTarget);
-            }}
-          >
-            <Dots />
-          </IconButton>
+          {folder.project !== null && (
+            <IconButton
+              className="sb-group-action sb-group-more"
+              tabIndex={-1}
+              label={t("sidebar.projectMenu")}
+              aria-haspopup="menu"
+              onClick={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                props.onOpenProjectMenu(folder, box.left, box.bottom + 4, event.currentTarget);
+              }}
+            >
+              <Dots />
+            </IconButton>
+          )}
           <IconButton
             className="sb-group-action sb-group-new"
             testId="sidebar-project-new"

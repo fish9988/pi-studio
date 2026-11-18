@@ -906,3 +906,51 @@ button.md-attach-chip:active {
 :root[data-ui-style="claude"] .md-codeblock .md-code-dots {
   display: none;
 }
+
+/* ───────── 现代工作台（data-ui-style="zcode"）正文材质 ─────────
+   代码卡是柔和的中性软卡：0.5px 发丝描边、头部只比正文深一档、不画红黄绿三个窗口点；
+   行内代码是暖色微胶囊（无边框），表格只留发丝横线，粗体压到 500 字重。 */
+:root[data-ui-style="zcode"] .md-codeblock {
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+/* 浅色软卡自己的一套发丝描边色；上面那条 border 简写特异性更高，这里补回来 */
+:root[data-ui-style="zcode"] .md-codeblock[data-code-light] {
+  border-color: var(--border-code-light);
+}
+:root[data-ui-style="zcode"] .md-codeblock:not([data-figure]):not([data-artifact]) .md-codehead {
+  background: color-mix(in srgb, var(--bg-code-head) 55%, var(--bg-code));
+  border-bottom: var(--hairline) solid var(--border-code);
+}
+:root[data-ui-style="zcode"] .md-codeblock[data-code-light] .md-codehead {
+  background: var(--bg-code-light-head);
+  border-bottom-color: var(--border-code-light);
+}
+:root[data-ui-style="zcode"] .md-codeblock .md-code-dots {
+  display: none;
+}
+:root[data-ui-style="zcode"] .md-code-inline {
+  padding: 1px 5px;
+  color: color-mix(in srgb, var(--accent) 62%, var(--text));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 0;
+  border-radius: var(--radius-xs);
+  line-height: 1.25;
+}
+:root[data-ui-style="zcode"] .md-table {
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+}
+:root[data-ui-style="zcode"] .md-table thead th,
+:root[data-ui-style="zcode"] .md-table thead td {
+  background: var(--bg-sunken);
+  border-bottom: var(--hairline) solid var(--border);
+}
+:root[data-ui-style="zcode"] .md-table th,
+:root[data-ui-style="zcode"] .md-table td {
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+:root[data-ui-style="zcode"] .md :is(strong, b) {
+  font-weight: var(--fw-medium);
+}

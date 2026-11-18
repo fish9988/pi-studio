@@ -1,7 +1,7 @@
 // 内置配色主题与独立深浅色模式（ColorMode × ThemeFamily → 具体 CSS [data-theme]）。
 // 融合 Material 3 Expressive、Microsoft Fluent 2 与 Apple Liquid Glass 三大设计语言：
 // - default（灵动紫晶）：Porcelain 浅瓷云母 / Cosmic 暗夜深空 + Indigo-Violet 渐变高光；
-// - claude（Claude Code）：Anthropic 陶土珊瑚 #d97757，暖象牙白 / 深暖炭灰双模式；
+// - claude（Claude Code）：Anthropic 陶土珊瑚 #d97757，暖象牙 #faf9f5 / 暖炭 #1b1a18 双模式；
 // - mica（冰川云母）：Windows 11 Fluent 2 天青蓝；
 // - aurora（极光翠雾）：Google Material 3 苍翠极光；
 // - coral（液态珊瑚）：Apple Liquid Glass 珊瑚霓虹；
@@ -111,18 +111,18 @@ export const themes = {
   },
   "claude-light": {
     dark: false,
-    app: "#ffffff",
-    sidebar: "#fafafa",
-    text: "#161616",
-    scrim: "rgba(22, 22, 22, 0.32)",
+    app: "#faf9f5",
+    sidebar: "#f5f4ef",
+    text: "#1d1b18",
+    scrim: "rgba(29, 27, 24, 0.3)",
     art: true,
   },
   "claude-dark": {
     dark: true,
-    app: "#191919",
-    sidebar: "#1f1f1f",
-    text: "#fdfdfd",
-    scrim: "rgba(10, 10, 10, 0.64)",
+    app: "#1b1a18",
+    sidebar: "#161513",
+    text: "#f7f4ef",
+    scrim: "rgba(9, 8, 7, 0.66)",
     art: true,
   },
   "mica-light": {

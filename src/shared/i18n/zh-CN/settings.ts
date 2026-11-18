@@ -37,6 +37,7 @@ export const settings = {
   "uiStyle.expressive": "M3 灵动",
   "uiStyle.liquid": "Liquid 液态",
   "uiStyle.claude": "Claude 极简",
+  "uiStyle.zcode": "现代工作台",
   codeBlockStyle: "代码块风格",
   "codeBlockStyle.auto": "随设计风格",
   "codeBlockStyle.dark": "深色终端",

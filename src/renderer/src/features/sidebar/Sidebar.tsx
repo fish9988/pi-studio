@@ -1,4 +1,5 @@
-// 侧栏（spec §3.2、第 4 章）：竖排三行（搜索 / 新任务 / 打开文件夹）、"等你确认"条、按项目分组的任务、底部是设置和（更新下载好后才有的）新版本标签。
+// 侧栏（spec §3.2、第 4 章）：顶部搜索 + 主动作导航（新任务 / 打开文件夹 / 扩展）、"等你确认"条、按「项目 / 任务」分区的任务列表、
+// 底部是设置和（更新下载好后才有的）新版本标签。
 // 从顶栏下面开始，不画标题栏；底色 --bg-sidebar 与顶栏连成一片。宽度由外层容器给。
 import { reportError } from "../../ui/errors.ts";
 import { publishVisibleTaskIds } from "./visible-order-store.ts";
@@ -434,6 +435,7 @@ export function Sidebar() {
             searching={searching}
             activeOnly={activeOnly}
             activeCount={activeCount}
+            chatsDir={chatsDir}
             isOpen={isOpen}
             limits={limits}
             selectedTaskId={selectedTaskId}

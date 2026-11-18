@@ -549,8 +549,53 @@
 :root[data-ui-style="mica-liquid"] .ui-chip,
 :root[data-ui-style="claude"] .ui-seg,
 :root[data-ui-style="claude"] .ui-seg > button,
-:root[data-ui-style="claude"] .ui-chip {
+:root[data-ui-style="claude"] .ui-chip,
+:root[data-ui-style="zcode"] .ui-seg,
+:root[data-ui-style="zcode"] .ui-seg > button,
+:root[data-ui-style="zcode"] .ui-chip {
   border-radius: var(--radius-md);
+}
+
+/* 现代工作台（data-ui-style="zcode"）：所有控件换成小圆角 + 0.5px 发丝边框的扁平薄片。
+ * 只改描边粗细 / 圆角 / 阴影，不动 border-color：`[data-invalid]`、`[aria-disabled]`、primary / quiet 变体
+ * 各自的边框颜色依旧生效（直接写 border 简写会把它们整体盖掉）。
+ * 按压只降半像素，悬浮效果只给真浮层（菜单 / 对话框），控件本身不抬阴影。 */
+:root[data-ui-style="zcode"] .ui-btn,
+:root[data-ui-style="zcode"] .ui-field,
+:root[data-ui-style="zcode"] .ui-select,
+:root[data-ui-style="zcode"] .ui-textarea {
+  border-width: var(--hairline);
+  border-style: solid;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+:root[data-ui-style="zcode"] .ui-field:focus-within,
+:root[data-ui-style="zcode"] .ui-textarea:focus {
+  border-color: transparent;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+:root[data-ui-style="zcode"] .ui-field[data-invalid]:focus-within,
+:root[data-ui-style="zcode"] .ui-textarea[data-invalid]:focus {
+  border-color: transparent;
+  box-shadow: 0 0 0 1px var(--st-error);
+}
+:root[data-ui-style="zcode"] .ui-icon-btn {
+  border-radius: var(--radius-sm);
+}
+:root[data-ui-style="zcode"] .ui-seg {
+  border-width: var(--hairline);
+  background: var(--bg-sunken);
+}
+:root[data-ui-style="zcode"] .ui-seg > button[aria-checked="true"] {
+  box-shadow: 0 0 0 1px var(--border);
+}
+:root[data-ui-style="zcode"] .ui-chip {
+  border: var(--hairline) solid var(--border);
+  background: var(--bg-raised);
+  box-shadow: none;
+}
+:root[data-ui-style="zcode"] :is(.ui-btn, .ui-icon-btn, .ui-chip, .ui-seg > button, .ui-menu-item):active {
+  transform: translateY(0.5px);
 }
 
 .ui-tabs {

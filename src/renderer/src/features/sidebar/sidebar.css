@@ -7,6 +7,8 @@
   width: 100%;
   height: 100%;
   min-width: 0;
+  /* 文件夹头吸顶的偏移：HistorySection 量出标题行的实际高度后写进这个变量（0 是首帧的默认值） */
+  --sb-sticky-top: 0px;
   background: var(--bg-sidebar);
   color: var(--text);
   font-family: var(--font-sans);
@@ -215,8 +217,8 @@
 }
 
 /* ───── 项目分组 ───── */
-/* 历史会话标题区：两行，不再把「会话 / 进行中 / 折叠全部 / 文件夹|时间」塞进 240px 的一行。
-   上行：左「会话」，右「进行中」胶囊 + 折叠全部；下行：拉满整行、两段等宽的「文件夹 | 时间」切换。
+/* 历史会话标题区（「任务列表」控制头）：两行，不再把标题 / 进行中 / 折叠全部 / 文件夹|时间 塞进 240px 的一行。
+   上行：左「任务列表」，右「进行中」胶囊 + 折叠全部；下行：拉满整行、两段等宽的「文件夹 | 时间」切换。
    钉在滚动区顶部（.sb-list 上边没有内边距，起始位置就是钉住的位置），底色和侧栏一致，
    上下留出匀称的内边距，滚过的行不会从边缝透出；z-index 压住行里的绝对定位元素 */
 .sb-history-head {
@@ -238,6 +240,11 @@
 :root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb-history-head {
   /* 52% 而不是 --bd-sidebar-veil（84%）：这一层贴在 .sidebar-column 的磨砂纱上，两层纱相乘后
    * 84% 会变成近 97% 的实心色带（2026-11-14）。52% + 磨砂足够挡住滚过去的行，又不把自己涂成一条板。 */
+  background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
+  backdrop-filter: blur(18px);
+}
+/* 吸顶的文件夹头同样不能是一块实色板：和标题行用同一层半透纱 + 磨砂，滚过的行走它下面时不会露出一条深色带 */
+:root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb-group-head {
   background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
   backdrop-filter: blur(18px);
 }
@@ -444,9 +451,9 @@
 .sb-toggle-all:hover {
   color: var(--text);
 }
-/* 毛玻璃（app.css「Windows 11 毛玻璃」）：侧栏透明，露出 #app 那层半透明侧栏色。钉住的标题行没法再挡住下面滚过的行：
+/* 毛玻璃（app.css「Windows 11 毛玻璃」）：侧栏透明，露出 #app 那层半透明侧栏色。钉住的标题行 / 文件夹头没法再挡住下面滚过的行：
    实底是一条色带；半透明底、backdrop-filter 都会把 #app 那层半透明色再叠一遍，成了一条更深的带子（2026-10-30 真窗截屏）。
-   所以毛玻璃下标题行不钉住，跟着列表一起滚走。 */
+   所以毛玻璃下它们不钉住，跟着列表一起滚走。 */
 :root[data-glass] .sb {
   background: transparent;
 }
@@ -454,6 +461,66 @@
   position: static;
   background: transparent;
 }
+:root[data-glass] .sb-group-head {
+  position: static;
+  background: transparent;
+}
+/* ───── 「项目」/「任务」两个分区：真实绑定项目的文件夹归「项目」，默认文件夹里的通用对话和纯历史目录归「任务」───── */
+.sb-section + .sb-section {
+  margin-top: var(--space-2);
+}
+.sb-section-head {
+  display: flex;
+  align-items: center;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+}
+.sb-section-toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+}
+.sb-section-toggle:hover {
+  color: var(--text-2);
+}
+.sb-section-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--fw-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-section-count {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+/* 箭头展开朝下、折叠朝右（同文件夹头的 .sb-chevron） */
+.sb-section-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+  opacity: 0.75;
+  transition: transform var(--dur-fast) var(--ease-out);
+  transform: rotate(90deg);
+}
+.sb-section-toggle[data-collapsed="true"] .sb-section-chevron {
+  transform: rotate(0deg);
+}
+.sb-section-chevron .icon {
+  width: 12px;
+  height: 12px;
+}
+
 /* 文件夹：头部（箭头 + 名称，折叠时行数）+ 任务和会话混排的行 */
 .sb-folder + .sb-folder {
   margin-top: var(--space-1);
@@ -470,11 +537,16 @@
   line-height: var(--lh-xs);
   white-space: nowrap;
 }
+/* 文件夹头吸顶：长列表滚动时还知道自己在哪个项目里。钉在标题行下方——标题行的高度由 HistorySection 量出来写进
+   --sb-sticky-top；底色取侧栏底色，滚过的行不会从边缝里透出来；z-index 压住行里的绝对定位元素。 */
 .sb-group-head {
-  position: relative;
+  position: sticky;
+  top: var(--sb-sticky-top, 0px);
+  z-index: 2;
   display: flex;
   align-items: center;
   height: var(--control-h-sm);
+  background: var(--bg-sidebar);
   border-radius: var(--radius-sm);
 }
 .sb-group-toggle {
@@ -581,6 +653,7 @@
 .sb-group-action {
   position: absolute;
   top: 0;
+  z-index: 2;
   opacity: 0;
   pointer-events: none;
   transition:
@@ -602,6 +675,7 @@
 .sb-group-more:hover {
   color: var(--text);
 }
+.sb-group-head[data-open="true"] .sb-group-count,
 .sb-group-head:hover .sb-group-count,
 .sb-group-head:focus-within .sb-group-count,
 .sb-group-head[data-menu-open="true"] .sb-group-count {
@@ -610,6 +684,10 @@
   transition:
     opacity var(--dur-fast) var(--ease-out),
     visibility 0s linear var(--dur-fast);
+}
+.sb-group-head[data-open="true"] .sb-group-more {
+  opacity: 0.65;
+  pointer-events: auto;
 }
 .sb-group-head:hover .sb-group-action,
 .sb-group-head:focus-within .sb-group-action,
@@ -641,6 +719,9 @@
   display: flex;
   align-items: center;
   height: var(--row-task);
+  /* 悬停时右侧操作区的宽度：置顶 22 + 归档 22 + ⋯ 22 + 两个 2px 间隙；
+     主按钮滑到这个值就正好让出位置（见下面的 .sb-row[data-quick]:hover .sb-row-main） */
+  --sb-row-quick-w: calc(3 * 22px + 2 * var(--space-0-5));
   border-radius: var(--radius-md);
   transition:
     background-color var(--dur-fast) var(--ease-out),
@@ -685,7 +766,15 @@
   padding: 0 var(--space-2) 0 var(--space-3-5);
   border-radius: var(--radius-md);
   color: var(--text-2);
-  transition: color var(--dur-fast) var(--ease-out);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    padding-right var(--dur-fast) var(--ease-out);
+}
+/* 悬停 / 聚焦时标题平滑让出右侧操作区（相对时间同时淡出，见 .sb-row-tail） */
+.sb-row[data-quick]:hover .sb-row-main,
+.sb-row[data-quick]:focus-within .sb-row-main,
+.sb-row[data-quick][data-menu-open="true"] .sb-row-main {
+  padding-right: calc(var(--sb-row-quick-w) + var(--space-1));
 }
 .sb-row[data-selected="true"] .sb-row-main,
 .sb-row[data-status="needs_you"] .sb-row-main {
@@ -695,12 +784,16 @@
 .sb-row[data-running] .sb-row-main {
   color: var(--text);
 }
+/* 标题超出时右侧渐隐（不算生硬的「…」）：最后 18px 淡出，和右边的相对时间 / 操作按钮接得自然。
+   标题是 flex:1 的盒子，短标题的字结束在渐隐区之前，看上去仍是完全实心的。 */
 .sb-row-title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  text-overflow: clip;
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
 }
 .sb-row-pin {
   flex: none;
@@ -758,6 +851,49 @@
     opacity var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
+}
+/* 任务行尾部悬停时浮出的操作区：置顶 / 归档 / ⋯ 平时不占位、不拦截点击，
+   相对时间淡出的同时淡入（键盘聚焦、菜单打开时一样）。 */
+.sb-row-actions {
+  position: absolute;
+  top: 50%;
+  right: var(--space-0-5);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s linear var(--dur-fast);
+}
+.sb-row:hover .sb-row-actions,
+.sb-row:focus-within .sb-row-actions,
+.sb-row[data-menu-open="true"] .sb-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s;
+}
+/* 操作区里的按钮都矮一圈（22px）：三个挤在 240px 侧栏的行尾，也不抢标题的位置。
+   选择器多一层 .sb-row-actions：controls.css 的 --btn-h 默认值同特异度，靠本来赢不靠导入顺序。 */
+.sb-row-actions .sb-row-quick {
+  --btn-h: 22px;
+  color: var(--text-3);
+}
+.sb-row-actions .sb-row-quick:hover {
+  color: var(--text);
+}
+/* 操作区里的 ⋯ 跟着这一排走，不再自己绝对定位到行尾 */
+.sb-row-actions .sb-row-more {
+  --btn-h: 22px;
+  position: static;
+  right: auto;
 }
 .sb-row:hover .sb-row-more,
 .sb-row:focus-within .sb-row-more,

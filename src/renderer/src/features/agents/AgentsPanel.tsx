@@ -131,7 +131,7 @@ export function AgentsPanel({ taskId, selected }: { taskId: TaskId; selected: st
           <span className="agents-driving-text">{t(DRIVING_KEY[drive.op], { name: drive.name })}</span>
         </div>
       )}
-      <div className="agents-body" {...tabPanelProps(`agents-${taskId}`, tab)}>
+      <div className="agents-body" data-tab={tab} {...tabPanelProps(`agents-${taskId}`, tab)}>
         {tab === "activity" ? (
           <AgentsActivity
             taskId={taskId}
