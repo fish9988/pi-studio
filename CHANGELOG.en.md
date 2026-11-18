@@ -9,6 +9,22 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-18
+
+### Added
+
+- Added the **Modern Studio** UI design style (`0.5px` hairline borders, unified radius scale, flat tool rows, and soft light code cards) and refined the **Claude** theme family with warm ivory / warm charcoal surfaces and terracotta accents.
+
+### Changed
+
+- Rebuilt the **left sidebar with a Task List header and Projects / Tasks sections**: project headers stay sticky while scrolling, long task titles fade cleanly on the right edge, and hovering or focusing a task row smoothly reveals Pin, Archive, and Menu actions in place of the relative timestamp.
+- Upgraded **conversation reasoning and tool call presentation**: flat single-line tool rows shimmer while running, consecutive completed read/search/command steps fold into semantic summary rows, finished turns collapse work history into a minimal underline toggle, and the turn file-change summary strip aligns cleanly with Review.
+- Polished the **right workbench Overview and Subagents panel**: added full keyboard navigation in the omnibox for files and URLs, unified tile semantics, and tightened Subagents row and detail density.
+
+### Fixed
+
+- Fixed pure history folders showing a project menu button in the sidebar and fixed pointer clicks on expanded project menu buttons being intercepted by the header toggle.
+
 ## [0.7.1] - 2026-11-18
 
 ### Added
