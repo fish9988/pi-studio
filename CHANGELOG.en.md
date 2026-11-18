@@ -9,6 +9,20 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-18
+
+### Added
+
+- Added a native **PDF interactive reader** in the right workbench (chunked range loading for large PDFs, smooth zoom, selectable text layer, outline drawer, and full-text search) along with native **DOCX / XLSX previews** (multi-sheet tabs and one-click Markdown table export/copy).
+- Added **multi-tab file previews** in the right workbench (up to 10 concurrent file tabs with drag reordering, middle-click / `Esc` dismissal, tab pinning, and `#L` line / `#page:` jump support).
+- Added a **selection floating toolbar** across the conversation stream and Markdown / PDF previews for one-click Quote to Composer, Ask in BTW, or Copy.
+- Added **lightweight interactive Gen UI cards** in the conversation stream: render workspace HTML pages via `::visualize` or run HTML fenced blocks inline inside an isolated sandbox with persisted widget state, composer quoting, and confirmation-gated follow-up prompts.
+- Added an **MCP Apps interactive container**: discover and mount `ui://` app resources from configured Stdio and Streamable HTTP MCP servers as persistent workbench tabs with live tool calls and model context updates.
+
+### Fixed
+
+- Fixed pressing `Esc` in a standalone workbench file preview tab not closing the tab immediately and returning focus to the trigger control.
+
 ## [0.6.5] - 2026-11-17
 
 ### Fixed

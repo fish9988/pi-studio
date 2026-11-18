@@ -1,6 +1,6 @@
 {
   "name": "pi-studio",
-  "version": "0.6.5",
+  "version": "0.7.0",
   "private": true,
   "description": "Pi (@earendil-works/pi-coding-agent) 的桌面工作台",
   "license": "MIT",
@@ -54,9 +54,12 @@
     "vitest": "5.0.5"
   },
   "dependencies": {
+    "docx-preview": "0.4.1",
     "electron-updater": "6.8.11",
     "koffi": "3.3.5",
     "node-pty": "1.1.0",
+    "pdfjs-dist": "6.5.438",
+    "xlsx": "0.18.5",
     "yaml": "2.9.1"
   }
 }
