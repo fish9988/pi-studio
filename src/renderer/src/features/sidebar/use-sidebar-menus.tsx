@@ -25,7 +25,7 @@ import { setTerminalOpen } from "../terminal/terminal-store.ts";
 import { openDshToolTab } from "../workbench/dsh-workbench-store.ts";
 import { archivePending, commitPendingArchives } from "./archive-store.ts";
 import { refreshProjects } from "./projects-store.ts";
-import { startDraftInFolder } from "./sidebar-actions.ts";
+import { startDraftInFolder, startDraftInSessionFolder } from "./sidebar-actions.ts";
 import { hideFolderKey } from "./sidebar-prefs-store.ts";
 import { attempt, buildSessionMenu, buildTaskMenu } from "./task-menu.tsx";
 
@@ -138,6 +138,7 @@ export function useSidebarMenus({
       items: buildSessionMenu({
         t,
         session,
+        onNewInFolder: () => void startDraftInSessionFolder(session, t, chatsDir),
         onRenamedToTask: (taskId) => onRename(taskId),
       }),
     });

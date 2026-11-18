@@ -19,6 +19,7 @@ export const sidebar = {
   update: "新版本 {version}",
   updateTip: "重启并安装",
   newInProject: "在此项目新建任务",
+  newInSessionFolder: "在此对话目录新建任务",
   label: "任务列表",
   projectMenu: "项目菜单",
   openFolder: "打开文件夹",

@@ -95,20 +95,22 @@ const SessionRow = memo(function SessionRow({ session, tabStop, pinned, projectL
         <span className="sb-row-tail">{time}</span>
       </button>
       {rows.onOpenSessionMenu && (
-        <IconButton
-          className="sb-row-more"
-          label={t("task.more")}
-          tabIndex={-1}
-          aria-haspopup="menu"
-          onClick={(event) => {
-            const box = event.currentTarget.getBoundingClientRect();
-            const mainBtn =
-              event.currentTarget.parentElement?.querySelector<HTMLElement>(".sb-row-main") ?? event.currentTarget;
-            rows.onOpenSessionMenu!(session, box.left, box.bottom + 4, mainBtn);
-          }}
-        >
-          <Dots />
-        </IconButton>
+        <span className="sb-row-actions">
+          <IconButton
+            className="sb-row-more"
+            label={t("task.more")}
+            tabIndex={-1}
+            aria-haspopup="menu"
+            onClick={(event) => {
+              const box = event.currentTarget.getBoundingClientRect();
+              const mainBtn =
+                event.currentTarget.parentElement?.querySelector<HTMLElement>(".sb-row-main") ?? event.currentTarget;
+              rows.onOpenSessionMenu!(session, box.left, box.bottom + 4, mainBtn);
+            }}
+          >
+            <Dots />
+          </IconButton>
+        </span>
       )}
     </div>
   );

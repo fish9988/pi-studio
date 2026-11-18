@@ -13,6 +13,7 @@ import {
   projectLabels,
   sessionDotKind,
   sessionTitle,
+  splitSidebarFolders,
   taskTitle,
   waitingTasks,
   type SidebarInput,
@@ -257,6 +258,25 @@ describe("buildFolders / buildTimeline", () => {
     expect(buildFolders({ ...withDefault, projects: [chats], tasks: [], sessions: [] }).map((f) => f.label)).toEqual([
       "chats",
     ]);
+  });
+
+  it("任务区在不同工作目录间平铺并排序，已绑定项目不混入，默认目录仍算独立对话", () => {
+    const chats = project("pc", "C:\\work\\chats", "chats");
+    const options = input({
+      projects: [...projects, chats],
+      defaultCwd: "c:/WORK/chats/",
+      tasks: [task("bound", "p1", { updatedAt: 100 }), task("chat", "pc", { updatedAt: 20 })],
+      sessions: [
+        past("project-session", projects[0]!.path, 65),
+        past("notes", "E:/other/notes", 30),
+        past("pinned", "E:/other/personal", 1, { pinned: true }),
+        past("old", chats.path, 10),
+      ],
+    });
+    const result = splitSidebarFolders(buildFolders(options), options.defaultCwd!);
+    expect(result.projects.map((folder) => ids(folder.items))).toEqual([["task:bound", "session:project-session"], []]);
+    expect(ids(result.tasks)).toEqual(["session:pinned", "session:notes", "task:chat", "session:old"]);
+    expect(result.tasks[1]).toMatchObject({ session: { cwd: "E:/other/notes" } });
   });
 
   it("文件夹重名时标签带上级目录；归档的任务、已挂任务的会话、指向未知项目的任务都不出现", () => {

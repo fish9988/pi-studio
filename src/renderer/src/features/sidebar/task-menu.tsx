@@ -2,7 +2,7 @@
 // 第一组是任务本身（重命名、保持运行、会话信息、请求记录、分享链接），第二组是文件（工作目录、会话文件、复制、导出），最后是归档。
 import type { TFunction } from "../../../../shared/i18n/index.ts";
 import type { SessionSummary, TaskId } from "../../../../shared/ipc.ts";
-import { CopyIcon, External, FileIcon, Folder, Info, Pencil, Pin, Trash } from "../../icons.tsx";
+import { CopyIcon, External, FileIcon, Folder, Info, Pencil, Pin, Plus, Trash } from "../../icons.tsx";
 import { clearSelection, upsertTask } from "../../store/index.ts";
 import { reportError } from "../../ui/errors.ts";
 import type { MenuEntry } from "../../ui/Menu.tsx";
@@ -192,6 +192,7 @@ export function buildTaskMenu(options: {
 export function buildSessionMenu(options: {
   t: TFunction;
   session: SessionSummary;
+  onNewInFolder(): void;
   onRenamedToTask?(taskId: TaskId): void;
 }): MenuEntry[] {
   const { t, session } = options;
@@ -217,6 +218,12 @@ export function buildSessionMenu(options: {
           refreshHistorySessions();
           options.onRenamedToTask?.(task.id);
         }),
+    },
+    {
+      id: "newInSessionFolder",
+      label: t("sidebar.newInSessionFolder"),
+      icon: <Plus />,
+      onSelect: options.onNewInFolder,
     },
     {
       id: "smartRename",

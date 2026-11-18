@@ -282,11 +282,8 @@ test("P1 集成：Gen UI 内联卡片交互（::visualize 与 HTML Artifact）�
     await page.emulateMedia({ reducedMotion: "reduce" });
     await setLocaleTheme(page, "zh-CN", "light");
 
-    // 1) 从侧栏打开种好的历史会话（project 分组默认收起，先展开分组）
-    const groupToggle = page.getByRole("button", { name: /展开或收起 project/ });
-    await expect(groupToggle).toBeVisible({ timeout: 15_000 });
-    await groupToggle.click();
-    const row = page.getByText("生成交互图表").first();
+    // 1) 未绑定项目的历史会话在侧栏「任务」区平铺。
+    const row = page.getByTestId("sidebar-session").filter({ hasText: "生成交互图表" });
     await expect(row).toBeVisible({ timeout: 15_000 });
     await row.click();
     await expect(page.getByTestId("tsp-view")).toBeVisible({ timeout: 15_000 });

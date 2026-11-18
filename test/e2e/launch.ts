@@ -494,10 +494,10 @@ export async function setLocaleTheme(page: Page, locale: "zh-CN" | "en", theme: 
   await setTheme(page, theme);
 }
 
-/** 展开侧栏里所有折叠着的文件夹（任务行只在文件夹展开时才画出来）；文件夹还没出现时先等它出现。 */
+/** 等侧栏分组或独立任务出现，再展开折叠着的项目。 */
 export async function expandSidebarFolders(page: Page): Promise<void> {
   await page
-    .locator(".sb-group-toggle")
+    .locator('.sb-group-toggle, [data-testid="task-row"]')
     .first()
     .waitFor({ timeout: 15_000 })
     .catch(() => undefined);

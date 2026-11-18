@@ -139,7 +139,12 @@ async function stubMain(app: Awaited<ReturnType<typeof launchApp>>["app"], local
       stub("removeProject", () => undefined);
       stub("createTask", () => data.tasks[0]);
       stub("listSlashCommands", () => data.slash);
-      stub("getShellState", () => ({ sidebarWidth: 264, sidebarCollapsed: false, historyOrder: "folder" }));
+      stub("getShellState", () => ({
+        sidebarWidth: 226,
+        sidebarCollapsed: false,
+        historyOrder: "folder",
+        uiStyle: "zcode",
+      }));
       stub("ensureSessionProject", () => ({ id: "pn", path: "E:\\其他 目录\\notes", name: "notes" }));
       stub("setShellState", () => undefined);
     },
@@ -200,12 +205,11 @@ for (const [locale, colorScheme] of [
       const sidebar = page.getByTestId("sidebar");
       await expect(sidebar.getByRole("button", { name: new RegExp(words.newTask) }).first()).toBeVisible();
 
-      // 一个列表：项目和只在历史里出现的 cwd 合并成文件夹，没有单独的项目块；
+      // 仅已绑定的项目显示文件夹；其余对话平铺在「任务」里。
       // my app 里有选中/在跑/等你确认的任务所以默认展开：终端会话和任务混排，默认 5 行，其余在"显示更多"后面。
       const history = sidebar.getByTestId("sidebar-history");
       const myApp = sidebar.getByRole("region", { name: "my app" });
-      await expect(history.getByTestId("sidebar-folder")).toHaveCount(3);
-      await expect(sidebar.getByTestId("sidebar-folder")).toHaveCount(3);
+      await expect(history.getByTestId("sidebar-folder")).toHaveCount(2);
       await expect(sidebar.getByRole("region", { name: "api server" })).toBeVisible();
       await expect(myApp.getByTestId("sidebar-session")).toContainText("在终端里排查内存泄漏");
       // 正常完成的历史会话不画刺眼绿勾，保持标题左对齐干净。
@@ -215,25 +219,31 @@ for (const [locale, colorScheme] of [
       await myApp.getByTestId("sidebar-history-more").click();
       await expect(myApp.getByTestId("task-row")).toHaveCount(7);
 
-      // 只在历史里出现的文件夹：默认折叠、有 +、没有项目菜单；图标字形不进标题；+ 先把它加成项目再开草稿。
-      const notes = sidebar.getByRole("region", { name: "notes" });
-      await expect(notes.getByTestId("sidebar-session")).toHaveCount(0);
-      // 折叠：+ 左边是行数；纯历史文件夹没有 ⋯。展开的 studio 项目：同一格常驻 ⋯（不用悬停），行数隐去。
-      await expect(notes.locator(".sb-group-count")).toBeVisible();
-      await expect(notes.locator(".sb-group-count")).toContainText("1");
-      await expect(notes.locator(".sb-group-more")).toHaveCount(0);
+      const loose = sidebar.locator('.sb-section[data-section="tasks"]');
+      const notes = loose.getByTestId("sidebar-session");
+      await expect(loose.getByTestId("sidebar-folder")).toHaveCount(0);
+      await expect(loose.locator(".sb-section-count")).toHaveText("1");
+      await expect(notes.locator(".sb-row-title")).toHaveText("写笔记");
+      await expect(notes.locator(".sb-row-main svg")).toHaveCount(0);
       await expect(myApp.locator(".sb-group-more")).toBeVisible();
       await expect(myApp.locator(".sb-group-count")).toBeHidden();
-      await notes.locator(".sb-group-toggle").click();
-      await expect(notes.getByTestId("sidebar-session")).toHaveText(/^写笔记/);
-      await expect(notes.getByTestId("sidebar-session")).not.toContainText("\ue5fa");
-      await expect(notes.getByTestId("sidebar-session").locator("svg")).toHaveCount(0);
-      await notes.getByTestId("sidebar-project-new").click();
+      const search = sidebar.getByTestId("sidebar-search");
+      const toggleTasks = sidebar.getByTestId("sidebar-section-tasks");
+      await toggleTasks.click();
+      await expect(notes).toHaveCount(0);
+      await search.fill("写笔记");
+      await expect(notes).toBeVisible();
+      await search.press("ArrowDown");
+      await expect(notes.locator(".sb-row-main")).toBeFocused();
+      await search.fill("");
+      await expect(notes).toHaveCount(0);
+      await toggleTasks.click();
+      await notes.click({ button: "right" });
+      await page.getByRole("menuitem", { name: /在此对话目录新建任务|New task in this conversation/ }).click();
       await expect.poll(async () => (await mainCalls(app, "ensureSessionProject"))[0]?.[0]).toBe("sess-notes");
       await expect(myApp.locator(".sb-group-more")).toHaveCount(1);
 
       // 搜索同时过滤任务和会话，两种排列都一样。
-      const search = sidebar.getByTestId("sidebar-search");
       await search.fill("数据");
       await expect(sidebar.getByTestId("task-row")).toHaveCount(1);
       await expect(sidebar.getByTestId("sidebar-session")).toHaveCount(0);
@@ -249,7 +259,25 @@ for (const [locale, colorScheme] of [
       await expect(history.locator(".sb-row-main")).toHaveCount(11);
       await expect(history.getByTestId("sidebar-history-more")).toHaveCount(0);
       await sidebar.getByTestId("sidebar-history-by-folder").click();
-      await expect(sidebar.getByTestId("sidebar-folder")).toHaveCount(3);
+      await expect(sidebar.getByTestId("sidebar-folder")).toHaveCount(2);
+      await expect(notes).toBeVisible();
+      const [panelBox, sidebarBox, filterBox, toggleBox] = await Promise.all([
+        page.getByTestId("main-panel").boundingBox(),
+        page.getByTestId("sidebar-column").boundingBox(),
+        sidebar.getByTestId("sidebar-filter-active").boundingBox(),
+        sidebar.getByTestId("sidebar-toggle-all-folders").boundingBox(),
+      ]);
+      expect(panelBox?.x).toBe((sidebarBox?.x ?? 0) + (sidebarBox?.width ?? 0));
+      expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBe((sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0));
+      await expect(page.getByTestId("main-panel")).toHaveCSS("border-bottom-left-radius", "0px");
+      await expect(page.getByTestId("main-panel")).toHaveCSS("border-left-width", "0px");
+      expect(toggleBox!.x - (filterBox!.x + filterBox!.width)).toBeGreaterThan(0);
+      const allProjects = sidebar.getByTestId("sidebar-toggle-all-folders");
+      await allProjects.click();
+      await expect(myApp.locator(".sb-group-toggle")).toHaveAttribute("aria-expanded", "false");
+      await expect(notes).toBeVisible();
+      await allProjects.click();
+      await expect(myApp.locator(".sb-group-toggle")).toHaveAttribute("aria-expanded", "true");
 
       // 排列切换两段等宽，短的那段（"时间"）文字也在格子正中。
       const timeTextOffset = await sidebar.getByTestId("sidebar-history-by-time").evaluate((button) => {
@@ -283,6 +311,11 @@ for (const [locale, colorScheme] of [
         return offsets;
       });
       expect(headOffsets).toEqual([0, 0, 0]);
+      await history.locator(".sb-history-head").hover();
+      const scrollTrack = sidebar.locator(".sb-list-host > .osb[data-visible]");
+      await expect(scrollTrack).toBeVisible();
+      const trackBox = await scrollTrack.boundingBox();
+      expect(trackBox!.x).toBeGreaterThanOrEqual(toggleBox!.x + toggleBox!.width - 0.1);
       await list.evaluate((el) => {
         const element = el as unknown as PageScrollBox;
         element.scrollTop = 0;

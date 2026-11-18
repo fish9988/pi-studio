@@ -133,7 +133,7 @@ test("窗口放大时对话列和输入框一起变宽：约占主区 78%，最�
   }
 });
 
-test("没有项目时直接发送：在 chats 目录里建项目和任务，侧栏出现这个项目", async () => {
+test("没有项目时直接发送：工作目录仍为 chats，对话平铺在任务区", async () => {
   const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   try {
     const { page, userDataDir } = launched;
@@ -146,10 +146,13 @@ test("没有项目时直接发送：在 chats 目录里建项目和任务，侧�
     await sendFirst(page, "用一句中文回答：2+2 等于几？不要调用任何工具。");
     const projects = await page.evaluate(() => globalThis.studio.listProjects());
     expect(projects.map((project) => path.resolve(project.path))).toEqual([path.resolve(chats)]);
-    await expect(page.getByTestId("task-row")).toHaveCount(1);
-    // 侧栏里这一组叫"默认文件夹"，不露出 chats 这个目录名。
-    await expect(page.getByTestId("sidebar")).toContainText(/默认文件夹|Default folder/);
-    await expect(page.getByTestId("sidebar")).not.toContainText("chats");
+    const sidebar = page.getByTestId("sidebar");
+    const loose = sidebar.locator('.sb-section[data-section="tasks"]');
+    await expect(loose.getByTestId("task-row")).toHaveCount(1);
+    await expect(sidebar.getByTestId("sidebar-section-projects")).toHaveCount(0);
+    await expect(loose.getByTestId("sidebar-folder")).toHaveCount(0);
+    await expect(loose.locator(".sb-section-count")).toHaveText("7");
+    await expect(loose).not.toContainText(/默认文件夹|Default folder|chats/);
     await expect(page.getByTestId("sidebar-new-task")).not.toHaveAttribute("aria-current", "page");
 
     // 之后 Ctrl/Cmd N 还是默认文件夹（不沿用刚才的项目也一样是它）；工具行的轻标签写“默认文件夹”，完整路径在 title 上。
@@ -459,22 +462,18 @@ test("侧栏：竖排 搜索 / [新任务] / [打开文件夹]；任务和历史
     expect(n && a && n.y + n.height <= a.y).toBe(true);
     expect(a && list && a.y + a.height <= list.y).toBe(true);
 
-    // 一个列表：项目文件夹（有刚发的任务，选中所以展开）和只在历史里出现的文件夹都在"历史会话"这一个区块里，没有单独的项目块。
+    // 项目任务在「项目」，未绑定项目的历史会话直接平铺在「任务」。
     const history = page.getByTestId("sidebar-history");
     await expect(page.getByTestId("task-row")).toHaveCount(1);
     await expect(history.getByTestId("task-row")).toHaveCount(1);
     await expect(sidebar.locator(".sb-group")).toHaveCount(1);
     await expect(page.getByTestId("sidebar-history-by-folder")).toHaveAttribute("aria-checked", "true");
     const folders = history.getByTestId("sidebar-folder");
-    await expect(folders).toHaveCount(2);
-    // 不搜索也列出历史会话（launchApp 造的 6 条假会话，cwd 都是"omp studio 假项目"）；刚发的那条已挂在任务上，不在这里。
-    // 这个文件夹没有选中/在跑的任务，折叠着：名字 + 条数。
-    const fakeFolder = folders.filter({ hasText: "omp studio 假项目" });
-    await expect(fakeFolder).toHaveCount(1);
-    await expect(fakeFolder).toContainText("6");
-    await expect(history.getByTestId("sidebar-session")).toHaveCount(0);
-    // 点开文件夹：先显示 5 条（新到旧）+ 显示更多。
-    await fakeFolder.locator(".sb-group-toggle").click();
+    await expect(folders).toHaveCount(1);
+    const loose = history.locator('.sb-section[data-section="tasks"]');
+    await expect(loose.getByTestId("sidebar-folder")).toHaveCount(0);
+    await expect(loose.locator(".sb-section-count")).toHaveText("6");
+    // 6 条独立对话默认平铺 5 条（新到旧），其余通过「显示更多」查看。
     await expect(history.getByTestId("sidebar-session")).toHaveCount(5);
     await expect(history.getByTestId("sidebar-session").first()).toContainText("整理日志格式并补上单元测试");
     await history.getByTestId("sidebar-history-more").click();

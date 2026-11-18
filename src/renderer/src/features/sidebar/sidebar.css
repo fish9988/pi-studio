@@ -191,7 +191,7 @@
   min-height: 0;
   overflow-y: auto;
   /* 上边不留内边距："会话"标题行一开始就在滚动区顶部，sticky 钉住时不再位移 */
-  padding: 0 var(--space-2) var(--space-1);
+  padding: 0 max(var(--space-2), var(--scrollbar-hit)) var(--space-1) var(--space-2);
   scrollbar-width: none;
 }
 .sb-list::-webkit-scrollbar {
@@ -224,7 +224,7 @@
 .sb-history-head {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 3; /* 高于下方吸顶项目头 (2) 和任务快捷操作 (1)。 */
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -249,19 +249,21 @@
   backdrop-filter: blur(18px);
 }
 .sb-history-top {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  min-width: 0;
 }
-/* 标题左缘和文件夹名对齐（列表自身已有 8px 内边距） */
+/* 按钮组保留固有宽度，缩窄时只截断标题。 */
 .sb-history-top .sb-group-title {
+  min-width: 0;
   padding: 0 0 0 var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sb-history-meta {
-  display: inline-flex;
-  flex: none;
+  display: flex;
   align-items: center;
   gap: var(--space-1-5);
 }
@@ -444,12 +446,18 @@
   opacity: 0.32;
 }
 
-.sb-toggle-all {
+.sb-history-meta .sb-toggle-all {
   --btn-h: 22px;
   color: var(--text-3);
 }
-.sb-toggle-all:hover {
+.sb-history-meta .sb-toggle-all:hover {
   color: var(--text);
+}
+.sb-toggle-all svg {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.sb-toggle-all[data-collapsed="false"] svg {
+  transform: rotate(180deg);
 }
 /* 毛玻璃（app.css「Windows 11 毛玻璃」）：侧栏透明，露出 #app 那层半透明侧栏色。钉住的标题行 / 文件夹头没法再挡住下面滚过的行：
    实底是一条色带；半透明底、backdrop-filter 都会把 #app 那层半透明色再叠一遍，成了一条更深的带子（2026-10-30 真窗截屏）。
@@ -465,7 +473,7 @@
   position: static;
   background: transparent;
 }
-/* ───── 「项目」/「任务」两个分区：真实绑定项目的文件夹归「项目」，默认文件夹里的通用对话和纯历史目录归「任务」───── */
+/* ───── 「项目」显示已绑定的项目目录；「任务」直接显示独立对话 ───── */
 .sb-section + .sb-section {
   margin-top: var(--space-2);
 }
@@ -525,8 +533,8 @@
 .sb-folder + .sb-folder {
   margin-top: var(--space-1);
 }
-.sb-show-more-flat {
-  padding-left: var(--space-2);
+.sb-show-more.sb-show-more-flat {
+  padding-left: var(--space-3-5);
 }
 .sb-group-title {
   flex: none;
@@ -655,6 +663,7 @@
   top: 0;
   z-index: 2;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transition:
     opacity var(--dur-fast) var(--ease-out),
@@ -677,7 +686,6 @@
 }
 .sb-group-head[data-open="true"] .sb-group-count,
 .sb-group-head:hover .sb-group-count,
-.sb-group-head:focus-within .sb-group-count,
 .sb-group-head[data-menu-open="true"] .sb-group-count {
   opacity: 0;
   visibility: hidden;
@@ -687,12 +695,14 @@
 }
 .sb-group-head[data-open="true"] .sb-group-more {
   opacity: 0.65;
+  visibility: visible;
   pointer-events: auto;
 }
 .sb-group-head:hover .sb-group-action,
-.sb-group-head:focus-within .sb-group-action,
+.sb-group-head[data-open="true"]:focus-within .sb-group-action,
 .sb-group-head[data-menu-open="true"] .sb-group-action {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 .sb-group-empty {
@@ -719,9 +729,7 @@
   display: flex;
   align-items: center;
   height: var(--row-task);
-  /* 悬停时右侧操作区的宽度：置顶 22 + 归档 22 + ⋯ 22 + 两个 2px 间隙；
-     主按钮滑到这个值就正好让出位置（见下面的 .sb-row[data-quick]:hover .sb-row-main） */
-  --sb-row-quick-w: calc(3 * 22px + 2 * var(--space-0-5));
+  --sb-row-action-size: 22px;
   border-radius: var(--radius-md);
   transition:
     background-color var(--dur-fast) var(--ease-out),
@@ -766,15 +774,7 @@
   padding: 0 var(--space-2) 0 var(--space-3-5);
   border-radius: var(--radius-md);
   color: var(--text-2);
-  transition:
-    color var(--dur-fast) var(--ease-out),
-    padding-right var(--dur-fast) var(--ease-out);
-}
-/* 悬停 / 聚焦时标题平滑让出右侧操作区（相对时间同时淡出，见 .sb-row-tail） */
-.sb-row[data-quick]:hover .sb-row-main,
-.sb-row[data-quick]:focus-within .sb-row-main,
-.sb-row[data-quick][data-menu-open="true"] .sb-row-main {
-  padding-right: calc(var(--sb-row-quick-w) + var(--space-1));
+  transition: color var(--dur-fast) var(--ease-out);
 }
 .sb-row[data-selected="true"] .sb-row-main,
 .sb-row[data-status="needs_you"] .sb-row-main {
@@ -822,42 +822,31 @@
   background: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
-/* 时间一列：所有行的右边对齐；任务行 hover 时 ⋯ 盖在这一格上（最小宽 = ⋯ 的宽），所以任务行不再另外让位。
-   无衬线 + 等宽数字（2026-10-29：原来等宽字体，"40 分钟"里中文落到回退字体、数字和中文之间空一大格，英文 Just now 又宽得挤掉标题） */
+/* 相对时间和操作共用行尾，离开时先让当前内容淡出，再显示另一组；标题宽度不参与动画。 */
 .sb-row-tail {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1);
-  min-width: var(--control-h-sm);
+  min-width: var(--sb-row-action-size);
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
   color: var(--text-3);
   font-variant-numeric: tabular-nums;
   text-align: right;
-  transition:
-    opacity var(--dur-fast) var(--ease-out),
-    visibility 0s;
-}
-.sb-row-tail-text {
   white-space: nowrap;
-}
-.sb-row-more {
-  position: absolute;
-  right: var(--space-0-5);
-  opacity: 0;
   transition:
-    opacity var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
+    opacity var(--dur-instant) var(--ease-out) var(--dur-instant),
+    visibility 0s linear var(--dur-instant);
 }
-/* 任务行尾部悬停时浮出的操作区：置顶 / 归档 / ⋯ 平时不占位、不拦截点击，
-   相对时间淡出的同时淡入（键盘聚焦、菜单打开时一样）。 */
+.sb-row[data-quick] .sb-row-tail {
+  min-width: calc(3 * var(--sb-row-action-size) + 2 * var(--space-0-5));
+}
 .sb-row-actions {
   position: absolute;
   top: 50%;
-  right: var(--space-0-5);
+  right: var(--space-2);
   z-index: 1;
   display: flex;
   align-items: center;
@@ -867,49 +856,34 @@
   pointer-events: none;
   visibility: hidden;
   transition:
-    opacity var(--dur-fast) var(--ease-out),
-    visibility 0s linear var(--dur-fast);
+    opacity var(--dur-instant) var(--ease-out),
+    visibility 0s linear var(--dur-instant);
 }
 .sb-row:hover .sb-row-actions,
-.sb-row:focus-within .sb-row-actions,
+.sb-row-main:focus-visible + .sb-row-actions,
 .sb-row[data-menu-open="true"] .sb-row-actions {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
   transition:
-    opacity var(--dur-fast) var(--ease-out),
-    visibility 0s;
+    opacity var(--dur-instant) var(--ease-out) var(--dur-instant),
+    visibility 0s linear var(--dur-instant);
 }
-/* 操作区里的按钮都矮一圈（22px）：三个挤在 240px 侧栏的行尾，也不抢标题的位置。
-   选择器多一层 .sb-row-actions：controls.css 的 --btn-h 默认值同特异度，靠本来赢不靠导入顺序。 */
-.sb-row-actions .sb-row-quick {
-  --btn-h: 22px;
+.sb-row-actions .ui-icon-btn {
+  --btn-h: var(--sb-row-action-size);
   color: var(--text-3);
 }
-.sb-row-actions .sb-row-quick:hover {
+.sb-row-actions .ui-icon-btn:hover {
   color: var(--text);
 }
-/* 操作区里的 ⋯ 跟着这一排走，不再自己绝对定位到行尾 */
-.sb-row-actions .sb-row-more {
-  --btn-h: 22px;
-  position: static;
-  right: auto;
-}
-.sb-row:hover .sb-row-more,
-.sb-row:focus-within .sb-row-more,
-.sb-row[data-menu-open="true"] .sb-row-more,
-.sb-row-more[aria-expanded="true"] {
-  opacity: 1;
-}
 .sb-row[data-menu]:hover .sb-row-tail,
-.sb-row[data-menu]:focus-within .sb-row-tail,
-.sb-row[data-menu][data-menu-open="true"] .sb-row-tail {
+.sb-row[data-menu] .sb-row-main:focus-visible .sb-row-tail,
+.sb-row[data-menu-open="true"] .sb-row-tail {
   opacity: 0;
   visibility: hidden;
-  /* 隐藏时 visibility 等淡出放完再切，不然看不到渐隐。 */
   transition:
-    opacity var(--dur-fast) var(--ease-out),
-    visibility 0s linear var(--dur-fast);
+    opacity var(--dur-instant) var(--ease-out),
+    visibility 0s linear var(--dur-instant);
 }
 /* 改名框的文字和原来的标题对齐：框往左伸出 内边距 + 描边，字不跳（2026-10-29：原来右移 7px） */
 .sb-rename {

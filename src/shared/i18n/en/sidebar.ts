@@ -20,6 +20,7 @@ export const sidebar = {
   update: "Update {version}",
   updateTip: "Restart to install",
   newInProject: "New task in this project",
+  newInSessionFolder: "New task in this conversation’s folder",
   label: "Tasks",
   projectMenu: "Project menu",
   openFolder: "Open folder",

@@ -2,7 +2,8 @@
 // 所以全局快捷键（Ctrl N、Ctrl J）也能直接调。失败一律用 toast 说出来，不吞掉。
 import { reportError } from "../../ui/errors.ts";
 import type { TFunction } from "../../../../shared/i18n/index.ts";
-import type { TaskId } from "../../../../shared/ipc.ts";
+import type { SessionSummary, TaskId } from "../../../../shared/ipc.ts";
+import { isDefaultFolder } from "../empty/default-folder.ts";
 import { selectTask } from "../../store/index.ts";
 import { startDraft } from "../empty/index.ts";
 import { refreshProjects } from "./projects-store.ts";
@@ -38,19 +39,22 @@ export async function startDraftInFolder(
     startDraft(folder.project.id);
     return;
   }
-  const norm = (p: string) =>
-    p
-      .replace(/[\\/]+$/, "")
-      .replaceAll("\\", "/")
-      .toLowerCase();
-  if ((defaultCwd != null && norm(folder.cwd) === norm(defaultCwd)) || isScratchChatCwd(folder.cwd)) {
+  const item = folder.items.find((item) => item.kind === "session");
+  if (item !== undefined) await startDraftInSessionFolder(item.session, t, defaultCwd ?? null);
+}
+
+/** 历史会话平铺后，从对话菜单仍可在原目录开新任务。 */
+export async function startDraftInSessionFolder(
+  session: SessionSummary,
+  t: TFunction,
+  chatsDir: string | null,
+): Promise<void> {
+  if (isDefaultFolder(session.cwd, chatsDir) || isScratchChatCwd(session.cwd)) {
     startDraft(null);
     return;
   }
-  const session = folder.items.find((item) => item.kind === "session");
-  if (session?.kind !== "session") return;
   try {
-    const project = await window.studio.ensureSessionProject(session.session.id);
+    const project = await window.studio.ensureSessionProject(session.id);
     await refreshProjects();
     startDraft(project.id);
   } catch (error) {

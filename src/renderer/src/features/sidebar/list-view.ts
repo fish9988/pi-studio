@@ -10,6 +10,8 @@ export const initialPerFolder = 5;
 export const showMoreStep = 20;
 /** 时间排列的"显示更多"状态键（文件夹用它自己的 key）。 */
 export const timeLimitKey = "\u0000time";
+/** 「任务」区的平铺列表独立于各项目和时间视图分页。 */
+export const looseLimitKey = "\u0000loose";
 
 export const folderNavId = (folder: SidebarFolder) => `folder:${folder.key}`;
 export const moreNavId = (key: string) => `more:${key}`;

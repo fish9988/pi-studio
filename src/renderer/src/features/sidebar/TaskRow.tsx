@@ -176,7 +176,7 @@ export const TaskRow = memo(function TaskRow({
           {isRunning && <RunningFourDots label={t("status.running")} />}
         </span>
       </button>
-      {/* 平时不占位：悬停 / 聚焦时浮在行尾，主按钮同时把右内边距让出来（见 sidebar.css 的 --sb-row-quick-w）。 */}
+      {/* 与时间共用预留的行尾空间，切换时不改标题宽度。 */}
       <span className="sb-row-actions">
         <IconButton
           className="sb-row-quick"

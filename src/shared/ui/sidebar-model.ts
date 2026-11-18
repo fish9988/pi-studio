@@ -218,6 +218,18 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
   return list.sort((a, b) => rank(a) - rank(b) || newest(b) - newest(a));
 }
 
+/** 按文件夹浏览时，只给已绑定的非默认项目保留文件夹头；其余对话按置顶和最近活动合并。 */
+export function splitSidebarFolders(folders: readonly SidebarFolder[], defaultCwd: string | null) {
+  const defaultKey = defaultCwd === null ? null : folderKey(defaultCwd);
+  const projects: SidebarFolder[] = [];
+  const tasks: SidebarItem[] = [];
+  for (const folder of folders) {
+    if (folder.project !== null && folder.key !== defaultKey) projects.push(folder);
+    else tasks.push(...folder.items);
+  }
+  return { projects, tasks: tasks.sort((a, b) => byRecentItem(a, b)) };
+}
+
 /** 等你确认的任务，等得最久的在前。 */
 export function waitingTasks(tasks: readonly TaskState[], hidden: ReadonlySet<TaskId>): TaskState[] {
   return tasks

@@ -30,6 +30,7 @@ import {
   folderNavId,
   initialByTime,
   initialPerFolder,
+  looseLimitKey,
   moreNavId,
   showMoreStep,
   timeLimitKey,
@@ -44,6 +45,7 @@ import {
   buildTimeline,
   nextWaitingTask,
   projectLabels,
+  splitSidebarFolders,
   waitingTasks,
   type SidebarFolder,
 } from "../../../../shared/ui/sidebar-model.ts";
@@ -90,6 +92,7 @@ export function Sidebar() {
   const [renamingId, setRenamingId] = useState<TaskState["id"] | null>(null);
   const [renamingFolderKey, setRenamingFolderKey] = useState<string | null>(null);
   const [activeOnly, setActiveOnly] = useState(false);
+  const [openSections, setOpenSections] = useState({ projects: true, tasks: true });
   // 斜杠命令 /rename（不带新名字）：当前任务的行进入就地改名；侧栏收起时 App 同时把它展开。
   useEffect(
     () =>
@@ -175,6 +178,10 @@ export function Sidebar() {
     folderAliases,
     activeOnly,
   ]);
+  const { projects: projectFolders, tasks: looseTasks } = useMemo(
+    () => splitSidebarFolders(folders, chatsDir),
+    [folders, chatsDir],
+  );
   const timeline = useMemo(() => {
     if (order !== "time") return [];
     const built = buildTimeline({
@@ -202,20 +209,22 @@ export function Sidebar() {
       : (projectLabels(projectsState.list).get(projectId) ?? "");
   };
 
-  // 搜索或筛选进行中会话时忽略折叠，匹配的行都要看得见；否则用户点过的优先，没点过的看有没有选中/在跑/等你确认的任务。
+  // 搜索和进行中筛选临时展开匹配结果，不改用户的折叠设置。
+  const unlimited = searching || activeOnly;
+  const projectsOpen = unlimited || openSections.projects;
+  const tasksOpen = unlimited || openSections.tasks;
   const isOpen = useCallback(
-    (folder: SidebarFolder) =>
-      searching || activeOnly || (openOverride[folder.key] ?? defaultOpen(folder, selectedTaskId)),
-    [searching, activeOnly, openOverride, selectedTaskId],
+    (folder: SidebarFolder) => unlimited || (openOverride[folder.key] ?? defaultOpen(folder, selectedTaskId)),
+    [unlimited, openOverride, selectedTaskId],
   );
   // 因为选中 / 在跑 / 等你确认而展开的文件夹记成"展开"：任务跑完、换了选中项都不再自己收起，只有用户点了才折叠。
   const autoOpened = useMemo(
     () =>
-      folders
+      projectFolders
         .filter((folder) => openOverride[folder.key] === undefined && defaultOpen(folder, selectedTaskId))
         .map((folder) => folder.key)
         .join("\n"),
-    [folders, openOverride, selectedTaskId],
+    [projectFolders, openOverride, selectedTaskId],
   );
   useEffect(() => {
     if (autoOpened === "") return;
@@ -265,26 +274,36 @@ export function Sidebar() {
     [t, locale],
   );
 
-  // roving tabindex：整个列表一个停靠点，记住的那个已不存在时回到选中的任务，再不行是第一项。
+  const flatKey = order === "time" ? timeLimitKey : looseLimitKey;
+  const flatLimit = unlimited ? Infinity : (limits[flatKey] ?? (order === "time" ? initialByTime : initialPerFolder));
+  const flatItems = useMemo(
+    () => visibleItems(order === "time" ? timeline : looseTasks, flatLimit, selectedTaskId),
+    [order, timeline, looseTasks, flatLimit, selectedTaskId],
+  );
+  // roving tabindex 和任务快捷跳转共用实际呈现的行序；收起的分区不参与导航。
   const navIds = useMemo(() => {
-    if (order === "time") {
-      const { shown, remaining } = visibleItems(
-        timeline,
-        searching ? Infinity : (limits[timeLimitKey] ?? initialByTime),
-        selectedTaskId,
-      );
-      return [...shown.map((item) => item.key), ...(remaining > 0 ? [moreNavId(timeLimitKey)] : [])];
-    }
-    return folders.flatMap((folder) => {
-      if (!isOpen(folder)) return [folderNavId(folder)];
-      const { shown, remaining } = visibleItems(
-        folder.items,
-        searching ? Infinity : (limits[folder.key] ?? initialPerFolder),
-        selectedTaskId,
-      );
-      return [folderNavId(folder), ...shown.map((item) => item.key), ...(remaining > 0 ? [moreNavId(folder.key)] : [])];
-    });
-  }, [order, timeline, folders, searching, limits, isOpen, selectedTaskId]);
+    const flatIds = [
+      ...flatItems.shown.map((item) => item.key),
+      ...(flatItems.remaining > 0 ? [moreNavId(flatKey)] : []),
+    ];
+    if (order === "time") return flatIds;
+    const projectIds = projectsOpen
+      ? projectFolders.flatMap((folder) => {
+          if (!isOpen(folder)) return [folderNavId(folder)];
+          const { shown, remaining } = visibleItems(
+            folder.items,
+            unlimited ? Infinity : (limits[folder.key] ?? initialPerFolder),
+            selectedTaskId,
+          );
+          return [
+            folderNavId(folder),
+            ...shown.map((item) => item.key),
+            ...(remaining > 0 ? [moreNavId(folder.key)] : []),
+          ];
+        })
+      : [];
+    return tasksOpen ? [...projectIds, ...flatIds] : projectIds;
+  }, [order, flatItems, flatKey, projectsOpen, projectFolders, isOpen, unlimited, limits, selectedTaskId, tasksOpen]);
   const selectedNav = selectedTaskId === null ? "" : `task:${selectedTaskId}`;
   const tabStopId = navIds.includes(tabStop) ? tabStop : navIds.includes(selectedNav) ? selectedNav : (navIds[0] ?? "");
   const visibleTaskKey = useMemo(
@@ -302,7 +321,9 @@ export function Sidebar() {
   const onListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const keys = ["ArrowUp", "ArrowDown", "Home", "End"];
     if (!keys.includes(event.key) || event.altKey || event.ctrlKey || event.metaKey) return;
-    const items = [...event.currentTarget.querySelectorAll<HTMLElement>("[data-nav]")];
+    const items = [...event.currentTarget.querySelectorAll<HTMLElement>("[data-nav]")].filter((item) =>
+      navIds.includes(item.dataset.nav ?? ""),
+    );
     const at = items.indexOf(document.activeElement as HTMLElement);
     if (at === -1) return;
     event.preventDefault();
@@ -349,7 +370,9 @@ export function Sidebar() {
               setQuery("");
             } else if (event.key === "ArrowDown") {
               // 从搜索框直接进结果列表。
-              const first = listRef.current?.querySelector<HTMLElement>("[data-nav]");
+              const first = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-nav]") ?? [])].find(
+                (item) => item.dataset.nav === navIds[0],
+              );
               if (first) {
                 event.preventDefault();
                 first.focus();
@@ -430,12 +453,17 @@ export function Sidebar() {
             </div>
           )}
           <HistorySection
-            folders={folders}
-            timeline={timeline}
-            searching={searching}
+            order={order}
+            folders={projectFolders}
+            flatItems={flatItems}
+            flatKey={flatKey}
+            looseCount={looseTasks.length}
+            unlimited={unlimited}
             activeOnly={activeOnly}
             activeCount={activeCount}
-            chatsDir={chatsDir}
+            projectsOpen={projectsOpen}
+            tasksOpen={tasksOpen}
+            onToggleSection={(section) => setOpenSections((current) => ({ ...current, [section]: !current[section] }))}
             isOpen={isOpen}
             limits={limits}
             selectedTaskId={selectedTaskId}
@@ -445,13 +473,14 @@ export function Sidebar() {
             unreadTaskIds={unreadTaskIds}
             rows={rows}
             onToggle={(folder, open) => setOpenOverride((current) => ({ ...current, [folder.key]: open }))}
-            onSetAllOpen={(open) =>
+            onSetAllOpen={(open) => {
+              if (open) setOpenSections((current) => ({ ...current, projects: true }));
               setOpenOverride((current) => {
                 const next = { ...current };
-                for (const folder of folders) next[folder.key] = open;
+                for (const folder of projectFolders) next[folder.key] = open;
                 return next;
-              })
-            }
+              });
+            }}
             onToggleActiveOnly={setActiveOnly}
             onShowMore={(key) =>
               setLimits((current) => ({
