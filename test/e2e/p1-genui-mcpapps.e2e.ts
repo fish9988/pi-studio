@@ -208,12 +208,42 @@ test("P1 集成：Gen UI 内联卡片交互（::visualize 与 HTML Artifact）�
     "utf8",
   );
 
+  // 在 agentDir/visuals 下也种一个带交互滑块的中值定理可视化片段，检验无框透明渲染 + visuals 目录安全读取
+  const visualsDir = path.join(agentDir, "visuals");
+  await mkdir(visualsDir, { recursive: true });
+  await writeFile(
+    path.join(visualsDir, "mvt-demo.html"),
+    `<div style="padding:4px 0">
+      <div class="viz-controls">
+        <label class="form-label">切点 x₀ = <span id="xi-val" class="tabular-nums">1.00</span>
+          <input id="xi-slider" class="form-range" type="range" min="0.2" max="1.8" step="0.1" value="1.0" />
+        </label>
+        <span class="viz-badge" id="slope-badge">斜率 2.00</span>
+      </div>
+      <svg viewBox="0 0 300 100" style="width:100%;height:auto;display:block">
+        <line x1="20" y1="80" x2="280" y2="80" stroke="var(--border)" />
+        <circle id="pt-c" cx="150" cy="50" r="5" fill="var(--viz-series-1)" />
+      </svg>
+    </div>
+    <script>
+      var s = document.getElementById("xi-slider");
+      s.addEventListener("input", function () {
+        var v = Number(s.value);
+        document.getElementById("xi-val").textContent = v.toFixed(2);
+        document.getElementById("slope-badge").textContent = "斜率 " + (2 * v).toFixed(2);
+      });
+    </script>`,
+    "utf8",
+  );
+
   // 种一个带 `::visualize` 指令和 ```html Artifact 的会话
   const sessionFile = path.join(sessionBucket, "2026-11-18T12-00-00-000Z_p1-session.jsonl");
   const assistantMarkdown = [
     "下面展示交互可视化：",
     "",
     '::visualize{path="chart.html" title="训练曲线面板"}',
+    "",
+    '::visualize{"path":"mvt-demo.html","title":"拉格朗日中值定理"}',
     "",
     "```html",
     '<!doctype html><html><head><title>Inline Widget</title></head><body><button id="hi">Hello GenUI</button></body></html>',
@@ -261,12 +291,18 @@ test("P1 集成：Gen UI 内联卡片交互（::visualize 与 HTML Artifact）�
     await row.click();
     await expect(page.getByTestId("tsp-view")).toBeVisible({ timeout: 15_000 });
 
-    // 2) 验证 `::visualize{path="chart.html"}` 自动渲染出 GenUiCard，并与沙箱 iframe 完成双向桥接
+    // 2) 验证 `::visualize{path="chart.html"}` 自动渲染出无框透明 GenUiCard，并与沙箱 iframe 完成双向桥接
     const genUiCard = page.getByTestId("gen-ui-card").first();
     await expect(genUiCard).toBeVisible({ timeout: 15_000 });
-    await expect(genUiCard).toContainText("训练曲线面板");
+    await expect(genUiCard).toHaveCSS("border-top-width", "0px");
     const genFrame = page.frameLocator("iframe.gen-ui-frame").first();
     await expect(genFrame.locator("#heading")).toHaveText("Loss Tuner", { timeout: 15_000 });
+
+    // 验证位于 agentDir/visuals/mvt-demo.html 的无框透明交互图可直接渲染并实时调参
+    const mvtFrame = page.frameLocator("iframe.gen-ui-frame").nth(1);
+    await expect(mvtFrame.locator("#slope-badge")).toHaveText("斜率 2.00", { timeout: 15_000 });
+    await mvtFrame.locator("#xi-slider").fill("1.5");
+    await expect(mvtFrame.locator("#slope-badge")).toHaveText("斜率 3.00");
 
     // 触发 setWidgetState -> 宿主出现已保存状态徽标
     await genFrame.locator("#save-btn").click();
@@ -283,10 +319,10 @@ test("P1 集成：Gen UI 内联卡片交互（::visualize 与 HTML Artifact）�
     await genUiCard.getByTestId("gen-ui-confirm").getByRole("button", { name: "取消" }).click();
     await expect(genUiCard.getByTestId("gen-ui-confirm")).toHaveCount(0);
 
-    // 3) 验证 ```html Artifact 块点击「交互预览」就地展开第二个 GenUiCard
+    // 3) 验证 ```html Artifact 块点击「交互预览」就地展开第三个 GenUiCard
     await page.getByTestId("codeblock-run-genui").click();
-    await expect(page.getByTestId("gen-ui-card")).toHaveCount(2, { timeout: 10_000 });
-    const inlineFrame = page.frameLocator("iframe.gen-ui-frame").nth(1);
+    await expect(page.getByTestId("gen-ui-card")).toHaveCount(3, { timeout: 10_000 });
+    const inlineFrame = page.frameLocator("iframe.gen-ui-frame").nth(2);
     await expect(inlineFrame.locator("#hi")).toHaveText("Hello GenUI", { timeout: 10_000 });
 
     // 4) 打开右侧工作台，从概览启动真实 stdio MCP Apps 容器并完成双向交互

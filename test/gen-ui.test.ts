@@ -74,8 +74,8 @@ describe("parseVisualizeDirective", () => {
 });
 
 describe("clampGenUiHeight", () => {
-  it("限制在 160–720 之间并取整", () => {
-    expect(clampGenUiHeight(90)).toBe(GEN_UI_MIN_HEIGHT);
+  it("限制在 80–1400 之间并取整", () => {
+    expect(clampGenUiHeight(40)).toBe(GEN_UI_MIN_HEIGHT);
     expect(clampGenUiHeight(5000)).toBe(GEN_UI_MAX_HEIGHT);
     expect(clampGenUiHeight(320.6)).toBe(321);
     expect(clampGenUiHeight(Number.NaN)).toBe(GEN_UI_MIN_HEIGHT);
@@ -125,6 +125,8 @@ describe("buildGenUiHtml", () => {
     expect(built).toContain("--accent:#5b4ee6");
     expect(built).toContain("--border:rgba(19, 22, 41, 0.13)");
     expect(built).toContain("--surface:#f4f6fc");
+    expect(built).toContain("--background:transparent");
+    expect(built).toContain("--viz-series-1:var(--primary)");
     expect(built).toContain("color-scheme:light");
     // 垫片与桥都在 <head> 之后、正文之前。
     expect(built.indexOf("<script>")).toBeGreaterThan(built.indexOf("<head>"));

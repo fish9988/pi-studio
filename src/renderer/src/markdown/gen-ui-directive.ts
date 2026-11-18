@@ -4,9 +4,9 @@ import { injectHtmlPreviewShim } from "../features/file-preview/html-preview.ts"
 
 /** widget 状态（存 sessionStorage、随追问回传的 modelContent）序列化后的上限：16 KiB。 */
 export const MAX_WIDGET_STATE_BYTES = 16 * 1024;
-/** 卡片 iframe 的高度区间（px）：太矮控件挤成一团，太高会把对话顶走。 */
-export const GEN_UI_MIN_HEIGHT = 160;
-export const GEN_UI_MAX_HEIGHT = 720;
+/** 卡片 iframe 的高度区间（px）：太矮控件挤成一团，放宽上限到 1400 以容纳双面板交互图而无需内滚动。 */
+export const GEN_UI_MIN_HEIGHT = 80;
+export const GEN_UI_MAX_HEIGHT = 1400;
 /** 宿主与卡片 iframe 之间的消息通道名。 */
 export const GEN_UI_CHANNEL = "pi-gen-ui";
 /** 引用进输入框的文字上限：再长也不是"引用一段"，还会把草稿撑爆。 */
@@ -170,13 +170,17 @@ export function normalizeWidgetState(raw: unknown): GenUiWidgetState | null {
 
 // ───────────────────────── 沙箱文档注入 ─────────────────────────
 
-/** 卡片 iframe 内可读的主题色（CSS 变量 --bg / --fg / --accent / --border / --surface）。 */
+/** 卡片 iframe 内可读的主题色与字体变量（支持 --bg / --fg / --accent / --border / --surface 与 --foreground / --muted-foreground / --viz-series-1..6）。 */
 export interface GenUiThemeTokens {
   bg: string;
   fg: string;
   accent: string;
   border: string;
   surface: string;
+  mutedFg?: string | undefined;
+  card?: string | undefined;
+  fontFamily?: string | undefined;
+  fontSize?: string | undefined;
 }
 
 export interface BuildGenUiHtmlInput {
@@ -195,16 +199,77 @@ const THEME_VAR_PAIRS: readonly (readonly [keyof GenUiThemeTokens, string])[] = 
   ["accent", "--accent"],
   ["border", "--border"],
   ["surface", "--surface"],
+  ["mutedFg", "--muted-fg"],
+  ["card", "--pi-card"],
+  ["fontFamily", "--pi-font-sans"],
+  ["fontSize", "--pi-font-size"],
 ];
 
-/** 只留 CSS 值能用的字符：括号、逗号、百分号、`#`、斜杠，别的一律去掉，注入不了 `}` 或 `<`。 */
+/** 只留 CSS 值能用的字符：括号、逗号、百分号、`#`、斜杠、引号，别的一律去掉，注入不了 `}` 或 `<`。 */
 function sanitizeCssValue(value: string): string {
-  return value.replace(/[^\w\s#%.,()/-]/g, "");
+  return value.replace(/[^\w\s#%.,()/' "-]/g, "");
 }
 
+const GEN_UI_BASE_CSS = [
+  "*,*::before,*::after{box-sizing:border-box}",
+  'html,body{margin:0;padding:0;background:transparent !important;color:var(--foreground);font-family:var(--pi-font-sans,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif);font-size:var(--pi-font-size,14px);line-height:1.55;-webkit-font-smoothing:antialiased}',
+  ":root{",
+  "`--background`:transparent;".replaceAll("`", ""),
+  "`--foreground`:var(--fg,currentColor);".replaceAll("`", ""),
+  "`--muted`:color-mix(in srgb,var(--foreground) 8%,transparent);".replaceAll("`", ""),
+  "`--muted-foreground`:var(--muted-fg,color-mix(in srgb,var(--foreground) 58%,transparent));".replaceAll("`", ""),
+  "`--card`:var(--pi-card,color-mix(in srgb,var(--foreground) 4%,transparent));".replaceAll("`", ""),
+  "`--card-foreground`:var(--foreground);".replaceAll("`", ""),
+  "`--popover`:var(--surface,var(--card));".replaceAll("`", ""),
+  "`--popover-foreground`:var(--foreground);".replaceAll("`", ""),
+  "`--primary`:var(--accent,#5b4ee6);".replaceAll("`", ""),
+  "`--primary-foreground`:#ffffff;".replaceAll("`", ""),
+  "`--secondary`:var(--muted);".replaceAll("`", ""),
+  "`--secondary-foreground`:var(--foreground);".replaceAll("`", ""),
+  "`--accent-foreground`:var(--primary);".replaceAll("`", ""),
+  "`--input`:var(--border,color-mix(in srgb,var(--foreground) 16%,transparent));".replaceAll("`", ""),
+  "`--ring`:var(--primary);".replaceAll("`", ""),
+  "`--radius-sm`:4px;`--radius-md`:6px;`--radius-lg`:8px;`--radius-xl`:12px;".replaceAll("`", ""),
+  "`--blue`:light-dark(#2563eb,#60a5fa);`--green`:light-dark(#059669,#34d399);".replaceAll("`", ""),
+  "`--orange`:light-dark(#d97706,#fbbf24);`--red`:light-dark(#dc2626,#f87171);".replaceAll("`", ""),
+  "`--purple`:light-dark(#7c3aed,#a78bfa);`--yellow`:light-dark(#ca8a04,#facc15);".replaceAll("`", ""),
+  "`--viz-series-1`:var(--primary);`--viz-series-2`:var(--orange);`--viz-series-3`:var(--green);".replaceAll("`", ""),
+  "`--viz-series-4`:var(--red);`--viz-series-5`:var(--purple);`--viz-series-6`:light-dark(#0d9488,#2dd4bf);".replaceAll(
+    "`",
+    "",
+  ),
+  "}",
+  "h1,h2,h3{margin:0 0 8px;font-weight:500;color:var(--foreground);line-height:1.3}",
+  "h1{font-size:calc(var(--pi-font-size,14px) + 4px)}",
+  "h2{font-size:calc(var(--pi-font-size,14px) + 2px)}",
+  "h3{font-size:var(--pi-font-size,14px)}",
+  "svg{max-width:100%;height:auto}",
+  ".text-muted{color:var(--muted-foreground)}",
+  ".text-small{font-size:calc(var(--pi-font-size,14px) - 2px)}",
+  ".tabular-nums{font-variant-numeric:tabular-nums}",
+  ".card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:12px 14px}",
+  ".viz-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
+  ".viz-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:8px 0}",
+  ".viz-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}",
+  ".viz-stat{display:flex;flex-direction:column;gap:2px}",
+  ".viz-stat-value{font-size:calc(var(--pi-font-size,14px) + 4px);font-weight:500;font-variant-numeric:tabular-nums}",
+  ".viz-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:var(--muted);color:var(--foreground);font-size:12px;font-weight:500}",
+  ".btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 11px;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--card);color:var(--foreground);font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:background-color .14s ease,border-color .14s ease}",
+  ".btn:hover{background:var(--muted)}",
+  ".btn-primary{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}",
+  ".btn-primary:hover{opacity:.92;background:var(--primary)}",
+  ".btn-sm{height:24px;padding:0 9px;font-size:12px}",
+  ".form-range{accent-color:var(--primary);cursor:pointer;vertical-align:middle}",
+  ".form-control,.form-select{height:30px;padding:0 8px;border-radius:var(--radius-md);border:1px solid var(--input);background:var(--card);color:var(--foreground);font:inherit;font-size:13px}",
+  ".form-label{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-foreground)}",
+].join("\n");
+
 function themeStyle(input: BuildGenUiHtmlInput): string {
-  const declarations = THEME_VAR_PAIRS.map(([key, name]) => `${name}:${sanitizeCssValue(input.tokens[key])}`).join(";");
-  return `<style>:root{${declarations};color-scheme:${input.theme}}</style>`;
+  const declarations = THEME_VAR_PAIRS.flatMap(([key, name]) => {
+    const raw = input.tokens[key];
+    return typeof raw === "string" && raw.trim() !== "" ? [`${name}:${sanitizeCssValue(raw)}`] : [];
+  }).join(";");
+  return `<style>:root{${declarations};color-scheme:${input.theme}}</style><style>${GEN_UI_BASE_CSS}</style>`;
 }
 
 /** JSON 直接塞进 `<script>` 必须切断 `</script>`、U+2028、U+2029。 */
@@ -218,7 +283,7 @@ function scriptJson(value: unknown): string {
 // 注入到卡片文档里的桥：只 postMessage，不碰宿主 DOM。属性名与消息格式必须和 parseGenUiMessage 对齐。
 const GEN_UI_BRIDGE_BODY = `
 var CHANNEL = "pi-gen-ui";
-var THEME_VARS = [["bg", "--bg"], ["fg", "--fg"], ["accent", "--accent"], ["border", "--border"], ["surface", "--surface"]];
+var THEME_VARS = [["bg", "--bg"], ["fg", "--fg"], ["accent", "--accent"], ["border", "--border"], ["surface", "--surface"], ["mutedFg", "--muted-fg"], ["card", "--pi-card"], ["fontFamily", "--pi-font-sans"], ["fontSize", "--pi-font-size"]];
 var root = document.documentElement;
 var api = {};
 function post(type, payload) {
@@ -268,7 +333,10 @@ window.zcode = api;
 var lastHeight = 0;
 function measure() {
   var body = document.body;
-  var height = Math.max(root.scrollHeight, root.offsetHeight, body ? body.scrollHeight : 0);
+  var bodyRect = body ? Math.ceil(body.getBoundingClientRect().height) : 0;
+  var bodyScroll = body ? body.scrollHeight : 0;
+  var height = Math.max(bodyRect, bodyScroll);
+  if (height <= 0) height = Math.max(root.scrollHeight, root.offsetHeight);
   if (height > 0 && height !== lastHeight) {
     lastHeight = height;
     post("resize", { height: height });

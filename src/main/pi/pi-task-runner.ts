@@ -3,7 +3,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { appendFile, stat } from "node:fs/promises";
+import { appendFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
@@ -212,6 +212,20 @@ interface ActiveBtwProcess {
 }
 
 type RewindResult = { text: string; images?: PromptImage[]; summarized: boolean };
+
+/** 定位内置 `visualize` skill 目录（打包后位于 resources/skills/visualize，开发期位于仓库 resources/skills/visualize）。 */
+function resolveBuiltinVisualizeSkill(): string | null {
+  const resPath = (process as { resourcesPath?: string }).resourcesPath;
+  const candidates = [
+    ...(resPath ? [path.join(resPath, "skills", "visualize")] : []),
+    path.resolve(import.meta.dirname, "..", "..", "resources", "skills", "visualize"),
+    path.resolve(import.meta.dirname, "..", "..", "..", "resources", "skills", "visualize"),
+  ];
+  for (const dir of candidates) {
+    if (existsSync(path.join(dir, "SKILL.md"))) return dir;
+  }
+  return null;
+}
 
 export class PiTaskRunner {
   readonly id: TaskId;
@@ -615,6 +629,19 @@ export class PiTaskRunner {
           ? this.#record.thinkingLevel
           : undefined;
 
+      const extraArgs: string[] = [];
+      const vizSkill = resolveBuiltinVisualizeSkill();
+      if (vizSkill !== null) {
+        const visualsDir = path.join(resolveAgentDir(), "visuals");
+        await mkdir(visualsDir, { recursive: true }).catch(() => {});
+        extraArgs.push(
+          "--skill",
+          vizSkill,
+          "--append-system-prompt",
+          `[pi-studio] Inline interactive visualizations directory: "${visualsDir}". When using the visualize skill, write HTML fragments there (or use relative paths) and embed them on a standalone line via ::visualize{"path":"<filename>.html","title":"..."}.`,
+        );
+      }
+
       client = new PiRpcClient({
         launch,
         cwd: this.cwd,
@@ -625,6 +652,7 @@ export class PiTaskRunner {
         thinkingLevel: effectiveThinking,
         sessionName:
           this.#record.title !== "" && !/^[A-Za-z]:?$/.test(this.#record.title.trim()) ? this.#record.title : undefined,
+        extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
       });
 
       client.onEvent((event) => {

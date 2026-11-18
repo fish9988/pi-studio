@@ -154,6 +154,8 @@ function parseCliArgs(argv) {
     } else if (arg === "--name" && i + 1 < argv.length) {
       opts.name = argv[i + 1];
       i += 2;
+    } else if ((arg === "--skill" || arg === "--append-system-prompt") && i + 1 < argv.length) {
+      i += 2;
     } else if (arg.startsWith("-")) {
       i += 1;
     } else {

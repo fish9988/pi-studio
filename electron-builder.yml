@@ -47,6 +47,9 @@ extraResources:
   # Dracula / Tokyo Night / Catppuccin / Nord / Rosé Pine 主题（src/renderer/styles/themes.css）的配色取自各自的 MIT 调色板：许可证随软件一起带上。
   - from: src/renderer/styles/themes-LICENSE.txt
     to: licenses/theme-palettes-MIT.txt
+  # 内置轻量可视化技能（随 pi 任务注入，不改动用户的 ~/.pi/agent/skills）。
+  - from: resources/skills
+    to: skills
 # koffi 的原生 .node 在 @koromix/koffi-<平台> 包里，electron-builder 会自动把 .node 解出 asar；
 # 已在打包产物里实测 koffi 能加载并调用 kernel32。
 win:

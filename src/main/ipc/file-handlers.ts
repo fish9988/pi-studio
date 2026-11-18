@@ -8,6 +8,7 @@ import { shell } from "electron";
 import type { HandlerGroup, ProjectFilesTarget } from "../../shared/ipc.ts";
 import { listDirectory } from "../files/list-directory.ts";
 import { ProjectFileIndex, parseFileQuery } from "../files/project-files.ts";
+import { resolveAgentDir } from "../history/session-index.ts";
 import { getTaskPool } from "../tasks/runtime.ts";
 import { chatsDir } from "../tasks/chats-dir.ts";
 import {
@@ -49,6 +50,49 @@ export async function targetCwd(target: ProjectFilesTarget): Promise<string> {
   return project.path;
 }
 
+function isHtmlPath(filePath: string): boolean {
+  const ext = path.extname(stripPreviewFragment(filePath)).toLowerCase();
+  return ext === ".html" || ext === ".htm";
+}
+
+/** 仅用于 `::visualize` 产出的会话独立 HTML 片段：允许读取 `<agentDir>/visuals/` 内的 `.html/.htm`（严防越界）。 */
+async function tryRunInVisualsDir<T>(
+  raw: string,
+  fn: (rootCwd: string, targetPath: string) => Promise<T>,
+  isMissingResult: (res: T) => boolean,
+): Promise<T | null> {
+  if (!isHtmlPath(raw)) return null;
+  const visualsDir = path.join(resolveAgentDir(), "visuals");
+  let cleaned = raw
+    .trim()
+    .replace(/^file:\/\//i, "")
+    .replace(/^\/+(?=[A-Za-z]:[\\/])/, "");
+  try {
+    cleaned = decodeURIComponent(cleaned);
+  } catch {
+    // keep cleaned
+  }
+  cleaned = stripPreviewFragment(cleaned);
+
+  let rel: string;
+  if (path.isAbsolute(cleaned) || path.win32.isAbsolute(cleaned)) {
+    const relFromVisuals = path.relative(visualsDir, cleaned);
+    if (relFromVisuals === "" || relFromVisuals.startsWith("..") || path.isAbsolute(relFromVisuals)) {
+      return null;
+    }
+    rel = relFromVisuals;
+  } else {
+    rel = cleaned.replace(/^visuals[\\/]/i, "");
+  }
+  if (rel === "" || rel.includes("..")) return null;
+  try {
+    const res = await fn(visualsDir, rel);
+    return isMissingResult(res) ? null : res;
+  } catch {
+    return null;
+  }
+}
+
 async function resolvePreviewAndRun<T>(
   parsed: ProjectFilesTarget,
   raw: string,
@@ -72,8 +116,12 @@ async function resolvePreviewAndRun<T>(
         }
       }
     }
+    const visualHit = await tryRunInVisualsDir(raw, fn, isMissingResult);
+    if (visualHit !== null) return visualHit;
     return direct;
   } catch (err) {
+    const visualHit = await tryRunInVisualsDir(raw, fn, isMissingResult);
+    if (visualHit !== null) return visualHit;
     if (parsed.kind !== "task" || parsed.root !== undefined) throw err;
     let cleaned = raw
       .trim()

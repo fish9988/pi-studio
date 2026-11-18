@@ -217,6 +217,11 @@ export const External = (props: IconProps) => (
     <path d="M9.5 3H13v3.5M13 3 7.5 8.5M11 9.5V13H3V5h3.5" />
   </Icon>
 );
+export const Maximize = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M10 2.5h3.5V6M6 13.5H2.5V10M13.5 2.5 9.2 6.8M2.5 13.5l4.3-4.3" />
+  </Icon>
+);
 export const Trash = (props: IconProps) => (
   <Icon {...props}>
     <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" />

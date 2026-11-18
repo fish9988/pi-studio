@@ -1,39 +1,32 @@
-/* 内联 Gen UI 沙箱卡片（markdown/GenUiCard.tsx）：头部条 + 自适应高度的 iframe + 追问确认条。
+/* 内联 Gen UI 交互画布（markdown/GenUiCard.tsx）：无框透明直出融入对话流，悬停微胶囊操作，支持居中弹出放大。
    只引用 tokens.css 的变量，类名一律 .gen-ui- 前缀。 */
 
 .gen-ui-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  margin: var(--space-4) 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-raised);
-  overflow: hidden;
+  margin: var(--space-3) 0;
+  background: transparent;
 }
 
-.gen-ui-head {
-  display: flex;
+.gen-ui-surface {
+  position: relative;
+}
+
+.gen-ui-overlay-bar {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  z-index: 3;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: var(--panel-head-h);
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.gen-ui-title {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh-sm);
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: var(--space-1-5);
+  pointer-events: none;
 }
 
 .gen-ui-saved {
-  flex: none;
-  padding: 0 var(--space-1-5);
+  pointer-events: auto;
+  padding: 2px var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--accent);
@@ -43,11 +36,89 @@
   white-space: nowrap;
 }
 
-.gen-ui-actions {
-  flex: none;
+.gen-ui-float-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid var(--glass-rim);
+  box-shadow: var(--shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.gen-ui-card:hover .gen-ui-float-actions,
+.gen-ui-card:focus-within .gen-ui-float-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.gen-ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.gen-ui-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.gen-ui-collapsed-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+}
+
+.gen-ui-collapsed-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-tool);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  cursor: pointer;
+}
+
+.gen-ui-collapsed-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.gen-ui-collapsed-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.gen-ui-collapsed-hint {
+  flex: none;
+  color: var(--accent);
 }
 
 /* 收起只藏内容，iframe 不卸载：卡片的脚本状态和滚动位置都还在。 */
@@ -59,25 +130,36 @@
   display: block;
   width: 100%;
   border: 0;
-  background: var(--bg-raised);
+  background: transparent;
   transition: height var(--dur-base) var(--ease-out);
+}
+
+.gen-ui-modal-frame {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  min-height: 420px;
+  border: 0;
+  background: transparent;
 }
 
 .gen-ui-note {
   margin: 0;
-  padding: var(--space-4);
+  padding: var(--space-2) 0;
   font-size: var(--fs-sm);
   line-height: var(--lh-sm);
   color: var(--text-3);
 }
 
-/* 追问确认条：卡片里点"追问"先落在这里，用户点确认才真正发出去。 */
+/* 追问确认条：页面里点"追问"先落在这里，用户点确认才真正发出去。 */
 .gen-ui-confirm {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  margin-bottom: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   background: var(--bg-tool);
 }
 

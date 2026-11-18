@@ -1,12 +1,14 @@
-// 内联 Gen UI 卡片：把 `::visualize{}` 指向的页面放进 app://preview 独立来源的 iframe，渲染成对话里的一张可交互卡片。
-// 与卡片只有 postMessage（channel = pi-gen-ui，token 每次挂载随机）一条通道：不同源、不 innerHTML、不自动发消息。
+// 内联 Gen UI 交互画布：默认无框透明直接融入对话流（悬停/聚焦显微胶囊，支持弹出宽屏放大）。
+// 与页面只有 postMessage（channel = pi-gen-ui，token 每次挂载随机）一条通道：不同源、不 innerHTML、不自动发消息。
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { DraftKey, TaskId } from "../../../shared/ipc.ts";
 import { resolveTheme, themes } from "../../../shared/themes.ts";
 import { quoteToComposer } from "../features/composer/quote.ts";
 import { useT } from "../i18n/use-t.ts";
+import { ChevronDown, ChevronRight, Code, External, Maximize } from "../icons.tsx";
 import { useSettings } from "../store/index.ts";
 import { Button } from "../ui/controls.tsx";
+import { Dialog } from "../ui/Dialog.tsx";
 import { reportError } from "../ui/errors.ts";
 import { onThemeChange } from "../ui/theme-change.ts";
 import {
@@ -22,8 +24,8 @@ import "./gen-ui.css";
 
 /** widget 状态按 stateKey 隔离存在 sessionStorage：刷新对话不丢，关掉会话就清。 */
 const STATE_STORAGE_PREFIX = "pi-gen-ui-state:";
-/** 还没收到卡片的 resize 之前的默认高度。 */
-const DEFAULT_HEIGHT = 360;
+/** 还没收到页面 resize 之前的默认高度。 */
+const DEFAULT_HEIGHT = 320;
 
 function readSavedState(stateKey: string): GenUiWidgetState | null {
   const raw = sessionStorage.getItem(`${STATE_STORAGE_PREFIX}${stateKey}`);
@@ -32,7 +34,6 @@ function readSavedState(stateKey: string): GenUiWidgetState | null {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    // 上一次写坏的残留：当作没有状态，别让整张卡片挂掉
     return null;
   }
   return normalizeWidgetState(parsed);
@@ -42,15 +43,20 @@ function writeSavedState(stateKey: string, state: GenUiWidgetState): void {
   sessionStorage.setItem(`${STATE_STORAGE_PREFIX}${stateKey}`, JSON.stringify(state));
 }
 
-/** 颜色从当前主题的实时计算值取：主题切换后（data-theme 变了）再算一次，卡片跟着走。 */
+/** 从宿主实时计算色阶与字体，沙箱透明融入当前主题。 */
 function readThemeTokens(): GenUiThemeTokens {
   const style = getComputedStyle(document.documentElement);
+  const bodyStyle = document.body ? getComputedStyle(document.body) : style;
   return {
-    bg: style.getPropertyValue("--bg-raised").trim(),
+    bg: "transparent",
     fg: style.getPropertyValue("--text").trim(),
+    mutedFg: style.getPropertyValue("--text-2").trim() || style.getPropertyValue("--text-3").trim(),
     accent: style.getPropertyValue("--accent").trim(),
     border: style.getPropertyValue("--border").trim(),
-    surface: style.getPropertyValue("--bg-tool").trim(),
+    surface: style.getPropertyValue("--bg-raised").trim(),
+    card: style.getPropertyValue("--bg-tool").trim(),
+    fontFamily: bodyStyle.fontFamily,
+    fontSize: bodyStyle.fontSize,
   };
 }
 
@@ -71,7 +77,7 @@ function composeFollowUpText(prompt: string, modelContent: unknown): string {
 }
 
 export interface GenUiCardProps {
-  /** 卡片页面的完整 HTML（不含垫片，注入在 buildGenUiHtml 里做）。 */
+  /** 页面的完整 HTML（不含垫片，注入在 buildGenUiHtml 里做）。 */
   html: string;
   title: string;
   /** widget 状态的存储键（按卡片区分）。 */
@@ -90,23 +96,23 @@ export function GenUiCard({ html, title, stateKey, taskId, quoteTarget, onOpenSi
   const systemDark = useSyncExternalStore(subscribeSystemDark, systemDarkNow);
   const dark = themes[resolveTheme(settings?.theme ?? "default", systemDark, settings?.colorMode ?? "system")].dark;
   const theme: "light" | "dark" = dark ? "dark" : "light";
-  // 主题换了（data-theme 变化）才重新取色：取计算值要等属性落到 <html> 上。
   const [themeEpoch, setThemeEpoch] = useState(0);
   useEffect(() => onThemeChange(() => setThemeEpoch((value) => value + 1)), []);
   const [tokens, setTokens] = useState<GenUiThemeTokens>(readThemeTokens);
   useEffect(() => setTokens(readThemeTokens()), [theme, themeEpoch]);
 
-  // app:// 是 secure context：每个挂载态一个随机 token，卡片消息只认它。
   const [token] = useState(() => globalThis.crypto.randomUUID());
   const [page, setPage] = useState<{ html: string; url: string } | null>(null);
+  const [expandedPage, setExpandedPage] = useState<{ html: string; url: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [collapsed, setCollapsed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [stateSaved, setStateSaved] = useState(false);
   const [pending, setPending] = useState<{ prompt: string; text: string } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const modalIframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // 文档只在挂载 / html 变化时注册一次；主题变化走 postMessage，不能重新注册（那会把卡片里的交互状态清掉）。
   const themeRef = useRef(theme);
   const tokensRef = useRef(tokens);
   useEffect(() => {
@@ -150,25 +156,59 @@ export function GenUiCard({ html, title, stateKey, taskId, quoteTarget, onOpenSi
     };
   }, [html, stateKey, t, token]);
 
-  // 主题切换后把新的颜色推给卡片：它自己更新 CSS 变量并派发主题事件，不动交互状态。
+  // 弹出放大视图按需注册一次并携带最新状态快照。
   useEffect(() => {
-    if (page === null) return;
-    iframeRef.current?.contentWindow?.postMessage(
-      { channel: GEN_UI_CHANNEL, token, type: "theme", payload: { theme, tokens } },
-      "*",
+    if (!expanded || html.trim() === "") {
+      setExpandedPage(null);
+      return;
+    }
+    let disposed = false;
+    let allocated: string | null = null;
+    const built = buildGenUiHtml({
+      html,
+      token,
+      theme: themeRef.current,
+      tokens: tokensRef.current,
+      initialState: readSavedState(stateKey),
+    });
+    const release = (url: string): void => {
+      void window.studio.releaseHtmlPreview(url).catch((error: unknown) => reportError(t, error));
+    };
+    void window.studio.registerHtmlPreview(built).then(
+      (url) => {
+        allocated = url;
+        if (disposed) release(url);
+        else setExpandedPage({ html, url });
+      },
+      (error: unknown) => {
+        if (!disposed) reportError(t, error);
+      },
     );
-  }, [page, theme, token, tokens]);
+    return () => {
+      disposed = true;
+      if (allocated !== null) release(allocated);
+    };
+  }, [expanded, html, stateKey, t, token]);
+
+  // 主题切换后把新的颜色推给已挂载的 iframe：不重建不丢交互状态。
+  useEffect(() => {
+    const payload = { channel: GEN_UI_CHANNEL, token, type: "theme", payload: { theme, tokens } };
+    if (page !== null) iframeRef.current?.contentWindow?.postMessage(payload, "*");
+    if (expandedPage !== null) modalIframeRef.current?.contentWindow?.postMessage(payload, "*");
+  }, [expandedPage, page, theme, token, tokens]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent): void => {
-      const frame = iframeRef.current;
-      // 只认这张卡片自己的 iframe：别的窗口（含主窗口自身）发的同名消息一律不理。
-      if (frame === null || event.source !== frame.contentWindow) return;
+      const inlineWin = iframeRef.current?.contentWindow ?? null;
+      const modalWin = modalIframeRef.current?.contentWindow ?? null;
+      const isInline = inlineWin !== null && event.source === inlineWin;
+      const isModal = modalWin !== null && event.source === modalWin;
+      if (!isInline && !isModal) return;
       const message = parseGenUiMessage(event.data, token);
       if (message === null) return;
       switch (message.type) {
         case "resize":
-          setHeight(message.height);
+          if (isInline) setHeight(message.height);
           break;
         case "state":
           writeSavedState(stateKey, message.state);
@@ -183,7 +223,6 @@ export function GenUiCard({ html, title, stateKey, taskId, quoteTarget, onOpenSi
         case "followUp": {
           const text = composeFollowUpText(message.prompt, message.modelContent);
           if (taskId === null) {
-            // 草稿态没有可发的任务：写进输入框，发不发由用户决定。
             quoteToComposer(quoteTarget, text, { fold: text.length > 400 });
             break;
           }
@@ -207,35 +246,82 @@ export function GenUiCard({ html, title, stateKey, taskId, quoteTarget, onOpenSi
   };
 
   const frame = page !== null && page.html === html ? page : null;
+  const modalFrame = expandedPage !== null && expandedPage.html === html ? expandedPage : null;
+
   return (
-    <div className="gen-ui-card" data-testid="gen-ui-card">
-      <div className="gen-ui-head">
-        <span className="gen-ui-title" title={title}>
-          {title}
-        </span>
-        {stateSaved && <span className="gen-ui-saved">{t("preview.genUiStateSaved")}</span>}
-        <span className="gen-ui-actions">
-          {onViewSource !== undefined && (
-            <Button size="sm" variant="quiet" onClick={onViewSource}>
-              {t("preview.modeSource")}
-            </Button>
-          )}
-          {onOpenSidebar !== undefined && (
-            <Button size="sm" variant="quiet" onClick={onOpenSidebar}>
-              {t("preview.filesToggle")}
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="quiet"
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((value) => !value)}
+    <div className="gen-ui-card" data-testid="gen-ui-card" data-collapsed={collapsed ? "" : undefined}>
+      {collapsed ? (
+        <div className="gen-ui-collapsed-bar">
+          <button
+            type="button"
+            className="gen-ui-collapsed-btn"
+            aria-expanded="false"
+            onClick={() => setCollapsed(false)}
             data-testid="gen-ui-toggle"
           >
-            {collapsed ? t("preview.genUiRun") : t("preview.genUiCollapse")}
-          </Button>
-        </span>
-      </div>
+            <ChevronRight size={14} />
+            <span className="gen-ui-collapsed-title" title={title}>
+              {title}
+            </span>
+            <span className="gen-ui-collapsed-hint">{t("preview.genUiRun")}</span>
+          </button>
+        </div>
+      ) : (
+        <div className="gen-ui-surface">
+          {(stateSaved || frame !== null) && (
+            <div className="gen-ui-overlay-bar" data-saved={stateSaved ? "true" : undefined}>
+              {stateSaved && <span className="gen-ui-saved">{t("preview.genUiStateSaved")}</span>}
+              {frame !== null && (
+                <div className="gen-ui-float-actions" role="toolbar" aria-label={title}>
+                  <button
+                    type="button"
+                    className="gen-ui-icon-btn"
+                    title={title}
+                    aria-label={title}
+                    onClick={() => setExpanded(true)}
+                  >
+                    <Maximize size={14} />
+                  </button>
+                  {onViewSource !== undefined && (
+                    <button
+                      type="button"
+                      className="gen-ui-icon-btn"
+                      title={t("preview.modeSource")}
+                      aria-label={t("preview.modeSource")}
+                      onClick={onViewSource}
+                    >
+                      <Code size={14} />
+                    </button>
+                  )}
+                  {onOpenSidebar !== undefined && (
+                    <button
+                      type="button"
+                      className="gen-ui-icon-btn"
+                      title={t("preview.filesToggle")}
+                      aria-label={t("preview.filesToggle")}
+                      onClick={onOpenSidebar}
+                    >
+                      <External size={14} />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="gen-ui-icon-btn"
+                    title={t("preview.genUiCollapse")}
+                    aria-label={t("preview.genUiCollapse")}
+                    aria-expanded="true"
+                    onClick={() => setCollapsed(true)}
+                    data-testid="gen-ui-toggle"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {pending !== null && (
         <div className="gen-ui-confirm" data-testid="gen-ui-confirm">
           <p className="gen-ui-confirm-hint">{t("preview.genUiConfirmSend")}</p>
@@ -250,6 +336,7 @@ export function GenUiCard({ html, title, stateKey, taskId, quoteTarget, onOpenSi
           </div>
         </div>
       )}
+
       <div className="gen-ui-body" data-collapsed={collapsed ? "" : undefined}>
         {loadError !== null ? (
           <p className="gen-ui-note" role="alert">
@@ -272,6 +359,22 @@ export function GenUiCard({ html, title, stateKey, taskId, quoteTarget, onOpenSi
           />
         )}
       </div>
+
+      <Dialog open={expanded} onClose={() => setExpanded(false)} title={title} size="lg">
+        {modalFrame === null ? (
+          <p className="gen-ui-note">{t("preview.genUiLoading")}</p>
+        ) : (
+          <iframe
+            ref={modalIframeRef}
+            key={modalFrame.url}
+            className="gen-ui-modal-frame"
+            title={title}
+            sandbox="allow-scripts"
+            referrerPolicy="no-referrer"
+            src={modalFrame.url}
+          />
+        )}
+      </Dialog>
     </div>
   );
 }
