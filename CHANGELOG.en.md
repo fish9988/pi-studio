@@ -9,6 +9,14 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-18
+
+### Fixed
+
+- The sidebar's Tasks section now lists conversations that aren't assigned to a project directly and counts conversations rather than folders, without changing their working directories.
+- Fixed the filter, expand/collapse button, and scrollbar crowding each other in narrow sidebars, and stopped timestamps and row actions from overlapping during hover transitions.
+- Aligned the sidebar and chat canvas at the bottom in Modern Studio, leaving a single divider between them.
+
 ## [0.7.2] - 2026-11-18
 
 ### Added
