@@ -9,6 +9,21 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-11-19
+
+### Added
+
+- Redesigned the **Modern Studio** interface style with a seamless full-height sidebar and floating rounded panels, compact topbar history navigation, and a centered greeting home screen with quick action pills.
+- Added a two-column **New tab** launcher in the right workbench with Files, Browser, Terminal, Review, Side chat, Subagents, and app shortcuts (PDF, Spreadsheets, Word, Visual canvas, Skills, and MCP Apps), automatically creating a session when opened from a draft.
+
+### Changed
+
+- Partitioned the sidebar by working directory: tasks and sessions in the default chat workspace appear directly under Conversations, while all other directories (including unregistered historical workspaces) are grouped under Projects.
+- Streamlined the **Modern Studio** sidebar header to three navigation actions above a compact Task List toolbar with toggleable search, active filter, collapse-all, and folder/timeline view switching.
+
+### Fixed
+
+- Fixed narrow-window drawer layering over the floating workbench, aligned sidebar section/folder counts and timestamps, improved turn footer legibility, and fixed breadcrumb folder icons for default conversations.
 ## [0.7.3] - 2026-11-18
 
 ### Fixed
