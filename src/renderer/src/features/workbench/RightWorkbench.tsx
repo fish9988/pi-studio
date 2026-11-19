@@ -1,7 +1,8 @@
-// Antigravity × DSH 右侧并排多标签工作台（Right Split Pane）：
+// 右侧并排多标签工作台（Right Split Pane）：
 // - 单一常驻容器，无切换抽动/滑入动画（零重排抖动）；
-// - 顶部动态多标签栏 + `+` 新建 Overview 标签 + 最大化/还原面板按钮 + 关闭（`×`）按钮；
-// - 默认页采用 Antigravity Overview 极简无框列表：全能搜索/URL 输入框 + 快捷导航区 + 实时状态区（Artifacts / Subagents / Background Tasks）；
+// - 顶部动态多标签栏 + `+` 新建标签 + 最大化/还原面板按钮 + 关闭（`×`）按钮；
+// - 「新标签页」按界面风格分两套：现代工作台（zcode）用 SidePaneLauncher 的精致双列启动器，
+//   其余 5 套风格沿用极简无框列表（全能搜索 + 快捷导航 + 实时状态）；
 // - 代码变更评审（Review）、文件树与预览（Files）、内置终端（Terminal）、内置浏览器（Browser）、扩展插件（Extensions）全部在分栏标签中并排打开，绝不遮挡左侧聊天区。
 import {
   useEffect,
@@ -26,6 +27,7 @@ import {
 } from "../../app/lazy-views.tsx";
 import { lazyView } from "../../ui/lazy-view.ts";
 import { shortcutLabel } from "../../app/platform-keys.ts";
+import { useShellValue } from "../../app/shell-store.ts";
 import { useLocale, useT } from "../../i18n/use-t.ts";
 import {
   ChevronRight,
@@ -79,12 +81,17 @@ import {
 
 const mcpAppHostView = lazyView(() => import("../mcp-apps/McpAppHost.tsx").then((m) => m.McpAppHost));
 import { EMPTY_SESSION_FILES, extractSessionChanges, sameSessionChanges } from "./GitChangesPanel.tsx";
+import { SidePaneLauncher } from "./SidePaneLauncher.tsx";
 import { openChangesPanel } from "./workbench-store.ts";
 import "../file-preview/file-preview.css";
 import "./workbench.css";
 
 const minWidth = 300;
 const maxShare = 0.78;
+/** 主区的最小宽（和 CSS 的 --main-min-w 一致）：现代工作台拖宽时不能把左边对话区挤没。 */
+const mainMinWidth = 480;
+/** 现代工作台卡片的左右外边距合计。 */
+const paneGap = 16;
 const keyboardStep = 16;
 const NO_AGENTS: readonly HubAgent[] = [];
 
@@ -321,6 +328,15 @@ function DshStartView({
               spellCheck={false}
               data-testid="dsh-start-omnibox"
             />
+            {urlCandidate !== null && taskId !== null && (
+              <span
+                className="dsh-ov-omni-kbd"
+                title={isZh ? "回车在内置浏览器中打开" : "Press Enter to open in Browser"}
+                aria-hidden="true"
+              >
+                Enter
+              </span>
+            )}
             {query && (
               <button
                 type="button"
@@ -664,10 +680,22 @@ function DshStartView({
   );
 }
 
-function tabMeta(tab: DshTabItem, isZh: boolean) {
+function PanelCollapseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2.3" y="3.3" width="11.4" height="9.4" rx="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M6.4 3.5v9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function tabMeta(tab: DshTabItem, isZh: boolean, isZcode: boolean) {
   switch (tab.kind) {
     case "start":
-      return { label: isZh ? "概览" : "Overview", icon: <Compass size={13} /> };
+      // 现代工作台里它就是一个真实的「新标签页」标签，不再是一行静态的「概览」文字
+      return isZcode
+        ? { label: isZh ? "新标签页" : "New tab", icon: <FileIcon size={13} /> }
+        : { label: isZh ? "概览" : "Overview", icon: <Compass size={13} /> };
     case "files":
       return { label: isZh ? "Files" : "Files", icon: <Folder size={13} /> };
     case "preview":
@@ -738,6 +766,7 @@ function StandalonePreviewTab({
 export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; taskId: TaskId | null }) {
   const t = useT();
   const isZh = useLocale() === "zh-CN";
+  const isZcode = useShellValue("uiStyle") === "zcode";
   const ws = useDshWorkspace(panelKey);
   const preview = usePreviewPanel();
   const agentsState = useAgentsPanel();
@@ -757,9 +786,15 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
     effectiveTaskId ?? (taskObj?.projectId ? draftKey(taskObj.projectId) : draftObj ? panelKey : null);
 
   const clampWidth = (value: number) => {
-    const parent = root.current?.parentElement;
-    const max = parent ? parent.clientWidth * maxShare : value;
-    return Math.max(minWidth, Math.min(max, value));
+    const host = root.current?.parentElement;
+    if (host === null || host === undefined) return value;
+    // 现代工作台的槽跟着卡片伸缩（槽宽 = 卡片宽），拉宽的上限要减掉主区最小宽，不能把主区挤没；
+    // 其余风格仍然是可用宽度的 78%
+    const available = isZcode
+      ? (host.parentElement?.clientWidth ?? 0) - mainMinWidth - paneGap
+      : host.clientWidth * maxShare;
+    if (available <= 0) return value;
+    return Math.max(minWidth, Math.min(available, value));
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -828,7 +863,7 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
 
       <header className="dsh-wb-header" data-testid="workbench-strip">
         <div className="dsh-wb-tabs" role="tablist">
-          {isLoneStart ? (
+          {isLoneStart && !isZcode ? (
             <span className="dsh-wb-lone-start">
               <Compass size={13} />
               <span>{isZh ? "概览" : "Overview"}</span>
@@ -838,7 +873,7 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
               {ws.tabs.map((tab, index) => {
                 const isCurrent = tab.id === activeTab.id;
                 const prevCurrent = index > 0 && ws.tabs[index - 1]?.id === activeTab.id;
-                const meta = tabMeta(tab, isZh);
+                const meta = tabMeta(tab, isZh, isZcode);
                 return (
                   <div key={tab.id} className="dsh-wb-tab-slot">
                     {index > 0 && !isCurrent && !prevCurrent && <span className="dsh-wb-tab-sep" aria-hidden="true" />}
@@ -904,8 +939,12 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
               <button
                 type="button"
                 className="dsh-wb-add-btn"
-                title={isZh ? "打开 Overview 新标签页" : "New Overview tab"}
-                aria-label={isZh ? "打开 Overview 新标签页" : "New Overview tab"}
+                title={
+                  isZcode ? (isZh ? "新建标签页" : "New tab") : isZh ? "打开 Overview 新标签页" : "New Overview tab"
+                }
+                aria-label={
+                  isZcode ? (isZh ? "新建标签页" : "New tab") : isZh ? "打开 Overview 新标签页" : "New Overview tab"
+                }
                 data-testid="dsh-wb-add-tab"
                 onClick={() => addDshStartTab(panelKey)}
               >
@@ -938,21 +977,29 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
             data-testid="dsh-wb-collapse"
             onClick={() => collapseDshSidebar(panelKey)}
           >
-            <Close size={14} />
+            {isZcode ? <PanelCollapseIcon /> : <Close size={14} />}
           </button>
         </div>
       </header>
 
       <div className="dsh-wb-body">
-        {activeTab.kind === "start" && (
-          <DshStartView
-            panelKey={panelKey}
-            taskId={effectiveTaskId}
-            tabId={activeTab.id}
-            isZh={isZh}
-            terminalTabs={terminalTabs}
-          />
-        )}
+        {activeTab.kind === "start" &&
+          (isZcode ? (
+            <SidePaneLauncher
+              panelKey={panelKey}
+              taskId={effectiveTaskId}
+              tabId={activeTab.id}
+              terminalTabs={terminalTabs}
+            />
+          ) : (
+            <DshStartView
+              panelKey={panelKey}
+              taskId={effectiveTaskId}
+              tabId={activeTab.id}
+              isZh={isZh}
+              terminalTabs={terminalTabs}
+            />
+          ))}
         {activeTab.kind === "files" && <FilePreviewPane panelKey={panelKey} page={previewPage} path={previewPath} />}
         {previewTabs.map((pTab) => (
           <StandalonePreviewTab

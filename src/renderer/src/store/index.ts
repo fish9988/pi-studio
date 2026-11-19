@@ -23,7 +23,9 @@ export {
   currentPlatform,
   setAppearanceColorMode,
   setAppearanceTheme,
+  refreshAppInfo,
   useAppInfo,
+  useAppInfoError,
   useSettings,
   useSettingsSettled,
 } from "./settings-store.ts";

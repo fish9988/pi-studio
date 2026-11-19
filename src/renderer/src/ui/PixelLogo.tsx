@@ -91,7 +91,15 @@ export function PixelLogo({
           data-brand="pi"
         >
           <span className="pi-compact-mark" aria-hidden="true">
-            π
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M3.25 4.75h9.5M6.1 4.75v6.75M10.15 4.75v5.5c0 .75.45 1.25 1.2 1.25.35 0 .65-.08.9-.2"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
           <span className="pi-compact-wordmark">pi studio</span>
         </span>

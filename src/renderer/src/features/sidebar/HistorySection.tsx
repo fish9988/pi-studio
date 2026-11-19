@@ -1,11 +1,9 @@
-// 侧栏的「任务列表」（spec §4.2–§4.5）：studio 任务和 omp 里还没挂在任务上的会话合在这一个列表里。
-// 文件夹视图下，只有已绑定的非默认项目有目录头；通用对话和未归属项目的历史会话在「任务」里平铺。
-// 时间视图下，所有任务和会话平铺一列。搜索和筛选临时展开匹配结果，不改变用户的折叠设置。
+// Sidebar 的顶层标题在 Sidebar.tsx；这里渲染「项目 / 会话」分区与排列切换。
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { HistoryOrder, TaskId } from "../../../../shared/ipc.ts";
 import type { SidebarFolder } from "../../../../shared/ui/sidebar-model.ts";
 import { setHistoryOrder } from "../../app/shell-store.ts";
-import { ChevronDown } from "../../icons.tsx";
+import { Plus } from "../../icons.tsx";
 import { IconButton, Segmented } from "../../ui/controls.tsx";
 import { useFlip } from "../../ui/flip.ts";
 import { Reveal } from "../../ui/Reveal.tsx";
@@ -13,21 +11,21 @@ import { ChevronIcon } from "./icons.tsx";
 import { FolderGroup } from "./FolderGroup.tsx";
 import { ItemRow } from "./ItemRow.tsx";
 import { initialPerFolder, moreNavId, showMoreStep, type visibleItems } from "./list-view.ts";
-import { RunningFourDots } from "./StatusDot.tsx";
 import type { RowHandlers } from "./TaskRow.tsx";
 
 interface HistorySectionProps {
   order: HistoryOrder;
+  /** 现代工作台：不渲染排列切换行（工具行里已有图标按钮），文件夹头直接钉在滚动区顶部。 */
+  zcode: boolean;
   folders: readonly SidebarFolder[];
   flatItems: ReturnType<typeof visibleItems>;
   flatKey: string;
-  looseCount: number;
+  conversationCount: number;
   unlimited: boolean;
   activeOnly: boolean;
-  activeCount: number;
   projectsOpen: boolean;
-  tasksOpen: boolean;
-  onToggleSection(section: "projects" | "tasks"): void;
+  conversationsOpen: boolean;
+  onToggleSection(section: "projects" | "conversations"): void;
   isOpen(folder: SidebarFolder): boolean;
   /** 已展开的行数上限，键是文件夹 key 或 timeLimitKey。 */
   limits: Readonly<Record<string, number>>;
@@ -38,15 +36,17 @@ interface HistorySectionProps {
   unreadTaskIds?: ReadonlySet<string> | undefined;
   rows: RowHandlers;
   onToggle(folder: SidebarFolder, open: boolean): void;
-  onSetAllOpen?(open: boolean): void;
-  onToggleActiveOnly?(next: boolean): void;
   onShowMore(key: string): void;
   onNewTask(folder: SidebarFolder): void;
+  /** 分区头右侧的「添加项目文件夹」。 */
+  onAddProject(): void;
+  /** 分区头右侧的「新建对话」（默认目录里的草稿）。 */
+  onCreateConversation(): void;
   onOpenProjectMenu(folder: SidebarFolder, x: number, y: number, trigger: HTMLElement): void;
   onCommitFolderRename?(folder: SidebarFolder, nextName: string | null): void;
 }
 
-/** 「项目」/「任务」两个分区的区块头：一行折叠开关（箭头 + 名称 + 数量）。 */
+/** 「项目」/「会话」分区的区块头：一行折叠开关（箭头 + 名称 + 数量），右侧动作悬停时浮现。 */
 function FolderSection({
   label,
   count,
@@ -54,6 +54,7 @@ function FolderSection({
   testId,
   open,
   onToggle,
+  actions,
   children,
 }: {
   label: string;
@@ -62,6 +63,7 @@ function FolderSection({
   testId: string;
   open: boolean;
   onToggle(): void;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -81,6 +83,7 @@ function FolderSection({
           <span className="sb-section-name">{label}</span>
           <span className="sb-section-count">{count}</span>
         </button>
+        {actions !== undefined && <div className="sb-section-actions">{actions}</div>}
       </div>
       <Reveal open={open}>
         <div className="sb-section-body" inert={!open}>
@@ -137,9 +140,9 @@ function FlatRows({
 }
 
 export function HistorySection(props: HistorySectionProps) {
-  const { rows, order, unlimited, activeOnly, folders, projectsOpen, tasksOpen } = props;
-  const { t, locale } = rows;
-  // 文件夹头吸顶时钉在标题行下面：保留实际的亚像素高度，避免缩放时两行压住彼此。
+  const { rows, order, unlimited, activeOnly, folders, projectsOpen, conversationsOpen, zcode } = props;
+  const { t } = rows;
+  // 文件夹头吸顶时钉在排列切换行下面：保留实际的亚像素高度，避免缩放时两行压住彼此。
   const [head, setHead] = useState<HTMLDivElement | null>(null);
   const [headHeight, setHeadHeight] = useState(0);
   useLayoutEffect(() => {
@@ -152,9 +155,6 @@ export function HistorySection(props: HistorySectionProps) {
   }, [head]);
   const empty = props.flatItems.shown.length === 0 && (order === "time" || folders.length === 0);
   if (empty && !activeOnly) return null;
-
-  const anyOpen = projectsOpen && folders.some(props.isOpen);
-  const canToggleAll = order === "folder" && !unlimited && folders.length > 1 && props.onSetAllOpen !== undefined;
 
   const renderFolder = (folder: SidebarFolder) => (
     <FolderGroup
@@ -181,56 +181,28 @@ export function HistorySection(props: HistorySectionProps) {
       className="sb-group sb-history"
       aria-label={t("sidebar.listTitle")}
       data-testid="sidebar-history"
-      style={{ "--sb-sticky-top": `${headHeight}px` } as Record<string, string>}
+      style={{ "--sb-sticky-top": zcode ? "0px" : `${headHeight}px` } as Record<string, string>}
     >
-      <div className="sb-history-head" ref={setHead}>
-        <div className="sb-history-top">
-          <p className="sb-group-title">{t("sidebar.listTitle")}</p>
-          <div className="sb-history-meta">
-            <button
-              type="button"
-              className="sb-active-filter"
-              data-active={activeOnly || undefined}
-              data-has-active={props.activeCount > 0 || undefined}
-              aria-pressed={activeOnly}
-              data-testid="sidebar-filter-active"
-              title={locale === "zh-CN" ? "仅显示进行中或待确认的活跃会话" : "Show active sessions only"}
-              onClick={() => props.onToggleActiveOnly?.(!activeOnly)}
-            >
-              <RunningFourDots size="sm" active={props.activeCount > 0} />
-              <span>{locale === "zh-CN" ? "进行中" : "Active"}</span>
-              {props.activeCount > 0 && <span className="sb-active-filter-count">{props.activeCount}</span>}
-            </button>
-            {canToggleAll && (
-              <IconButton
-                className="sb-toggle-all"
-                testId="sidebar-toggle-all-folders"
-                label={t(anyOpen ? "sidebar.collapseAll" : "sidebar.expandAll")}
-                data-collapsed={!anyOpen}
-                onClick={() => props.onSetAllOpen?.(!anyOpen)}
-              >
-                <ChevronDown size={12} />
-              </IconButton>
-            )}
+      {!zcode && (
+        <div className="sb-history-head" ref={setHead}>
+          <div className="sb-history-order-row">
+            <Segmented
+              size="sm"
+              label={t("sidebar.historyOrder")}
+              testId="sidebar-history-by"
+              value={order}
+              options={[
+                { value: "folder", label: t("sidebar.historyByFolder") },
+                { value: "time", label: t("sidebar.historyByTime") },
+              ]}
+              onChange={setHistoryOrder}
+            />
           </div>
         </div>
-        <div className="sb-history-order-row">
-          <Segmented
-            size="sm"
-            label={t("sidebar.historyOrder")}
-            testId="sidebar-history-by"
-            value={order}
-            options={[
-              { value: "folder", label: t("sidebar.historyByFolder") },
-              { value: "time", label: t("sidebar.historyByTime") },
-            ]}
-            onChange={setHistoryOrder}
-          />
-        </div>
-      </div>
+      )}
       {empty && activeOnly ? (
         <p className="sb-note" role="status">
-          {locale === "zh-CN" ? "暂无进行中的会话" : "No active sessions"}
+          {t("sidebar.activeEmpty")}
         </p>
       ) : order === "time" ? (
         <FlatRows {...props} />
@@ -244,18 +216,38 @@ export function HistorySection(props: HistorySectionProps) {
               testId="sidebar-section-projects"
               open={projectsOpen}
               onToggle={() => props.onToggleSection("projects")}
+              actions={
+                <IconButton
+                  tabIndex={-1}
+                  testId="sidebar-add-project"
+                  label={t("sidebar.addProject")}
+                  onClick={props.onAddProject}
+                >
+                  <Plus />
+                </IconButton>
+              }
             >
               {folders.map(renderFolder)}
             </FolderSection>
           )}
-          {props.looseCount > 0 && (
+          {props.conversationCount > 0 && (
             <FolderSection
-              label={t("sidebar.sectionTasks")}
-              count={props.looseCount}
-              sectionId="tasks"
-              testId="sidebar-section-tasks"
-              open={tasksOpen}
-              onToggle={() => props.onToggleSection("tasks")}
+              label={t("sidebar.sectionConversations")}
+              count={props.conversationCount}
+              sectionId="conversations"
+              testId="sidebar-section-conversations"
+              open={conversationsOpen}
+              onToggle={() => props.onToggleSection("conversations")}
+              actions={
+                <IconButton
+                  tabIndex={-1}
+                  testId="sidebar-new-conversation"
+                  label={t("sidebar.newConversation")}
+                  onClick={props.onCreateConversation}
+                >
+                  <Plus />
+                </IconButton>
+              }
             >
               <FlatRows {...props} />
             </FolderSection>

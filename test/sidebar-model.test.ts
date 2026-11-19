@@ -260,7 +260,16 @@ describe("buildFolders / buildTimeline", () => {
     ]);
   });
 
-  it("任务区在不同工作目录间平铺并排序，已绑定项目不混入，默认目录仍算独立对话", () => {
+  it("defaultCwd 还未加载时不猜测目录归属", () => {
+    const folders = buildFolders(
+      input({
+        sessions: [past("default", "C:/home/chats", 20), past("project", "E:/work/app", 10)],
+      }),
+    );
+    expect(splitSidebarFolders(folders, null)).toEqual({ ready: false, projects: [], conversations: [] });
+  });
+
+  it("会话默认工作目录平铺为对话，其他所有目录（含仅有历史记录的目录）归入项目", () => {
     const chats = project("pc", "C:\\work\\chats", "chats");
     const options = input({
       projects: [...projects, chats],
@@ -274,9 +283,13 @@ describe("buildFolders / buildTimeline", () => {
       ],
     });
     const result = splitSidebarFolders(buildFolders(options), options.defaultCwd!);
-    expect(result.projects.map((folder) => ids(folder.items))).toEqual([["task:bound", "session:project-session"], []]);
-    expect(ids(result.tasks)).toEqual(["session:pinned", "session:notes", "task:chat", "session:old"]);
-    expect(result.tasks[1]).toMatchObject({ session: { cwd: "E:/other/notes" } });
+    expect(result.projects.map((folder) => [folder.label, folder.project?.id ?? null, ids(folder.items)])).toEqual([
+      ["app", "p1", ["task:bound", "session:project-session"]],
+      ["notes", null, ["session:notes"]],
+      ["personal", null, ["session:pinned"]],
+      ["empty", "p2", []],
+    ]);
+    expect(ids(result.conversations)).toEqual(["task:chat", "session:old"]);
   });
 
   it("文件夹重名时标签带上级目录；归档的任务、已挂任务的会话、指向未知项目的任务都不出现", () => {
@@ -322,7 +335,7 @@ describe("buildFolders / buildTimeline", () => {
     expect(taskTitle({ title: " \ue000 任务 " })).toBe("任务");
   });
 
-  it("纯聊天临时目录（.t3/scratch/*、chat-workspace）哪怕已被登记为 Project，其任务和历史会话也自动归入默认文件夹，不拆出伪项目文件夹", () => {
+  it("旧版临时聊天目录也按原目录显示，不并入当前默认目录", () => {
     const folders = buildFolders(
       input({
         projects: [
@@ -343,8 +356,11 @@ describe("buildFolders / buildTimeline", () => {
         ],
       }),
     );
-    expect(folders.map((f) => [f.label, ids(f.items)])).toEqual([
-      ["chats", ["task:t-scratch", "session:s1", "session:s2"]],
+    const result = splitSidebarFolders(folders, "C:/Users/someone/pi-studio/chats");
+    expect(result.conversations).toEqual([]);
+    expect(result.projects.map((f) => [f.label, ids(f.items)])).toEqual([
+      ["2026-11-11-https-aistudio-g", ["task:t-scratch", "session:s1"]],
+      ["chat-workspace", ["session:s2"]],
       ["app", []],
     ]);
   });

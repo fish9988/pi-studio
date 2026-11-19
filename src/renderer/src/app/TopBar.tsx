@@ -10,19 +10,23 @@ import { DraftGitTools, GitTools } from "../features/git/index.ts";
 import { TerminalToggle, useDraftTerminalKey } from "../features/terminal/index.ts";
 import { ChangesToggle } from "../features/workbench/index.ts";
 import { useT } from "../i18n/use-t.ts";
+import { ArrowLeft, ArrowRight } from "../icons.tsx";
 import { useSelectedTaskId, useTask } from "../store/index.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { PixelLogo } from "../ui/PixelLogo.tsx";
 import { SidebarIcon } from "./icons.tsx";
 import { withShortcut } from "./platform-keys.ts";
+import { useShellValue } from "./shell-store.ts";
 import { TaskCrumb } from "./TaskCrumb.tsx";
 
 interface TopBarProps {
   sidebarShown: boolean;
   onToggleSidebar(): void;
+  onGoBack?(): void;
+  onGoForward?(): void;
 }
 
-function TaskTools() {
+export function TaskTools() {
   const taskId = useSelectedTaskId();
   const task = useTask(taskId);
   const draftKey = useDraftTerminalKey();
@@ -46,6 +50,7 @@ function TaskTools() {
 
 export function TopBar(props: TopBarProps) {
   const t = useT();
+  const isZcode = useShellValue("uiStyle") === "zcode";
   return (
     <header className="topbar" data-testid="topbar">
       <div className="topbar-left">
@@ -61,6 +66,26 @@ export function TopBar(props: TopBarProps) {
         >
           <SidebarIcon shown={props.sidebarShown} />
         </IconButton>
+        {isZcode && props.onGoBack && props.onGoForward && (
+          <span className="topbar-history-nav">
+            <IconButton
+              label={t("browser.back")}
+              tip={withShortcut(t("browser.back"), "Alt ArrowLeft")}
+              testId="topbar-back"
+              onClick={props.onGoBack}
+            >
+              <ArrowLeft size={14} />
+            </IconButton>
+            <IconButton
+              label={t("browser.forward")}
+              tip={withShortcut(t("browser.forward"), "Alt ArrowRight")}
+              testId="topbar-forward"
+              onClick={props.onGoForward}
+            >
+              <ArrowRight size={14} />
+            </IconButton>
+          </span>
+        )}
       </div>
       <div className="topbar-main">
         <TaskCrumb />

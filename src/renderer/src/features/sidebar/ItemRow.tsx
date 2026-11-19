@@ -92,7 +92,9 @@ const SessionRow = memo(function SessionRow({ session, tabStop, pinned, projectL
             {projectLabel}
           </span>
         )}
-        <span className="sb-row-tail">{time}</span>
+        <span className="sb-row-tail">
+          <span className="sb-row-tail-text">{time}</span>
+        </span>
       </button>
       {rows.onOpenSessionMenu && (
         <span className="sb-row-actions">

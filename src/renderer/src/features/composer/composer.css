@@ -179,6 +179,88 @@
   }
 }
 
+/* ───── 现代工作台（data-ui-style="zcode"）：输入框是一张薄边卡片 ─────
+   实底 --bg-raised、无磨砂，发丝描边 + 两道极淡投影。聚焦只把描边加深一档、投影微抬半档，
+   不再给 3px 强调色外环（在白底上那一圈橙红光环就是整页最跳的东西）。 */
+:root[data-ui-style="zcode"] .composer {
+  background: var(--bg-raised);
+  backdrop-filter: none;
+  border: var(--hairline) solid var(--border);
+  border-radius: 16px;
+  box-shadow:
+    0 2px 12px color-mix(in srgb, var(--text) 4%, transparent),
+    0 1px 2px color-mix(in srgb, var(--text) 2%, transparent);
+}
+:root[data-ui-style="zcode"] .composer:hover {
+  border-color: var(--border-strong);
+}
+:root[data-ui-style="zcode"] .composer:focus-within {
+  border-color: var(--border-strong);
+  box-shadow:
+    0 4px 18px color-mix(in srgb, var(--text) 6%, transparent),
+    0 1px 3px color-mix(in srgb, var(--text) 3%, transparent);
+}
+/* 深色主题：同样的两道投影换暗色，卡片靠比台面亮一档的底色站起来 */
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .composer {
+  background: color-mix(in srgb, var(--text) 4%, var(--bg-raised));
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.22);
+}
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .composer:focus-within {
+  border-color: var(--border-strong);
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.34),
+    0 1px 3px rgba(0, 0, 0, 0.24);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="zcode"]:not([data-theme]) .composer {
+    background: color-mix(in srgb, var(--text) 4%, var(--bg-raised));
+    box-shadow:
+      0 2px 12px rgba(0, 0, 0, 0.3),
+      0 1px 2px rgba(0, 0, 0, 0.22);
+  }
+  :root[data-ui-style="zcode"]:not([data-theme]) .composer:focus-within {
+    border-color: var(--border-strong);
+    box-shadow:
+      0 4px 18px rgba(0, 0, 0, 0.34),
+      0 1px 3px rgba(0, 0, 0, 0.24);
+  }
+}
+/* 桌宠不上工作台：卡通像素小人骑在极简的薄边卡片上会抢走第一眼的焦点，窄槽里还会挡住工具行状态 */
+:root[data-ui-style="zcode"] .composer-mascot,
+:root[data-ui-style="zcode"] .composer-crab {
+  display: none;
+}
+:root[data-ui-style="zcode"] .send {
+  border-radius: var(--radius-pill);
+}
+/* 工具行里的思考档位与项目目录胶囊：极淡边、无染色，高档位也只用字色区分。
+   圆角走本风格的 --radius-md（和模型胶囊、其他控件同一个方正语言，不在这里单独变回药丸） */
+:root[data-ui-style="zcode"] .composer .ui-chip.chip-effort,
+:root[data-ui-style="zcode"] .composer .empty-project-btn {
+  background: transparent;
+  border: var(--hairline) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+  box-shadow: none;
+}
+:root[data-ui-style="zcode"] .composer .ui-chip.chip-effort:hover,
+:root[data-ui-style="zcode"] .composer .ui-chip.chip-effort[aria-expanded="true"],
+:root[data-ui-style="zcode"] .composer .empty-project-btn:hover,
+:root[data-ui-style="zcode"] .composer .empty-project-btn[aria-expanded="true"] {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+:root[data-ui-style="zcode"]
+  .composer
+  .ui-chip.chip-effort:is([data-level="high"], [data-level="xhigh"], [data-level="max"]) {
+  background: transparent;
+  border-color: var(--border-subtle);
+  color: var(--text);
+}
+
 /* ── 桌面宠物精灵表窗口（钉在输入框右上角内缘一点，支持自由拖拽记忆） ── */
 .composer-mascot {
   position: absolute;

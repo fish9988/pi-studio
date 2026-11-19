@@ -7,12 +7,7 @@ import { isDefaultFolder } from "../empty/default-folder.ts";
 import { selectTask } from "../../store/index.ts";
 import { startDraft } from "../empty/index.ts";
 import { refreshProjects } from "./projects-store.ts";
-import {
-  nextWaitingTask,
-  waitingTasks,
-  isScratchChatCwd,
-  type SidebarFolder,
-} from "../../../../shared/ui/sidebar-model.ts";
+import { nextWaitingTask, waitingTasks, type SidebarFolder } from "../../../../shared/ui/sidebar-model.ts";
 
 /** 弹系统文件夹选择器加入项目，并把它设为新任务草稿的项目（不创建任务）。取消时什么也不做。 */
 export async function addProjectAsDraft(t: TFunction): Promise<void> {
@@ -43,13 +38,13 @@ export async function startDraftInFolder(
   if (item !== undefined) await startDraftInSessionFolder(item.session, t, defaultCwd ?? null);
 }
 
-/** 历史会话平铺后，从对话菜单仍可在原目录开新任务。 */
+/** 从历史会话的菜单在它原来的工作目录开新任务。 */
 export async function startDraftInSessionFolder(
   session: SessionSummary,
   t: TFunction,
   chatsDir: string | null,
 ): Promise<void> {
-  if (isDefaultFolder(session.cwd, chatsDir) || isScratchChatCwd(session.cwd)) {
+  if (isDefaultFolder(session.cwd, chatsDir)) {
     startDraft(null);
     return;
   }

@@ -760,3 +760,163 @@
 #app[data-motion="reduced"] .eu-mchart-col {
   animation: none;
 }
+
+/* ───────── 现代工作台（data-ui-style="zcode"）的空状态：一张融进主面板底色的极简首页 ─────────
+   背景透明：主面板自己的 --bg-app 就是台面，再叠一层实底就会在白底中间露出颜色不同的灰块。
+   内容整体偏低一点、靠 auto 外边距居中，再用底部内边距把视觉重心抬到偏中上的黄金分割处（约 42%），
+   视线第一眼落在问候语和正中的输入框上，不用低头去屏幕最底边找。 */
+.zempty {
+  align-items: center;
+  padding: var(--space-8) var(--gutter);
+  background: transparent;
+}
+
+.zempty-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 740px);
+  margin-block: auto;
+  padding-bottom: 16vh;
+}
+
+.zempty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  text-align: center;
+}
+
+.zempty-greeting {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 1.25;
+  font-weight: var(--fw-strong);
+  letter-spacing: -0.02em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+/* 窄窗（面板被拖窄）里问候语缩一号：28px 的三行中文会把输入框挤到折叠线以下 */
+@container (max-width: 720px) {
+  .zempty-greeting {
+    font-size: 22px;
+  }
+}
+
+/* 已选项目目录 / 最近更新：副标题一行，压不过主问候语 */
+.zempty-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--text-3);
+}
+
+.zempty-folder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  min-width: 0;
+}
+
+.zempty-folder > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.zempty-folder-name {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 最近更新跟在文件夹胶囊后面：同一行里只占自己的宽度，不撑满副标题 */
+.zempty-sub > .whats-new {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* 正中放草稿输入框：取消 .empty-draft 的贴底悬浮，宽度收到 740px 以内 */
+.zempty-draft {
+  position: static;
+  z-index: auto;
+  align-self: center;
+  width: 100%;
+  max-width: 100%;
+  margin: 24px 0 0;
+}
+
+.zempty-draft > .composer-stack {
+  width: 100%;
+  padding-bottom: 0;
+}
+
+/* 输入框下方一排轻量建议胶囊：全部连真实动作，克制到只有一圈极淡描边 */
+.zempty-quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: 14px;
+}
+
+.zempty-quick {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-raised);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.025);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.zempty-quick > svg {
+  flex: none;
+  color: var(--text-3);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.zempty-quick:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.zempty-quick:hover > svg {
+  color: var(--text-2);
+}
+
+.zempty-quick:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

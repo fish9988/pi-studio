@@ -464,7 +464,8 @@ export function App() {
     togglePalette: () => setPaletteOpen(!paletteOpenRef.current),
     focusSidebarSearch: () => {
       if (!sidebarShown) toggleSidebar();
-      // 侧栏收起时容器是 inert：等展开提交后再聚焦。
+      window.dispatchEvent(new CustomEvent("studio:open-sidebar-search"));
+      // 侧栏收起或搜索框收起时，等展开提交后再聚焦。
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           const input = document.querySelector<HTMLInputElement>("[data-testid=sidebar-search]");
@@ -501,6 +502,8 @@ export function App() {
     },
   });
 
+  const zcode = uiStyle === "zcode";
+
   return isStandaloneSettingsWindow() ? (
     <div id="app" data-testid="app-root" data-locale={appInfo?.locale}>
       <StandaloneSettingsWindowRoot />
@@ -516,7 +519,12 @@ export function App() {
       data-drawer={narrow}
       style={{ "--sidebar-current": `${sidebarWidth}px` } as CSSProperties}
     >
-      <TopBar sidebarShown={sidebarShown} onToggleSidebar={toggleSidebar} />
+      <TopBar
+        sidebarShown={sidebarShown}
+        onToggleSidebar={toggleSidebar}
+        onGoBack={navigation.goBack}
+        onGoForward={navigation.goForward}
+      />
       <div className="body">
         {drawerScrim.mounted && (
           <div
@@ -561,7 +569,7 @@ export function App() {
         >
           {!narrow && sidebarShown && <SidebarResizer width={sidebarWidth} column={sidebarColumn} />}
           {!narrow && <ChatWidthResizer width={chatWidth} panel={mainPanel} />}
-          {/* 会话过程区与输入框始终保持挂载与可见，打开设置时以并行窗口方式在旁展示，方便一边看会话一边调设置。 */}
+          {/* 会话过程区与输入框始终保持挂载与可见，打开设置时以并行窗口方式在旁展示。 */}
           {kept.map((id) => (
             <Activity key={`tsp:${id}`} mode={id === taskId ? "visible" : "hidden"}>
               <ErrorBoundary resetKey={id}>
@@ -570,7 +578,7 @@ export function App() {
             </Activity>
           ))}
           {taskId === null ? (
-            <EmptyState />
+            <EmptyState variant={zcode ? "zcode" : "studio"} />
           ) : (
             <>
               <SessionTreePanel key={`tree:${taskId}`} taskId={taskId} />

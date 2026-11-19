@@ -133,7 +133,7 @@ test("窗口放大时对话列和输入框一起变宽：约占主区 78%，最�
   }
 });
 
-test("没有项目时直接发送：工作目录仍为 chats，对话平铺在任务区", async () => {
+test("没有项目时直接发送：工作目录仍为 chats，对话平铺在会话区", async () => {
   const launched = await launchApp({ STUDIO_TEST_PI: testPi() });
   try {
     const { page, userDataDir } = launched;
@@ -147,12 +147,16 @@ test("没有项目时直接发送：工作目录仍为 chats，对话平铺在�
     const projects = await page.evaluate(() => globalThis.studio.listProjects());
     expect(projects.map((project) => path.resolve(project.path))).toEqual([path.resolve(chats)]);
     const sidebar = page.getByTestId("sidebar");
-    const loose = sidebar.locator('.sb-section[data-section="tasks"]');
-    await expect(loose.getByTestId("task-row")).toHaveCount(1);
-    await expect(sidebar.getByTestId("sidebar-section-projects")).toHaveCount(0);
-    await expect(loose.getByTestId("sidebar-folder")).toHaveCount(0);
-    await expect(loose.locator(".sb-section-count")).toHaveText("7");
-    await expect(loose).not.toContainText(/默认文件夹|Default folder|chats/);
+    const conversations = sidebar.locator('.sb-section[data-section="conversations"]');
+    const projectsSection = sidebar.locator('.sb-section[data-section="projects"]');
+    await expect(conversations.getByTestId("task-row")).toHaveCount(1);
+    await expect(conversations.locator(".sb-section-count")).toHaveText("1");
+    await expect(sidebar.getByTestId("sidebar-section-projects")).toBeVisible();
+    await expect(projectsSection.locator(".sb-section-count")).toHaveText("1");
+    const otherHistory = sidebar.getByRole("region", { name: "omp studio 假项目" });
+    await expect(otherHistory.locator(".sb-group-toggle")).toHaveAttribute("aria-expanded", "false");
+    await expect(projectsSection).toContainText("omp studio 假项目");
+    await expect(sidebar).not.toContainText("chats");
     await expect(page.getByTestId("sidebar-new-task")).not.toHaveAttribute("aria-current", "page");
 
     // 之后 Ctrl/Cmd N 还是默认文件夹（不沿用刚才的项目也一样是它）；工具行的轻标签写“默认文件夹”，完整路径在 title 上。
@@ -442,7 +446,7 @@ test("空状态、对话里的用量", async () => {
   }
 });
 
-test("侧栏：竖排 搜索 / [新任务] / [打开文件夹]；任务和历史会话合在一个列表里（文件夹 / 时间）；搜索过滤两者", async () => {
+test("侧栏：项目与会话分区、搜索 / [新任务] / [打开文件夹]；项目按工作目录分组，会话来自默认目录", async () => {
   const { launched, cleanup } = await start();
   try {
     const { page } = launched;
@@ -462,22 +466,25 @@ test("侧栏：竖排 搜索 / [新任务] / [打开文件夹]；任务和历史
     expect(n && a && n.y + n.height <= a.y).toBe(true);
     expect(a && list && a.y + a.height <= list.y).toBe(true);
 
-    // 项目任务在「项目」，未绑定项目的历史会话直接平铺在「任务」。
+    // 项目目录归入「项目」；只有 chatsDir 里的对话在文件夹视图下平铺为「会话」。
     const history = page.getByTestId("sidebar-history");
+    const projects = history.locator('.sb-section[data-section="projects"]');
     await expect(page.getByTestId("task-row")).toHaveCount(1);
     await expect(history.getByTestId("task-row")).toHaveCount(1);
-    await expect(sidebar.locator(".sb-group")).toHaveCount(1);
     await expect(page.getByTestId("sidebar-history-by-folder")).toHaveAttribute("aria-checked", "true");
     const folders = history.getByTestId("sidebar-folder");
-    await expect(folders).toHaveCount(1);
-    const loose = history.locator('.sb-section[data-section="tasks"]');
-    await expect(loose.getByTestId("sidebar-folder")).toHaveCount(0);
-    await expect(loose.locator(".sb-section-count")).toHaveText("6");
-    // 6 条独立对话默认平铺 5 条（新到旧），其余通过「显示更多」查看。
-    await expect(history.getByTestId("sidebar-session")).toHaveCount(5);
-    await expect(history.getByTestId("sidebar-session").first()).toContainText("整理日志格式并补上单元测试");
-    await history.getByTestId("sidebar-history-more").click();
-    await expect(history.getByTestId("sidebar-session")).toHaveCount(6);
+    await expect(folders).toHaveCount(2);
+    await expect(projects.locator(".sb-section-count")).toHaveText("2");
+    const fakeFolder = sidebar.getByRole("region", { name: "omp studio 假项目" });
+    await expect(fakeFolder.locator(".sb-group-toggle")).toHaveAttribute("aria-expanded", "false");
+    await fakeFolder.locator(".sb-group-toggle").click();
+    await expect(fakeFolder.getByTestId("sidebar-session")).toHaveCount(5);
+    await expect(fakeFolder.getByTestId("sidebar-session").first()).toContainText("整理日志格式并补上单元测试");
+    await fakeFolder.getByTestId("sidebar-history-more").click();
+    await expect(fakeFolder.getByTestId("sidebar-session")).toHaveCount(6);
+    const conversations = history.locator('.sb-section[data-section="conversations"]');
+    await expect(conversations.getByTestId("sidebar-folder")).toHaveCount(0);
+    await expect(conversations.getByTestId("task-row")).toHaveCount(0);
     // 切到按时间：任务和全部会话平铺一列，新到旧（刚跑完的任务在最上面）。
     await page.getByTestId("sidebar-history-by-time").click();
     await expect(page.getByTestId("sidebar-history-by-time")).toHaveAttribute("aria-checked", "true");

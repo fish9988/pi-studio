@@ -126,8 +126,7 @@ export function buildTimeline(input: SidebarInput): SidebarItem[] {
     if (needle === "" && isEphemeralTestTempCwd(rawKey)) continue;
     if (session.taskId !== null || !matches(needle, sessionTitle(session))) continue;
     const pinned = session.pinned || (input.pinnedIds?.has(session.id) ?? false);
-    const projectLabel =
-      isScratchChatCwd(rawKey) && input.defaultCwd != null ? folderName(input.defaultCwd) : folderName(session.cwd);
+    const projectLabel = folderName(session.cwd);
     items.push({
       kind: "session",
       key: `session:${session.id}`,
@@ -147,31 +146,13 @@ export function buildTimeline(input: SidebarInput): SidebarItem[] {
  */
 export function buildFolders(input: SidebarInput): SidebarFolder[] {
   const needle = input.query.trim().toLowerCase();
-  const pinnedDefaultKey = input.defaultCwd == null ? null : folderKey(input.defaultCwd);
   const folders = new Map<string, SidebarFolder>();
   const projectKey = new Map<ProjectId, string>();
   for (const project of input.projects) {
-    const rawKey = folderKey(project.path);
-    const redirectProject = pinnedDefaultKey !== null && isScratchChatCwd(rawKey);
-    const key = redirectProject ? pinnedDefaultKey : rawKey;
+    const key = folderKey(project.path);
     projectKey.set(project.id, key);
-    if (!redirectProject) {
-      const existing = folders.get(key);
-      if (!existing) {
-        folders.set(key, { key, cwd: project.path, label: project.name, project, items: [] });
-      } else if (existing.project === null) {
-        existing.cwd = project.path;
-        existing.label = project.name;
-        existing.project = project;
-      }
-    } else if (!folders.has(key) && input.defaultCwd != null) {
-      folders.set(key, {
-        key,
-        cwd: input.defaultCwd,
-        label: folderName(input.defaultCwd),
-        project: null,
-        items: [],
-      });
+    if (!folders.has(key)) {
+      folders.set(key, { key, cwd: project.path, label: project.name, project, items: [] });
     }
   }
   for (const item of buildTimeline(input)) {
@@ -179,23 +160,10 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
       folders.get(projectKey.get(item.task.projectId) ?? "")?.items.push(item);
       continue;
     }
-    const rawKey = folderKey(item.session.cwd);
-    if (needle === "" && !folders.has(rawKey) && isEphemeralTestTempCwd(rawKey)) {
-      continue;
-    }
-    const redirectToDefault = pinnedDefaultKey !== null && isScratchChatCwd(rawKey);
-    const key = redirectToDefault ? pinnedDefaultKey : rawKey;
+    const key = folderKey(item.session.cwd);
     const folder = folders.get(key);
     if (folder) folder.items.push(item);
-    else if (redirectToDefault && input.defaultCwd != null) {
-      folders.set(key, {
-        key,
-        cwd: input.defaultCwd,
-        label: folderName(input.defaultCwd),
-        project: null,
-        items: [item],
-      });
-    } else {
+    else {
       folders.set(key, {
         key,
         cwd: item.session.cwd,
@@ -218,16 +186,17 @@ export function buildFolders(input: SidebarInput): SidebarFolder[] {
   return list.sort((a, b) => rank(a) - rank(b) || newest(b) - newest(a));
 }
 
-/** 按文件夹浏览时，只给已绑定的非默认项目保留文件夹头；其余对话按置顶和最近活动合并。 */
+/** 按文件夹浏览：默认工作目录里的项目/会话平铺到「会话」；其他每个工作目录都作为一个「项目」分组。 */
 export function splitSidebarFolders(folders: readonly SidebarFolder[], defaultCwd: string | null) {
-  const defaultKey = defaultCwd === null ? null : folderKey(defaultCwd);
+  if (defaultCwd === null) return { ready: false, projects: [] as SidebarFolder[], conversations: [] as SidebarItem[] };
+  const defaultKey = folderKey(defaultCwd);
   const projects: SidebarFolder[] = [];
-  const tasks: SidebarItem[] = [];
+  const conversations: SidebarItem[] = [];
   for (const folder of folders) {
-    if (folder.project !== null && folder.key !== defaultKey) projects.push(folder);
-    else tasks.push(...folder.items);
+    if (folder.key === defaultKey) conversations.push(...folder.items);
+    else projects.push(folder);
   }
-  return { projects, tasks: tasks.sort((a, b) => byRecentItem(a, b)) };
+  return { ready: true, projects, conversations: conversations.sort((a, b) => byRecentItem(a, b)) };
 }
 
 /** 等你确认的任务，等得最久的在前。 */

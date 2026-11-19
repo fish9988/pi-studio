@@ -8,6 +8,7 @@ import { createStore, useStoreValue } from "./create-store.ts";
 interface SettingsState {
   settings: StudioSettings | null;
   appInfo: AppInfo | null;
+  appInfoError: string | null;
   error: string | null;
 }
 
@@ -70,7 +71,7 @@ function mergeIncomingSettings(incoming: StudioSettings): StudioSettings {
   };
 }
 
-const settingsStore = createStore<SettingsState>({ settings: null, appInfo: null, error: null });
+const settingsStore = createStore<SettingsState>({ settings: null, appInfo: null, appInfoError: null, error: null });
 
 function reportError(what: string, error: unknown): void {
   console.error(`${what} 失败`, error);
@@ -79,9 +80,17 @@ function reportError(what: string, error: unknown): void {
 
 function loadAppInfo(): void {
   window.studio.getAppInfo().then(
-    (appInfo) => settingsStore.set({ ...settingsStore.get(), appInfo }),
-    (error: unknown) => reportError("getAppInfo", error),
+    (appInfo) => settingsStore.set({ ...settingsStore.get(), appInfo, appInfoError: null }),
+    (error: unknown) => {
+      const appInfoError = error instanceof Error ? error.message : String(error);
+      settingsStore.set({ ...settingsStore.get(), appInfoError });
+      reportError("getAppInfo", error);
+    },
   );
+}
+
+export function refreshAppInfo(): void {
+  loadAppInfo();
 }
 
 export function startSettingsStore(): void {
@@ -165,6 +174,10 @@ export function useSettingsSettled(): boolean {
 
 export function useAppInfo(): AppInfo | null {
   return useStoreValue(settingsStore, (state) => state.appInfo);
+}
+
+export function useAppInfoError(): string | null {
+  return useStoreValue(settingsStore, (state) => state.appInfoError);
 }
 
 /** 当前平台（非 React 代码用；还没载入时按 win32，与 TerminalPanel 一致）。 */

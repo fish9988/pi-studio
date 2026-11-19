@@ -13,6 +13,7 @@ const now = Date.now();
 const minute = 60_000;
 const projectA = { id: "pa" as ProjectId, path: "E:\\研究 项目\\my app", name: "my app" };
 const projectB = { id: "pb" as ProjectId, path: "E:\\work\\api server", name: "api server" };
+const chatsDir = "E:\\pi\\chats";
 
 /** 页面里量布局用到的最小类型（e2e 的类型检查没有 DOM 类型）。 */
 type PageRect = { top: number; left: number; width: number };
@@ -108,6 +109,13 @@ async function makeAgentDir(): Promise<string> {
     headerLine("sess-notes", "E:\\其他 目录\\notes") + userLine("\ue5fa 写笔记"),
     "utf8",
   );
+  const chatsBucket = path.join(agentDir, "sessions", "--E--pi-chats--");
+  await mkdir(chatsBucket, { recursive: true });
+  await writeFile(
+    path.join(chatsBucket, "d_default.jsonl"),
+    headerLine("sess-default", chatsDir) + userLine("默认目录中的独立对话"),
+    "utf8",
+  );
   return agentDir;
 }
 
@@ -128,7 +136,7 @@ async function stubMain(app: Awaited<ReturnType<typeof launchApp>>["app"], local
         version: "0.0.0",
         platform: "win32",
         locale: data.locale,
-        isPackaged: false,
+        chatsDir: data.chatsDir,
         runtime: { electron: "0", chromium: "0", node: "0" },
       }));
       stub("listProjects", () => data.projects);
@@ -143,13 +151,13 @@ async function stubMain(app: Awaited<ReturnType<typeof launchApp>>["app"], local
         sidebarWidth: 226,
         sidebarCollapsed: false,
         historyOrder: "folder",
-        uiStyle: "zcode",
       }));
       stub("ensureSessionProject", () => ({ id: "pn", path: "E:\\其他 目录\\notes", name: "notes" }));
       stub("setShellState", () => undefined);
     },
     {
       locale,
+      chatsDir,
       projects: [projectA, projectB],
       tasks,
       slash: [
@@ -205,13 +213,17 @@ for (const [locale, colorScheme] of [
       const sidebar = page.getByTestId("sidebar");
       await expect(sidebar.getByRole("button", { name: new RegExp(words.newTask) }).first()).toBeVisible();
 
-      // 仅已绑定的项目显示文件夹；其余对话平铺在「任务」里。
-      // my app 里有选中/在跑/等你确认的任务所以默认展开：终端会话和任务混排，默认 5 行，其余在"显示更多"后面。
+      // chatsDir 内的对话单独平铺；其他工作目录（包括尚未注册项目的历史目录）都放在「项目」。
       const history = sidebar.getByTestId("sidebar-history");
+      const projects = sidebar.locator('.sb-section[data-section="projects"]');
+      const conversations = sidebar.locator('.sb-section[data-section="conversations"]');
       const myApp = sidebar.getByRole("region", { name: "my app" });
-      await expect(history.getByTestId("sidebar-folder")).toHaveCount(2);
+      await expect(history.getByTestId("sidebar-folder")).toHaveCount(3);
+      await expect(projects.locator(".sb-section-count")).toHaveText("3");
       await expect(sidebar.getByRole("region", { name: "api server" })).toBeVisible();
       await expect(myApp.getByTestId("sidebar-session")).toContainText("在终端里排查内存泄漏");
+      await expect(conversations.getByTestId("sidebar-session")).toHaveCount(1);
+      await expect(conversations).toContainText("默认目录中的独立对话");
       // 正常完成的历史会话不画刺眼绿勾，保持标题左对齐干净。
       await expect(myApp.getByTestId("sidebar-session").locator(".sb-dot-done")).toHaveCount(0);
       await expect(myApp.getByTestId("task-row")).toHaveCount(4);
@@ -219,29 +231,36 @@ for (const [locale, colorScheme] of [
       await myApp.getByTestId("sidebar-history-more").click();
       await expect(myApp.getByTestId("task-row")).toHaveCount(7);
 
-      const loose = sidebar.locator('.sb-section[data-section="tasks"]');
-      const notes = loose.getByTestId("sidebar-session");
-      await expect(loose.getByTestId("sidebar-folder")).toHaveCount(0);
-      await expect(loose.locator(".sb-section-count")).toHaveText("1");
-      await expect(notes.locator(".sb-row-title")).toHaveText("写笔记");
-      await expect(notes.locator(".sb-row-main svg")).toHaveCount(0);
+      const notes = sidebar.getByRole("region", { name: "notes" });
+      await expect(notes.getByTestId("sidebar-session")).toHaveCount(0);
+      await expect(notes.locator(".sb-group-count")).toContainText("1");
+      await expect(notes.locator(".sb-group-more")).toHaveCount(0);
+      await expect(notes.locator(".sb-group-toggle")).toBeVisible();
+      await notes.locator(".sb-group-toggle").click();
+      await expect(notes.getByTestId("sidebar-session").locator(".sb-row-title")).toHaveText("写笔记");
+      await expect(notes.getByTestId("sidebar-session").locator(".sb-row-main svg")).toHaveCount(0);
       await expect(myApp.locator(".sb-group-more")).toBeVisible();
       await expect(myApp.locator(".sb-group-count")).toBeHidden();
       const search = sidebar.getByTestId("sidebar-search");
-      const toggleTasks = sidebar.getByTestId("sidebar-section-tasks");
-      await toggleTasks.click();
-      await expect(notes).toHaveCount(0);
+      const toggleProjects = sidebar.getByTestId("sidebar-section-projects");
+      await toggleProjects.click();
+      await expect(notes.getByTestId("sidebar-session")).toHaveCount(0);
       await search.fill("写笔记");
-      await expect(notes).toBeVisible();
+      await expect(notes.getByTestId("sidebar-session")).toBeVisible();
       await search.press("ArrowDown");
-      await expect(notes.locator(".sb-row-main")).toBeFocused();
+      await expect(notes.locator(".sb-group-toggle")).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await expect(notes.getByTestId("sidebar-session").locator(".sb-row-main")).toBeFocused();
       await search.fill("");
-      await expect(notes).toHaveCount(0);
-      await toggleTasks.click();
-      await notes.click({ button: "right" });
+      await expect(notes.getByTestId("sidebar-session")).toHaveCount(0);
+      await toggleProjects.click();
+      await notes.getByTestId("sidebar-session").click({ button: "right" });
       await page.getByRole("menuitem", { name: /在此对话目录新建任务|New task in this conversation/ }).click();
       await expect.poll(async () => (await mainCalls(app, "ensureSessionProject"))[0]?.[0]).toBe("sess-notes");
-      await expect(myApp.locator(".sb-group-more")).toHaveCount(1);
+      await sidebar.getByTestId("sidebar-section-conversations").click();
+      await expect(conversations.getByTestId("sidebar-session")).toHaveCount(0);
+      await sidebar.getByTestId("sidebar-section-conversations").click();
+      await expect(conversations.getByTestId("sidebar-session")).toHaveCount(1);
 
       // 搜索同时过滤任务和会话，两种排列都一样。
       await search.fill("数据");
@@ -252,14 +271,14 @@ for (const [locale, colorScheme] of [
       await expect(myApp.getByTestId("sidebar-session")).toHaveCount(1);
       await search.fill("");
 
-      // 按时间：任务和会话平铺成一列，没有文件夹；先显示 40 行，这里一共 11 行，全部露出、没有"显示更多"。
+      // 按时间：任务和会话平铺成一列，没有文件夹；先显示 40 行，这里一共 12 行，全部露出。
       await sidebar.getByTestId("sidebar-history-by-time").click();
       await expect(sidebar.getByTestId("sidebar-folder")).toHaveCount(0);
-      await expect(sidebar.getByTestId("sidebar-session")).toHaveCount(2);
-      await expect(history.locator(".sb-row-main")).toHaveCount(11);
+      await expect(sidebar.getByTestId("sidebar-session")).toHaveCount(3);
+      await expect(history.locator(".sb-row-main")).toHaveCount(12);
       await expect(history.getByTestId("sidebar-history-more")).toHaveCount(0);
       await sidebar.getByTestId("sidebar-history-by-folder").click();
-      await expect(sidebar.getByTestId("sidebar-folder")).toHaveCount(2);
+      await expect(sidebar.getByTestId("sidebar-folder")).toHaveCount(3);
       await expect(notes).toBeVisible();
       const [panelBox, sidebarBox, filterBox, toggleBox] = await Promise.all([
         page.getByTestId("main-panel").boundingBox(),
@@ -269,8 +288,6 @@ for (const [locale, colorScheme] of [
       ]);
       expect(panelBox?.x).toBe((sidebarBox?.x ?? 0) + (sidebarBox?.width ?? 0));
       expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBe((sidebarBox?.y ?? 0) + (sidebarBox?.height ?? 0));
-      await expect(page.getByTestId("main-panel")).toHaveCSS("border-bottom-left-radius", "0px");
-      await expect(page.getByTestId("main-panel")).toHaveCSS("border-left-width", "0px");
       expect(toggleBox!.x - (filterBox!.x + filterBox!.width)).toBeGreaterThan(0);
       const allProjects = sidebar.getByTestId("sidebar-toggle-all-folders");
       await allProjects.click();

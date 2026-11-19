@@ -5,12 +5,13 @@ import { useDraftProject } from "../features/empty/use-draft-project.ts";
 import { useProjects } from "../features/sidebar/projects-store.ts";
 import { folderAliasKey, useFolderAliases } from "../features/sidebar/sidebar-prefs-store.ts";
 import { useT } from "../i18n/use-t.ts";
-import { Restart } from "../icons.tsx";
+import { Folder, Restart } from "../icons.tsx";
 import { useMainView, useSelectedTaskId, useTask } from "../store/index.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { reportError } from "../ui/errors.ts";
 import { withShortcut } from "./platform-keys.ts";
 import { restartBlockedKey, restartSession } from "./restart-session.ts";
+import { useShellValue } from "./shell-store.ts";
 
 function baseName(p: string): string {
   const parts = p.split(/[\\/]+/).filter(Boolean);
@@ -25,6 +26,7 @@ export function TaskCrumb() {
   const projects = useProjects();
   const folderAliases = useFolderAliases();
   const draftProject = useDraftProject();
+  const isZcode = useShellValue("uiStyle") === "zcode";
   const [restarting, setRestarting] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
@@ -44,21 +46,27 @@ export function TaskCrumb() {
   if (taskId === null || task === null) {
     const draftAlias = draftProject ? folderAliases[folderAliasKey(draftProject.path)] : undefined;
     const draftFolder = draftAlias ?? (draftProject ? draftProject.name || baseName(draftProject.path) : null);
+    if (isZcode && !draftFolder) {
+      return <div className="crumb" data-testid="topbar-crumb" data-empty="" />;
+    }
     return (
       <div
         className="crumb"
         data-testid="topbar-crumb"
         title={draftProject ? `${draftProject.path} / ${t("menu.newTask")}` : t("menu.newTask")}
       >
+        {isZcode && <Folder size={13} className="crumb-folder-ic" />}
         {draftFolder && (
           <>
             <span className="crumb-folder">{draftFolder}</span>
-            <span className="crumb-sep" aria-hidden="true">
-              /
-            </span>
+            {!isZcode && (
+              <span className="crumb-sep" aria-hidden="true">
+                /
+              </span>
+            )}
           </>
         )}
-        <span className="crumb-title">{t("menu.newTask")}</span>
+        {!isZcode && <span className="crumb-title">{t("menu.newTask")}</span>}
       </div>
     );
   }
@@ -92,10 +100,12 @@ export function TaskCrumb() {
     window.studio.renameTask(task.id, next).catch((error: unknown) => reportError(t, error));
   };
 
+  const showFolder = Boolean(folderName && (!isZcode || folderName.toLowerCase() !== "chats"));
   return (
     <div className="crumb" data-testid="topbar-crumb">
-      {folderName && (
+      {showFolder && (
         <>
+          {isZcode && <Folder size={13} className="crumb-folder-ic" />}
           <span className="crumb-folder" title={task.cwd}>
             {folderName}
           </span>

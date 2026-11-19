@@ -47,8 +47,7 @@
   gap: var(--space-1-5);
   height: var(--panel-head-h);
   padding: 0 var(--space-2) 0 var(--space-3);
-  background: var(--bg-glass);
-  backdrop-filter: blur(14px);
+  background: var(--bg-app);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
 }
@@ -72,9 +71,9 @@
   align-items: center;
   gap: var(--space-1-5);
   padding: 0 var(--space-0-5);
-  color: var(--text-2);
+  color: var(--text);
   font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-strong);
 }
 
 .dsh-wb-lone-start svg {
@@ -120,7 +119,12 @@
   color: var(--text-2);
 }
 
-/* 当前页签 = 抬起的白卡（1px 描边 + 极浅投影），和头部的玻璃底拉开一层 */
+.dsh-wb-tab:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* 当前页签 = 抬起的白卡（1px 描边 + 极浅投影），和头部平铺底色拉开一层 */
 .dsh-wb-tab[data-active] {
   background: var(--bg-raised);
   color: var(--text);
@@ -190,6 +194,13 @@
   color: var(--text);
 }
 
+.dsh-wb-add-btn:focus-visible,
+.dsh-wb-icon-btn:focus-visible,
+.dsh-wb-tab-close:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
 .dsh-wb-actions {
   display: inline-flex;
   align-items: center;
@@ -212,9 +223,9 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  padding: var(--space-4) var(--space-4) var(--space-6);
-  /* 凹陷台面：上面 --bg-raised 的 Bento 磁贴在 Fluent / 云母浅色下才有分层，否则是白底上的白块 */
-  background: var(--bg-sunken);
+  padding: var(--space-4) var(--space-4) var(--space-8);
+  /* 平铺台面：卡片 / 磁贴靠 1px 细线和底色差自己分层，不做凹陷槽，深色下也不会出现一道更黑的底 */
+  background: var(--bg-app);
   overflow-y: auto;
   /* 窄右栏里用容器查询收掉磁贴快捷键，免得溢出 */
   container-type: inline-size;
@@ -242,10 +253,10 @@
   align-items: center;
   gap: var(--space-2);
   height: 34px;
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-2-5) 0 var(--space-3);
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   color: var(--text-3);
   transition:
     border-color var(--dur-fast) var(--ease-out),
@@ -343,14 +354,22 @@
   white-space: nowrap;
 }
 
-.dsh-ov-omni-kbd {
+/* 键帽：搜索框里的 Enter 提示与磁贴右上角的快捷键共用一套薄边小键帽（底边略深一档，像压下去的一层） */
+.dsh-ov-omni-kbd,
+.dsh-ov-tile-kbd {
+  display: inline-flex;
+  align-items: center;
   flex: none;
-  padding: 1px 5px;
+  height: 18px;
+  padding: 0 5px;
   border: 1px solid var(--border-subtle);
+  border-bottom-color: var(--border);
   border-radius: var(--radius-xs);
   background: var(--bg-sunken);
   color: var(--text-3);
+  font-family: var(--font-mono);
   font-size: var(--fs-2xs);
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -360,14 +379,30 @@
   gap: var(--space-2);
 }
 
-/* 区块卡：白底 + 1px 细描边，坐在 --bg-sunken 台面上，深色下也不会和底拉不开 */
+/* 区块卡：白底 + 1px 细描边；卡头单占一行（下面一条分隔线），列表贴到卡的内缘，
+   比「整卡内边距 + 漂浮行」更像静态分组，也省掉一截空白。 */
 .dsh-ov-card {
-  gap: var(--space-2-5);
-  padding: var(--space-3);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
   background: var(--bg-raised);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-1);
+}
+
+.dsh-ov-card > .dsh-ov-section-head {
+  min-height: 30px;
+  padding: var(--space-1-5) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dsh-ov-card > .dsh-ov-live-list {
+  padding: var(--space-1);
+}
+
+.dsh-ov-card > .dsh-ov-empty {
+  padding: var(--space-2-5) var(--space-3) var(--space-3);
 }
 
 .dsh-ov-tile-grid {
@@ -380,11 +415,11 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: var(--space-3);
-  min-height: 74px;
-  padding: var(--space-2-5) var(--space-3) var(--space-3);
+  gap: var(--space-2-5);
+  min-height: 72px;
+  padding: var(--space-2-5) var(--space-3);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   box-shadow: var(--shadow-1);
   color: var(--text);
@@ -425,7 +460,7 @@
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   background: var(--bg-sunken);
   color: var(--text-2);
   flex: none;
@@ -447,23 +482,40 @@
   color: var(--text-2);
 }
 
-/* 键帽：右上角固定高度间距，四块磁贴里垂直对齐 */
-.dsh-ov-tile-kbd {
-  flex: none;
-  padding: 1px 5px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
-  background: var(--bg-sunken);
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  line-height: 1.5;
-  white-space: nowrap;
+/* 窄栏：先收组间距和卡头/空态的内边距，再把磁贴快捷键和半截留白收掉；
+   300px 时两块磁贴仍并排（~130px/块）。容器是 .dsh-wb-start 自己，规则只能命中它的后代 */
+@container (max-width: 380px) {
+  .dsh-ov-container {
+    gap: var(--space-3);
+  }
+
+  .dsh-ov-card > .dsh-ov-section-head {
+    padding: 0 var(--space-2-5);
+  }
+
+  .dsh-ov-card > .dsh-ov-empty {
+    padding: var(--space-2) var(--space-2-5) var(--space-2-5);
+  }
 }
 
 @container (max-width: 340px) {
   .dsh-ov-tile-kbd {
     display: none;
+  }
+
+  .dsh-ov-omni {
+    height: 32px;
+  }
+
+  .dsh-ov-tile {
+    gap: var(--space-2);
+    min-height: 64px;
+    padding: var(--space-2) var(--space-2-5) var(--space-2-5);
+  }
+
+  .dsh-ov-tile-ic {
+    width: 24px;
+    height: 24px;
   }
 }
 
@@ -510,7 +562,7 @@
   height: 40px;
   padding: 0 var(--space-3);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   box-shadow: var(--shadow-1);
   color: var(--text);
@@ -1167,6 +1219,7 @@
 
 /* ───────── 三套界面设计风格下的工作台质感 ───────── */
 :root[data-ui-style="liquid"] .dsh-wb-header {
+  background: var(--bg-glass);
   backdrop-filter: blur(24px) saturate(180%);
 }
 
@@ -1199,28 +1252,652 @@
   }
 }
 
-/* ZCode：暖灰台面 + 一律 1px 细线分层，卡片 / 磁贴不浮起，头部不做磨砂（层级只靠描边和底色） */
-:root[data-ui-style="zcode"] .dsh-wb-header {
-  background: var(--bg-app);
-  backdrop-filter: none;
+/* ───────── 现代工作台（data-ui-style="zcode"） ─────────
+   面板自己就是那张卡：浅色纯白、深色回到应用底色，1px 细边框 + 圆角 + 极轻阴影；
+   头部、启动器、内嵌面板一律透明 —— 三层深浅不一的灰坑一次抹平。 */
+:root[data-ui-style="zcode"] .dsh-wb {
+  margin-left: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
-:root[data-ui-style="zcode"] :is(.dsh-ov-card, .dsh-ov-tile, .dsh-ov-tile-wide) {
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .dsh-wb {
+  background: var(--bg-app);
+  border-color: var(--border);
   box-shadow: none;
 }
 
-:root[data-ui-style="zcode"] .dsh-ov-tile:hover,
-:root[data-ui-style="zcode"] .dsh-ov-tile-wide:hover {
-  border-color: var(--border-strong);
-  transform: none;
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="zcode"]:not([data-theme]) .dsh-wb {
+    background: var(--bg-app);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+}
+
+:root[data-ui-style="zcode"] .dsh-wb-header {
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: none;
+}
+
+:root[data-ui-style="zcode"] :is(.dsh-wb-body, .dsh-wb-extensions-pane) {
+  background: transparent;
+}
+
+/* 标签胶囊：激活态是一层柔和浅底（不描硬框），28px 高、8px 圆角，× 常显 */
+:root[data-ui-style="zcode"] .dsh-wb-tab {
+  height: 28px;
+  border-radius: 8px;
 }
 
 :root[data-ui-style="zcode"] .dsh-wb-tab[data-active] {
-  box-shadow: inset 0 0 0 1px var(--border);
+  background: color-mix(in srgb, var(--text) 6.5%, transparent);
+  color: var(--text);
+  box-shadow: none;
 }
 
-/* 区域背景图：侧栏 / 整窗的图从工作台底下穿过去，工作台稍稍透一点（--bd-surface-alpha） */
+:root[data-ui-style="zcode"] .dsh-wb-tab-close {
+  width: 15px;
+  height: 15px;
+  opacity: 0.55;
+}
+
+:root[data-ui-style="zcode"] :is(.dsh-wb-add-btn, .dsh-wb-icon-btn) {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+/* 宽窗口（≥1181px）：右侧工作台默认 540px 舒展双列，拖左缘时 inline flex-basis 覆盖默认宽。 */
+@media (min-width: 1181px) {
+  :root[data-ui-style="zcode"] .dsh-wb {
+    flex: 0 0 540px;
+    width: 540px;
+    min-width: 320px;
+    max-width: 76%;
+  }
+
+  :root[data-ui-style="zcode"] .dsh-wb[data-expanded] {
+    flex: 0 0 760px;
+    width: 760px;
+  }
+}
+
+/* 窄窗口（≤1180px）：工作台转为右侧圆角浮层卡片，不挤压中间主对话列；
+   层级低于左侧抽屉遮罩（--z-popover - 1），打开抽屉时遮罩自然盖住右侧浮层，绝不双栏夹击。 */
+@media (max-width: 1180px) {
+  :root[data-ui-style="zcode"] .dsh-wb {
+    position: absolute;
+    top: 0;
+    right: 6px;
+    bottom: 6px;
+    z-index: calc(var(--z-popover) - 2);
+    width: min(460px, calc(100vw - 12px));
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    box-shadow: var(--shadow-2);
+  }
+}
+
+/* 区域背景图：侧栏 / 整窗的图从工作台底下穿过去，工作台稍稍透一点（--bd-surface-alpha）；
+   头部跟着透，否则会盖住上面那一层模糊底、和下面的内容接不上 */
 :root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .dsh-wb {
   background: color-mix(in srgb, var(--bg-app) var(--bd-surface-alpha, 88%), transparent);
   backdrop-filter: blur(20px);
+}
+
+:root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .dsh-wb-header {
+  background: transparent;
+}
+
+/* ───────── 现代工作台「新标签页」启动器（SidePaneLauncher） ───────── */
+
+.spl-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 22px 24px 32px;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--text);
+  /* 窄面板时下面双列自动收成单列 */
+  container-type: inline-size;
+}
+
+.spl-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.spl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.spl-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: var(--fw-strong);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 全能搜索：一行极简浅底，不描重框；文件直达预览，网址回车开内置浏览器 */
+.spl-omni-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  margin-top: var(--space-3-5);
+}
+
+.spl-omni {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 34px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+  color: var(--text-3);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.spl-omni:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text-2);
+}
+
+.spl-omni-ic {
+  flex: none;
+}
+
+.spl-omni-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  outline: none;
+}
+
+.spl-omni-input::placeholder {
+  color: var(--text-3);
+}
+
+.spl-omni-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.spl-omni-clear:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  color: var(--text);
+}
+
+.spl-omni-kbd {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+}
+
+.spl-omni-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+  overflow-y: auto;
+}
+
+.spl-omni-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.spl-omni-option[data-active] {
+  background: color-mix(in srgb, var(--text) 5.5%, transparent);
+  color: var(--text);
+}
+
+.spl-omni-option-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───── 双列横向应用行 ───── */
+
+.spl-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-5);
+}
+
+.spl-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 20px;
+  padding: 0 var(--space-1);
+}
+
+.spl-section-title {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-label);
+}
+
+.spl-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.spl-link:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.spl-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.spl-apps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+/* MCP App 直接落在同一张双列网格里，不另起一块外框 */
+.spl-mcp-host {
+  display: contents;
+}
+
+.spl-app {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.spl-app:hover {
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+}
+
+.spl-app:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.spl-app[data-busy] {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.spl-tile {
+  --spl-tone: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text-2);
+}
+
+/* 应用区的彩色图标块：--spl-hue 是这一档的色相（深色下混白提亮一档，见文件末尾） */
+.spl-tile[data-tone="pdf"] {
+  --spl-hue: #d9534a;
+}
+
+.spl-tile[data-tone="sheet"] {
+  --spl-hue: #12945c;
+}
+
+.spl-tile[data-tone="doc"] {
+  --spl-hue: #2b7cd3;
+}
+
+.spl-tile[data-tone="canvas"] {
+  --spl-hue: #7a5cd6;
+}
+
+.spl-tile[data-tone="skills"] {
+  --spl-hue: #c07f0a;
+}
+
+.spl-tile[data-tone="mcp"] {
+  --spl-hue: #0d8a99;
+}
+
+.spl-tile[data-tone] {
+  --spl-tone: var(--spl-hue);
+  border-color: color-mix(in srgb, var(--spl-tone) 22%, transparent);
+  background: color-mix(in srgb, var(--spl-tone) 12%, transparent);
+  color: var(--spl-tone);
+}
+
+:root:is([data-theme$="dark"], [data-theme="dark"]) .spl-tile[data-tone] {
+  --spl-tone: color-mix(in srgb, var(--spl-hue) 62%, #ffffff);
+  background: color-mix(in srgb, var(--spl-tone) 18%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .spl-tile[data-tone] {
+    --spl-tone: color-mix(in srgb, var(--spl-hue) 62%, #ffffff);
+    background: color-mix(in srgb, var(--spl-tone) 18%, transparent);
+  }
+}
+
+.spl-app-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.spl-app-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.spl-app-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: var(--fw-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spl-app-hint {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spl-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--link) 14%, transparent);
+  color: var(--link);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.spl-open-pill {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 5.5%, transparent);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: var(--fw-medium);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+
+.spl-app:hover .spl-open-pill {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+/* 居中短分割线：把「工作台工具」和「应用插件」两区輕輕分开 */
+.spl-divider {
+  width: 88px;
+  height: 1px;
+  margin: 18px auto;
+  background: var(--border);
+}
+
+/* ───── 第三区：按需显现的实时上下文 ───── */
+
+.spl-context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3-5);
+  margin-top: var(--space-5);
+}
+
+.spl-context-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.spl-context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 18px;
+  padding: 0 var(--space-1);
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-label);
+}
+
+.spl-count {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.spl-live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 3px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.spl-live:hover {
+  background: color-mix(in srgb, var(--text) 4.5%, transparent);
+}
+
+.spl-live:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.spl-live-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--text-3);
+}
+
+.spl-live:hover .spl-live-ic {
+  color: var(--text-2);
+}
+
+.spl-live-main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: var(--space-1-5);
+  min-width: 0;
+}
+
+.spl-live-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spl-live-main > .spl-live-title:not(:last-child) {
+  max-width: 58%;
+}
+
+.spl-live-sub {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: var(--fs-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spl-live-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 状态点：绿 = 在跑 / 已完成，橙 = 排队或挂起，红 = 失败，灰 = 已结束 */
+.spl-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--text-3);
+}
+
+.spl-dot[data-state="running"] {
+  background: var(--st-done);
+}
+
+.spl-dot[data-state="waiting"] {
+  background: var(--st-waiting);
+}
+
+.spl-dot[data-state="done"],
+.spl-dot[data-state="completed"],
+.spl-dot[data-state="idle"] {
+  background: var(--st-done);
+}
+
+.spl-dot[data-state="failed"] {
+  background: var(--st-error);
+}
+
+/* 面板窄于 430px：双列收成单列，说明文字不被挤成碎字 */
+@container (max-width: 430px) {
+  .spl-apps {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

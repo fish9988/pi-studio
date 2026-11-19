@@ -7,7 +7,10 @@
   width: 100%;
   height: 100%;
   min-width: 0;
-  /* 文件夹头吸顶的偏移：HistorySection 量出标题行的实际高度后写进这个变量（0 是首帧的默认值） */
+  /* 窄栏行为按侧栏自己的宽度判断（拖窄、抽屉里都不依赖窗口宽度）：
+     宽度 ≤ 219px 时收起快捷键提示、筛选文字与项目标签，只留图标和短标题。 */
+  container-type: inline-size;
+  /* 文件夹头吸顶的偏移：HistorySection 量出排列切换行的实际高度后写进这个变量（0 是首帧的默认值） */
   --sb-sticky-top: 0px;
   background: var(--bg-sidebar);
   color: var(--text);
@@ -36,12 +39,41 @@
   flex: none;
 }
 
+/* ───── 一级标题行（左「任务列表」/ 右进行中与全部折叠） ───── */
+.sb-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-h-sm);
+  /* 右侧和 .sb-list 的滚动条死区同宽：全部折叠按钮的右缘和覆盖式滚动条的轨道对齐 */
+  padding: 0 max(var(--space-2), var(--scrollbar-hit)) 0 var(--space-2);
+}
+.sb-head-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-strong);
+  line-height: var(--lh-xs);
+  letter-spacing: var(--ls-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sb-head-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
 /* ───── 顶部三行：搜索（M3 药丸框）/ [新任务] / [打开文件夹] ───── */
 .sb-actions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
-  margin: var(--space-1) var(--space-2) var(--space-2);
+  gap: 1px;
+  margin: var(--space-1) var(--space-2) var(--space-1);
 }
 .sb-actions .ui-field {
   border-radius: var(--radius-pill);
@@ -80,7 +112,7 @@
   gap: var(--space-2);
   width: 100%;
   min-width: 0;
-  height: 30px;
+  height: 28px;
   /* 左缘 14px = 3px 竖条（left 4px）+ 7px 空隙：选不选中都是它，文字不横向跳（2026-11-14） */
   padding: 0 var(--space-2) 0 var(--space-3-5);
   color: var(--text-2);
@@ -93,8 +125,8 @@
     border-color var(--dur-instant) var(--ease-out);
 }
 .sb-new .icon {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 .sb-new:hover {
   background: var(--bg-hover);
@@ -157,11 +189,12 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: var(--control-h-md);
+  height: var(--control-h-sm);
   margin: 0 var(--space-2) var(--space-1);
   padding: 0 var(--space-3);
   background: var(--st-waiting-soft);
   color: var(--st-waiting-text);
+  font-size: var(--fs-xs);
   border-radius: var(--radius-md);
 }
 .sb-waiting-text {
@@ -217,8 +250,7 @@
 }
 
 /* ───── 项目分组 ───── */
-/* 历史会话标题区（「任务列表」控制头）：两行，不再把标题 / 进行中 / 折叠全部 / 文件夹|时间 塞进 240px 的一行。
-   上行：左「任务列表」，右「进行中」胶囊 + 折叠全部；下行：拉满整行、两段等宽的「文件夹 | 时间」切换。
+/* 历史会话控制头：只剩拉满整行、两段等宽的「文件夹 | 时间」切换（标题 / 进行中 / 折叠全在顶部 .sb-head，不跟着列表滚）。
    钉在滚动区顶部（.sb-list 上边没有内边距，起始位置就是钉住的位置），底色和侧栏一致，
    上下留出匀称的内边距，滚过的行不会从边缝透出；z-index 压住行里的绝对定位元素 */
 .sb-history-head {
@@ -228,7 +260,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-1-5) 0 var(--space-1-5);
+  padding: var(--space-1) 0 var(--space-1-5);
   background: var(--bg-sidebar);
 }
 /* 区域背景图：侧栏 / 整窗的磨砂底由 app.css 的 .sidebar-column 负责，.sb 不再叠一层实色，
@@ -247,25 +279,6 @@
 :root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb-group-head {
   background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
   backdrop-filter: blur(18px);
-}
-.sb-history-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-}
-/* 按钮组保留固有宽度，缩窄时只截断标题。 */
-.sb-history-top .sb-group-title {
-  min-width: 0;
-  padding: 0 0 0 var(--space-2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sb-history-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1-5);
 }
 /* 排列切换拉满整行：两段等宽，短的那段（时间）文字仍在格子正中 */
 .sb-history-order-row {
@@ -287,9 +300,9 @@
 .sb-active-filter {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 6px;
+  gap: 3px;
+  height: 20px;
+  padding: 0 5px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--text) 3%, transparent);
@@ -302,6 +315,11 @@
     color var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
+}
+.sb-active-filter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sb-active-filter:hover {
   background: var(--bg-hover);
@@ -446,11 +464,11 @@
   opacity: 0.32;
 }
 
-.sb-history-meta .sb-toggle-all {
-  --btn-h: 22px;
+.sb-head-tools .sb-toggle-all {
+  --btn-h: 20px;
   color: var(--text-3);
 }
-.sb-history-meta .sb-toggle-all:hover {
+.sb-head-tools .sb-toggle-all:hover {
   color: var(--text);
 }
 .sb-toggle-all svg {
@@ -473,14 +491,15 @@
   position: static;
   background: transparent;
 }
-/* ───── 「项目」显示已绑定的项目目录；「任务」直接显示独立对话 ───── */
+/* ───── 「项目」与「会话」两个分区（中间用留白分开，不画常驻横线） ───── */
 .sb-section + .sb-section {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1-5);
 }
 .sb-section-head {
+  position: relative;
   display: flex;
   align-items: center;
-  height: var(--control-h-sm);
+  height: 26px;
   padding: 0 var(--space-2);
 }
 .sb-section-toggle {
@@ -491,26 +510,61 @@
   min-width: 0;
   height: 100%;
   border-radius: var(--radius-sm);
-  color: var(--text-3);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-xs);
+  color: var(--text-2);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-medium);
+  line-height: var(--lh-2xs);
+  letter-spacing: var(--ls-label);
 }
 .sb-section-toggle:hover {
-  color: var(--text-2);
+  color: var(--text);
 }
 .sb-section-name {
   min-width: 0;
   overflow: hidden;
-  font-weight: var(--fw-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 数量靠右对齐，和文件夹头的行数在同一列 */
 .sb-section-count {
   flex: none;
+  margin-left: auto;
+  padding-left: var(--space-2);
   color: var(--text-3);
   font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+/* 分区头右侧的 ＋：平时不出声，悬停 / 键盘聚焦分区头时才浮现（绝对定位，不占行宽） */
+.sb-section-actions {
+  position: absolute;
+  top: 0;
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.sb-section-actions .ui-icon-btn {
+  --btn-h: 22px;
+  color: var(--text-3);
+}
+.sb-section-actions .ui-icon-btn:hover {
+  color: var(--text);
+}
+.sb-section-head:hover .sb-section-actions,
+.sb-section-head:focus-within .sb-section-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* 动作区浮现在数量的位置上：数量让位，两者不叠字 */
+.sb-section-head:hover .sb-section-count,
+.sb-section-head:focus-within .sb-section-count {
+  opacity: 0;
 }
 /* 箭头展开朝下、折叠朝右（同文件夹头的 .sb-chevron） */
 .sb-section-chevron {
@@ -531,29 +585,21 @@
 
 /* 文件夹：头部（箭头 + 名称，折叠时行数）+ 任务和会话混排的行 */
 .sb-folder + .sb-folder {
-  margin-top: var(--space-1);
+  margin-top: 2px;
 }
 .sb-show-more.sb-show-more-flat {
   padding-left: var(--space-3-5);
 }
-.sb-group-title {
-  flex: none;
-  margin: 0;
-  padding: var(--space-1) var(--space-2);
-  color: var(--text-3);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-xs);
-  white-space: nowrap;
-}
-/* 文件夹头吸顶：长列表滚动时还知道自己在哪个项目里。钉在标题行下方——标题行的高度由 HistorySection 量出来写进
-   --sb-sticky-top；底色取侧栏底色，滚过的行不会从边缝里透出来；z-index 压住行里的绝对定位元素。 */
+/* 文件夹头吸顶：长列表滚动时还知道自己在哪个项目里。钉在排列切换行下方（--sb-sticky-top 由 HistorySection 量出）；
+   底色取侧栏底色，滚过的行不会从边缝里透出来；z-index 压住行里的绝对定位元素。 */
 .sb-group-head {
+  --sb-group-row-h: var(--control-h-sm);
   position: sticky;
   top: var(--sb-sticky-top, 0px);
   z-index: 2;
   display: flex;
   align-items: center;
-  height: var(--control-h-sm);
+  height: var(--sb-group-row-h);
   background: var(--bg-sidebar);
   border-radius: var(--radius-sm);
 }
@@ -565,7 +611,7 @@
   min-width: 0;
   height: 100%;
   /* 平时右侧仅弱化显示会话计数；悬停时浮现 ⋯ 与 ＋，预留右侧空间保证标题不跳动 */
-  padding: 0 calc(2 * var(--control-h-sm) + var(--space-1)) 0 var(--space-2);
+  padding: 0 calc(2 * var(--sb-group-row-h) + var(--space-1)) 0 var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--text);
   font-weight: var(--fw-medium);
@@ -635,8 +681,8 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-1-5);
-  min-width: var(--control-h-sm);
-  height: var(--control-h-sm);
+  min-width: var(--sb-group-row-h);
+  height: var(--sb-group-row-h);
   color: color-mix(in srgb, var(--text) 45%, transparent);
   font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
@@ -659,6 +705,7 @@
   height: 6px;
 }
 .sb-group-action {
+  --btn-h: var(--sb-group-row-h);
   position: absolute;
   top: 0;
   z-index: 2;
@@ -678,7 +725,7 @@
   color: var(--text);
 }
 .sb-group-more {
-  right: var(--control-h-sm);
+  right: var(--sb-group-row-h);
   color: var(--text-3);
 }
 .sb-group-more:hover {
@@ -1043,4 +1090,273 @@
 :root[data-ui-style="claude"] .sb-new {
   height: var(--control-h-sm);
   border-radius: var(--radius-sm);
+}
+
+/* ───── 现代工作台：一级导航在最上面，工具行其次，任务分区靠留白分层 ─────
+   一级导航 30px、工具行 28px、分区头 28px、文件夹头 26px、任务行 28px。
+   层级只靠留白、发丝线和中性底色，不靠圆角阴影、不画主题色竖条：少画线才干净。 */
+:root[data-ui-style="zcode"] .sb-actions {
+  margin: 2px var(--space-2) 0;
+  gap: 0;
+}
+:root[data-ui-style="zcode"] .sb-actions .sb-new {
+  height: 30px;
+  padding: 0 var(--space-2-5);
+  border-radius: var(--radius-md);
+  color: var(--text-2);
+}
+:root[data-ui-style="zcode"] .sb-actions .sb-new .icon {
+  width: 15px;
+  height: 15px;
+}
+:root[data-ui-style="zcode"] .sb-actions .sb-new:hover {
+  background: var(--bg-hover);
+}
+/* 一级导航与任务区分开的那一条：极淡、只画一次，下方分区之间不再重复画线 */
+:root[data-ui-style="zcode"] .sb-head-divider {
+  margin: 6px 12px 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+:root[data-ui-style="zcode"] .sb-head {
+  height: 28px;
+}
+:root[data-ui-style="zcode"] .sb-head-title {
+  padding-left: var(--space-2-5);
+  color: var(--text-3);
+  font-weight: var(--fw-medium);
+}
+:root[data-ui-style="zcode"] .sb-head-tools {
+  gap: var(--space-0-5);
+}
+:root[data-ui-style="zcode"] .sb-head-tools .ui-icon-btn {
+  --btn-h: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+}
+:root[data-ui-style="zcode"] .sb-head-tools .ui-icon-btn:hover {
+  color: var(--text);
+}
+:root[data-ui-style="zcode"] .sb-head-tools .ui-icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+/* 收起的搜索框展开时才占高（平滑长出，位于工具行正下方） */
+:root[data-ui-style="zcode"] .sb-search {
+  margin: 0 var(--space-2) var(--space-1-5);
+}
+:root[data-ui-style="zcode"] .sb-search .ui-field {
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border-color: var(--border-subtle);
+  background: var(--bg-raised);
+  font-size: var(--fs-xs);
+}
+:root[data-ui-style="zcode"] .sb-waiting {
+  height: 26px;
+  border-radius: var(--radius-sm);
+}
+/* 活跃筛选：平时只是一个安静的 24×24 图标按钮，只有真的在筛选时才显出一块柔和底色 */
+:root[data-ui-style="zcode"] .sb-active-filter {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  justify-content: center;
+  border-color: transparent;
+  background: none;
+  border-radius: var(--radius-sm);
+}
+:root[data-ui-style="zcode"] .sb-active-filter:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+:root[data-ui-style="zcode"] .sb-active-filter-label {
+  display: none;
+}
+:root[data-ui-style="zcode"] .sb-active-filter[data-active] {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+/* 有活跃任务时右上角一个小角标，不把按钮撑成胶囊 */
+:root[data-ui-style="zcode"] .sb-active-filter-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 9px;
+  line-height: 1;
+}
+:root[data-ui-style="zcode"] .sb-section-head {
+  height: 28px;
+  /* 分区文字与「任务列表」标题、行文字同一条竖线（左内边距由列表 + 开关按钮承担） */
+  padding: 0;
+}
+:root[data-ui-style="zcode"] .sb-section-actions {
+  right: 0;
+}
+/* 分区之间用呼吸间距分开：上方主导航下已经有一条横线了，这里不再画 */
+:root[data-ui-style="zcode"] .sb-section + .sb-section {
+  margin-top: var(--space-3);
+  padding-top: 0;
+  border-top: 0;
+}
+:root[data-ui-style="zcode"] .sb-section-toggle {
+  gap: var(--space-1);
+  padding: 0 var(--space-2-5);
+  color: var(--text-3);
+}
+:root[data-ui-style="zcode"] .sb-section-name {
+  order: 1;
+}
+:root[data-ui-style="zcode"] .sb-section-toggle:hover {
+  color: var(--text-2);
+}
+/* 箭头跟在分区文字右侧，平时淡隐，悬停或聚焦时才浮现 */
+:root[data-ui-style="zcode"] .sb-section-chevron {
+  order: 2;
+  opacity: 0;
+}
+:root[data-ui-style="zcode"] .sb-section-count {
+  order: 3;
+  opacity: 0.45;
+}
+:root[data-ui-style="zcode"] .sb-section-head:hover .sb-section-chevron,
+:root[data-ui-style="zcode"] .sb-section-head:focus-within .sb-section-chevron {
+  opacity: 0.75;
+}
+:root[data-ui-style="zcode"] .sb-section-head:hover .sb-section-count,
+:root[data-ui-style="zcode"] .sb-section-head:focus-within .sb-section-count {
+  opacity: 0;
+}
+:root[data-ui-style="zcode"] .sb-group-head {
+  --sb-group-row-h: 26px;
+}
+:root[data-ui-style="zcode"] .sb-group-toggle {
+  padding-left: var(--space-2-5);
+}
+:root[data-ui-style="zcode"] .sb-group-count {
+  right: var(--space-2-5);
+}
+/* 子列表对齐文件夹图标中轴线，配极淡引导细线，明确区分项目子任务与独立会话 */
+:root[data-ui-style="zcode"] .sb-group-body {
+  margin: 2px 0 6px 16px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-subtle);
+}
+:root[data-ui-style="zcode"] .sb-row {
+  height: 28px;
+  --sb-row-action-size: 20px;
+  border-radius: var(--radius-md);
+}
+:root[data-ui-style="zcode"] .sb-row-main,
+:root[data-ui-style="zcode"] .sb-new {
+  padding-left: var(--space-2-5);
+  padding-right: var(--space-2-5);
+}
+:root[data-ui-style="zcode"] .sb-row:hover,
+:root[data-ui-style="zcode"] .sb-row[data-menu-open="true"] {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+}
+/* 选中态：一块温润克制的中性圆角填充，不再叠主题色与内描边阴影，也不画左缘彩色竖条 */
+:root[data-ui-style="zcode"] .sb-row[data-selected="true"],
+:root[data-ui-style="zcode"] .sb-new[aria-current="page"] {
+  background: color-mix(in srgb, var(--text) 8.5%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .sb-row[data-selected="true"],
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .sb-new[aria-current="page"] {
+  background: color-mix(in srgb, var(--text) 11%, transparent);
+}
+:root[data-ui-style="zcode"] .sb-row[data-selected="true"]::before,
+:root[data-ui-style="zcode"] .sb-new[aria-current="page"]::before {
+  display: none;
+}
+:root[data-ui-style="zcode"] .sb-row-actions {
+  right: var(--space-1);
+  gap: 0;
+}
+:root[data-ui-style="zcode"] .sb-row-main {
+  gap: var(--space-2);
+}
+:root[data-ui-style="zcode"] .sb-row-main > .sb-dot-none {
+  margin-right: calc(var(--space-2) * -1);
+}
+:root[data-ui-style="zcode"] .sb-show-more {
+  height: 26px;
+}
+:root[data-ui-style="zcode"] .sb-show-more.sb-show-more-flat {
+  padding-left: var(--space-2-5);
+}
+/* 底部设置栏：一条发丝线 + 安静的灰色文字，悬停才出声，选中不涂一块底 */
+:root[data-ui-style="zcode"] .sb-bottom {
+  height: 38px;
+  padding: 0 var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+:root[data-ui-style="zcode"] .sb-settings {
+  height: 30px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+:root[data-ui-style="zcode"] .sb-settings:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+:root[data-ui-style="zcode"] .sb-settings[data-active="true"] {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+/* ───── 窄栏（≤ 219px）：收起快捷键提示、筛选文字与项目标签，只留图标和标题
+   侧栏可拖到 200px，抽屉里也只占 240px：按外部窗口宽度判断不够，按 .sb 自己的宽度判断。 */
+@container (max-width: 219px) {
+  .sb-head {
+    padding-left: var(--space-1-5);
+    padding-right: var(--space-1-5);
+  }
+  .sb-actions {
+    margin-left: var(--space-1-5);
+    margin-right: var(--space-1-5);
+  }
+  .sb-new {
+    padding-left: var(--space-3);
+  }
+  .sb-new-hint,
+  .sb-actions .ui-affix {
+    display: none;
+  }
+  .sb-active-filter-label {
+    display: none;
+  }
+  .sb-history-order-row .ui-seg > button {
+    padding: 0 var(--space-1);
+  }
+  .sb-row-project {
+    display: none;
+  }
+  /* 窄栏把行尾的相对时间让给标题；运行中的四点还在，不丢状态 */
+  .sb-row-tail-text {
+    display: none;
+  }
+  .sb-row-main {
+    padding-left: var(--space-3);
+  }
+  .sb-group-toggle {
+    padding-left: var(--space-1-5);
+  }
+  .sb-group-body {
+    margin-left: 13px;
+  }
 }

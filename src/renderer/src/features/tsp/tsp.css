@@ -3338,8 +3338,8 @@
   margin-top: 2px;
   color: var(--text-3);
   font-size: var(--fs-2xs);
-  /* 0.78 而不是 0.45：0.45 时这一回合的用量几乎看不见，鼠标不悬停就读不出来 */
-  opacity: 0.78;
+  /* 0.92：保证 11px 小字在暖象牙与暗底上都稳过 WCAG AA，不靠悬停才能看清 */
+  opacity: 0.92;
   transition: opacity var(--dur-fast) var(--ease-out);
 }
 .tsp-col[data-role="omp.assistant"]:hover > .tsp-row[data-role="omp.turn.usage"],
@@ -4574,4 +4574,21 @@
 .tsp-assistant-copy-btn[data-copied] {
   color: var(--accent);
   background: var(--bg-hover);
+}
+
+/* ───────── 现代工作台（data-ui-style="zcode"）的对话区 ─────────
+   1) 顶部那条 compact 标题条是重复的品牌（π pi studio，侧栏顶部已经有了），整条藏掉；
+      第一句上方的呼吸感改由对话列自己的 padding-top 承担，别贴着顶沿。
+   2) 用户气泡换成安静的中性浅灰块：14px 圆角、无描边、无投影，不再有高饱和的强调色边（紫 / 橙）。 */
+:root[data-ui-style="zcode"] .tsp-column > [data-testid="studio-header"] {
+  display: none;
+}
+:root[data-ui-style="zcode"] .tsp-surface[data-mode="inline"] > .tsp-scroller > .tsp-column {
+  padding-top: var(--space-3);
+}
+:root[data-ui-style="zcode"] .tsp-card[data-role="omp.user"] {
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--text) 5.5%, var(--bg-raised));
+  border-color: transparent;
+  box-shadow: none;
 }
