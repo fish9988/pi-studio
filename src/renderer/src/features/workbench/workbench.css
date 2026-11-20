@@ -52,13 +52,22 @@
   user-select: none;
 }
 
-.dsh-wb-tabs {
+.dsh-wb-tabs-wrap {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
   align-items: center;
   gap: 2px;
+}
+
+.dsh-wb-tabs {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 
@@ -83,8 +92,7 @@
 .dsh-wb-tab-slot {
   display: inline-flex;
   align-items: center;
-  min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
 }
 
 .dsh-wb-tab-sep {
@@ -100,7 +108,9 @@
   align-items: center;
   gap: var(--space-1-5);
   height: 26px;
-  max-width: 168px;
+  min-width: 0;
+  max-width: 152px;
+  overflow: hidden;
   padding: 0 var(--space-2) 0 var(--space-2-5);
   border-radius: var(--radius-md);
   background: transparent;
@@ -1713,8 +1723,8 @@
   height: 17px;
   padding: 0 5px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--link) 14%, transparent);
-  color: var(--link);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text-2);
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
   font-weight: var(--fw-medium);

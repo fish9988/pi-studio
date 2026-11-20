@@ -772,11 +772,18 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
   const agentsState = useAgentsPanel();
   const width = usePreviewWidth();
   const root = useRef<HTMLElement>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startX: number; startWidth: number } | null>(null);
   const [dragTabId, setDragTabId] = useState<string | null>(null);
   const draftObj = parseDraftKey(panelKey);
   const effectiveTaskId = taskId ?? (draftObj === undefined ? (panelKey as TaskId) : null);
   const taskObj = useTask(effectiveTaskId);
+
+  useEffect(() => {
+    if (!ws.open) return;
+    const activeEl = tabsRef.current?.querySelector<HTMLElement>(".dsh-wb-tab[data-active]");
+    activeEl?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [ws.activeTabId, ws.open, ws.tabs.length]);
 
   if (!ws.open || ws.tabs.length === 0) return null;
 
@@ -862,15 +869,24 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
       />
 
       <header className="dsh-wb-header" data-testid="workbench-strip">
-        <div className="dsh-wb-tabs" role="tablist">
-          {isLoneStart && !isZcode ? (
-            <span className="dsh-wb-lone-start">
-              <Compass size={13} />
-              <span>{isZh ? "概览" : "Overview"}</span>
-            </span>
-          ) : (
-            <>
-              {ws.tabs.map((tab, index) => {
+        <div className="dsh-wb-tabs-wrap">
+          <div
+            ref={tabsRef}
+            className="dsh-wb-tabs"
+            role="tablist"
+            onWheel={(e) => {
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+          >
+            {isLoneStart && !isZcode ? (
+              <span className="dsh-wb-lone-start">
+                <Compass size={13} />
+                <span>{isZh ? "概览" : "Overview"}</span>
+              </span>
+            ) : (
+              ws.tabs.map((tab, index) => {
                 const isCurrent = tab.id === activeTab.id;
                 const prevCurrent = index > 0 && ws.tabs[index - 1]?.id === activeTab.id;
                 const meta = tabMeta(tab, isZh, isZcode);
@@ -935,22 +951,22 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
                     </div>
                   </div>
                 );
-              })}
-              <button
-                type="button"
-                className="dsh-wb-add-btn"
-                title={
-                  isZcode ? (isZh ? "新建标签页" : "New tab") : isZh ? "打开 Overview 新标签页" : "New Overview tab"
-                }
-                aria-label={
-                  isZcode ? (isZh ? "新建标签页" : "New tab") : isZh ? "打开 Overview 新标签页" : "New Overview tab"
-                }
-                data-testid="dsh-wb-add-tab"
-                onClick={() => addDshStartTab(panelKey)}
-              >
-                <Plus size={13} />
-              </button>
-            </>
+              })
+            )}
+          </div>
+          {!(isLoneStart && !isZcode) && (
+            <button
+              type="button"
+              className="dsh-wb-add-btn"
+              title={isZcode ? (isZh ? "新建标签页" : "New tab") : isZh ? "打开 Overview 新标签页" : "New Overview tab"}
+              aria-label={
+                isZcode ? (isZh ? "新建标签页" : "New tab") : isZh ? "打开 Overview 新标签页" : "New Overview tab"
+              }
+              data-testid="dsh-wb-add-tab"
+              onClick={() => addDshStartTab(panelKey)}
+            >
+              <Plus size={13} />
+            </button>
           )}
         </div>
 

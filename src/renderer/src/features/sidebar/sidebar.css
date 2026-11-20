@@ -484,11 +484,12 @@
   background: transparent;
 }
 :root[data-glass] .sb-history-head {
-  position: static;
+  position: relative;
   background: transparent;
 }
+/* 毛玻璃模式不能设 static：否则折叠项目的 .sb-group-count 会丢失包含块，全部逃逸叠在顶部「项目」行上 */
 :root[data-glass] .sb-group-head {
-  position: static;
+  position: relative;
   background: transparent;
 }
 /* ───── 「项目」与「会话」两个分区（中间用留白分开，不画常驻横线） ───── */

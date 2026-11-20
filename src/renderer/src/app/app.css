@@ -1294,6 +1294,9 @@ html[data-platform="darwin"] .topbar-left {
   padding: 0 6px 6px 0;
   background: var(--bg-sidebar);
 }
+:root[data-ui-style="zcode"]:is([data-backdrop-scope="window"], [data-glass]) .body {
+  background: transparent;
+}
 :root[data-ui-style="zcode"] #app[data-sidebar="hidden"] .body,
 :root[data-ui-style="zcode"] #app[data-drawer="true"] .body {
   padding-left: 6px;
