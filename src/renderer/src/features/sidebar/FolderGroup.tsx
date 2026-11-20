@@ -101,7 +101,16 @@ export function FolderGroup(props: FolderGroupProps) {
   return (
     <section className="sb-folder" aria-label={folder.label} data-testid="sidebar-folder">
       {props.renamingFolder ? (
-        <FolderRenameInput folder={folder} onDone={(value) => props.onCommitFolderRename?.(folder, value)} />
+        <FolderRenameInput
+          folder={folder}
+          onDone={(value) => {
+            props.onCommitFolderRename?.(folder, value);
+            // 改名框卸下后焦点会掉到 body（下一帧才重建出真正的按钮）：回填到文件夹头，键盘用户不丢位置
+            requestAnimationFrame(() => {
+              document.querySelector<HTMLElement>(`[data-nav="${CSS.escape(navId)}"]`)?.focus();
+            });
+          }}
+        />
       ) : (
         <div
           className="sb-group-head"
@@ -206,7 +215,7 @@ export function FolderGroup(props: FolderGroupProps) {
         </div>
       )}
       <Reveal open={open}>
-        <div className="sb-group-body" ref={body}>
+        <div className="sb-group-body" ref={body} inert={!open}>
           {folder.items.length === 0 && <p className="sb-group-empty">{t("sidebar.empty")}</p>}
           {shown.map((item) => (
             <ItemRow

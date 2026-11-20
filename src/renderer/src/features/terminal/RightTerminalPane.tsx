@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { TerminalKey } from "../../../../shared/ipc.ts";
 import { cwdLabel } from "../../../../shared/ui/terminal-model.ts";
 import { withShortcut } from "../../app/platform-keys.ts";
+import { useShellValue } from "../../app/shell-store.ts";
 import { useT } from "../../i18n/use-t.ts";
 import { Close, Comment, CopyIcon, Restart, Terminal } from "../../icons.tsx";
 import { currentLocale } from "../../store/settings-store.ts";
@@ -30,6 +31,8 @@ export function RightTerminalPane({
 }) {
   const t = useT();
   const zh = currentLocale() === "zh-CN";
+  // 现代工作台里页签自己就有 ×、面板头部还有收起：再摆一个重复的关闭按钮只会误导。
+  const isZcode = useShellValue("uiStyle") === "zcode";
   const platform = useAppInfo()?.platform ?? "win32";
   const host = useRef<HTMLDivElement>(null);
   const session = useTerminalSession(terminalKey, host, platform);
@@ -125,14 +128,16 @@ export function RightTerminalPane({
         >
           <Restart size={13} />
         </IconButton>
-        <IconButton
-          label={t("terminal.hide")}
-          tip={withShortcut(t("terminal.hide"), "Ctrl `")}
-          testId={active ? "terminal-hide" : undefined}
-          onClick={onCloseTab}
-        >
-          <Close size={13} />
-        </IconButton>
+        {!isZcode && (
+          <IconButton
+            label={t("terminal.hide")}
+            tip={withShortcut(t("terminal.hide"), "Ctrl `")}
+            testId={active ? "terminal-hide" : undefined}
+            onClick={onCloseTab}
+          >
+            <Close size={13} />
+          </IconButton>
+        )}
       </header>
       <div
         className="terminal-body"

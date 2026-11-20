@@ -91,19 +91,45 @@
   backdrop-filter: blur(18px) saturate(160%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
+/* 液态玻璃的顶部镜面高光把 .ui-field:focus-within 的描边阴影整条盖掉了（box-shadow 是整条替换，不叠加）：
+   聚焦时把镜面高光和聚焦环一起写出来；默认玻璃底同理要显式重申一次聚焦环 */
+.sb-actions .ui-field:focus-within {
+  border-color: transparent;
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 0 4px var(--accent-soft);
+}
+:root[data-ui-style="liquid"] .sb-actions .ui-field:focus-within {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 0 1px var(--accent),
+    0 0 0 4px var(--accent-soft);
+}
 /* 云母：搜索框是 Fluent 2 的方正输入框（同 .sb-actions .ui-field 的几何），
    底子是薄玻璃，顶栏 / 侧栏磨砂层折射时能看到深浅变化 */
 :root[data-ui-style="mica-liquid"] .sb-actions .ui-field {
   border-radius: var(--radius-md);
   backdrop-filter: blur(18px) saturate(165%);
 }
-/* 深色底色上的 0.45 白会变成一道死白杠：同样的镜面高光只留 0.14 */
+/* 深色底色上的 0.45 白会变成一道死白杠：同样的镜面高光只留 0.14（聚焦环照旧留着） */
 :root[data-ui-style="liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .sb-actions .ui-field {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+:root[data-ui-style="liquid"]:is([data-theme$="dark"], [data-theme="dark"]) .sb-actions .ui-field:focus-within {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 0 1px var(--accent),
+    0 0 0 4px var(--accent-soft);
 }
 @media (prefers-color-scheme: dark) {
   :root[data-ui-style="liquid"]:not([data-theme]) .sb-actions .ui-field {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  }
+  :root[data-ui-style="liquid"]:not([data-theme]) .sb-actions .ui-field:focus-within {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 0 0 1px var(--accent),
+      0 0 0 4px var(--accent-soft);
   }
 }
 .sb-new {
@@ -269,14 +295,16 @@
 :root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb {
   background: transparent;
 }
-:root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb-history-head {
+:root[data-backdrop]:not([data-glass]):is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"])
+  .sb-history-head {
   /* 52% 而不是 --bd-sidebar-veil（84%）：这一层贴在 .sidebar-column 的磨砂纱上，两层纱相乘后
    * 84% 会变成近 97% 的实心色带（2026-11-14）。52% + 磨砂足够挡住滚过去的行，又不把自己涂成一条板。 */
   background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
   backdrop-filter: blur(18px);
 }
 /* 吸顶的文件夹头同样不能是一块实色板：和标题行用同一层半透纱 + 磨砂，滚过的行走它下面时不会露出一条深色带 */
-:root[data-backdrop]:is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"]) .sb-group-head {
+:root[data-backdrop]:not([data-glass]):is([data-backdrop-scope="chat-sidebar"], [data-backdrop-scope="window"])
+  .sb-group-head {
   background: color-mix(in srgb, var(--bg-sidebar) 52%, transparent);
   backdrop-filter: blur(18px);
 }
@@ -485,11 +513,13 @@
 }
 :root[data-glass] .sb-history-head {
   position: relative;
+  top: auto;
   background: transparent;
 }
-/* 毛玻璃模式不能设 static：否则折叠项目的 .sb-group-count 会丢失包含块，全部逃逸叠在顶部「项目」行上 */
+/* 毛玻璃模式不能设 static（会丢失包含块），改为 relative 并显式恢复 top: auto，避免继承 --sb-sticky-top 下移遮住子列表 */
 :root[data-glass] .sb-group-head {
   position: relative;
+  top: auto;
   background: transparent;
 }
 /* ───── 「项目」与「会话」两个分区（中间用留白分开，不画常驻横线） ───── */
@@ -604,6 +634,11 @@
   background: var(--bg-sidebar);
   border-radius: var(--radius-sm);
 }
+/* 吸顶头是不透明底色：圆角转角处会露出下面滚过的那一行，所以不吸顶的圆角一律换成方角；
+   毛玻璃模式不吸顶（见上面 :root[data-glass] 那段），保留圆角 */
+:root:not([data-glass]) .sb-group-head {
+  border-radius: 0;
+}
 .sb-group-toggle {
   display: flex;
   flex: 1;
@@ -677,7 +712,8 @@
 .sb-group-count {
   position: absolute;
   top: 0;
-  right: var(--space-1-5);
+  /* 右缘和 .sb-section-head 的右内边距对齐：项目数量与会话数量在同一列 */
+  right: var(--space-2);
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
@@ -755,7 +791,8 @@
 }
 .sb-group-empty {
   margin: 0;
-  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-6);
+  /* 左内边距对齐 .sb-row-main：空提示和子行标题起在同一条竖线上 */
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3-5);
   color: var(--text-3);
   font-size: var(--fs-xs);
 }
@@ -948,6 +985,10 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
   outline: none;
 }
+.sb-group-editing .sb-rename {
+  /* 文件夹头的行高（zcode 是 26px）比 --control-h-sm 矮时，输入框跟着缩，不把吸顶头撑高 */
+  height: calc(var(--sb-group-row-h, var(--control-h-sm)) - 2px);
+}
 
 /* ───── 状态图标：16×16 槽位里放状态标记；进行中由四点特效表达，形状 + 颜色双信号（需要介入琥珀底 ! / 已完成圆圈对勾 / 失败红底 × / 历史会话中断） ───── */
 .sb-dot {
@@ -1121,6 +1162,10 @@
 :root[data-ui-style="zcode"] .sb-head {
   height: 28px;
 }
+/* 顶部留 2px：第一个分区开关的 :focus-visible 描边不会被滚动区上缘切掉一半 */
+:root[data-ui-style="zcode"] .sb-list {
+  padding-top: 2px;
+}
 :root[data-ui-style="zcode"] .sb-head-title {
   padding-left: var(--space-2-5);
   color: var(--text-3);
@@ -1226,7 +1271,9 @@
 }
 :root[data-ui-style="zcode"] .sb-section-count {
   order: 3;
-  opacity: 0.45;
+  /* 不用 var(--text-3) + opacity 的双重变淡（会暗到看不清），改成和 .sb-group-count 一致的 45% 亮度 */
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+  opacity: 1;
 }
 :root[data-ui-style="zcode"] .sb-section-head:hover .sb-section-chevron,
 :root[data-ui-style="zcode"] .sb-section-head:focus-within .sb-section-chevron {
@@ -1244,6 +1291,11 @@
 }
 :root[data-ui-style="zcode"] .sb-group-count {
   right: var(--space-2-5);
+}
+/* 空项目提示对齐 zcode 的 .sb-row-main 左右内边距 */
+:root[data-ui-style="zcode"] .sb-group-empty {
+  padding-left: var(--space-2-5);
+  padding-right: var(--space-2-5);
 }
 /* 子列表对齐文件夹图标中轴线，配极淡引导细线，明确区分项目子任务与独立会话 */
 :root[data-ui-style="zcode"] .sb-group-body {

@@ -59,7 +59,7 @@ function makeStartTab(): DshTabItem {
   return { id: `start-${startSeq}`, kind: "start" };
 }
 
-function getWorkspace(key: TerminalKey): DshWorkspaceState {
+export function getDshWorkspace(key: TerminalKey): DshWorkspaceState {
   return store.get().get(key) ?? DEFAULT_CLOSED;
 }
 
@@ -88,7 +88,7 @@ function allocateTerminalTab(key: TerminalKey, existingTabs: readonly DshTabItem
 
 /** 顶栏右侧栏图标点击：开着就收起（保留已开标签），关着就展开（首次展开默认打开 DSH「🧭 开始」标签）。 */
 export function toggleDshSidebar(key: TerminalKey): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   if (ws.open) {
     setWorkspace(key, { ...ws, open: false });
     return;
@@ -108,19 +108,19 @@ export function toggleDshSidebar(key: TerminalKey): void {
 }
 
 export function collapseDshSidebar(key: TerminalKey): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   if (!ws.open) return;
   setWorkspace(key, { ...ws, open: false });
 }
 
 export function toggleDshExpanded(key: TerminalKey): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   setWorkspace(key, { ...ws, expanded: !ws.expanded });
 }
 
 /** 点击标签栏 `+` 新标签页按钮：打开或激活一个「🧭 开始」页签。 */
 export function addDshStartTab(key: TerminalKey): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const existingStart = ws.tabs.find((t) => t.kind === "start");
   if (existingStart) {
     setWorkspace(key, { ...ws, open: true, activeTabId: existingStart.id });
@@ -136,7 +136,7 @@ export function addDshStartTab(key: TerminalKey): void {
 }
 
 export function activateDshTab(key: TerminalKey, tabId: string): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   if (!ws.tabs.some((t) => t.id === tabId)) return;
   if (ws.open && ws.activeTabId === tabId) return;
   setWorkspace(key, { ...ws, open: true, activeTabId: tabId });
@@ -152,7 +152,7 @@ export function openDshToolTab(
   kind: Exclude<DshToolKind, "start" | "preview" | "mcp-app">,
   options: { replaceTabId?: string | undefined; forceNewTerminal?: boolean | undefined } = {},
 ): DshTabItem {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const replaceId =
     options.replaceTabId ?? (ws.tabs.length === 1 && ws.tabs[0]?.kind === "start" ? ws.tabs[0].id : undefined);
 
@@ -230,7 +230,7 @@ export function openDshPreviewTab(
     replaceTabId?: string | undefined;
   } = {},
 ): Extract<DshTabItem, { kind: "preview" }> {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const tabId = makePreviewTabId(filePath, options.root);
   const nextTab: Extract<DshTabItem, { kind: "preview" }> = {
     id: tabId,
@@ -279,7 +279,7 @@ export function openDshMcpAppTab(
     replaceTabId?: string | undefined;
   },
 ): Extract<DshTabItem, { kind: "mcp-app" }> {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const tabId = makeMcpAppTabId(options.server, options.uri);
   const nextTab: Extract<DshTabItem, { kind: "mcp-app" }> = {
     id: tabId,
@@ -310,7 +310,7 @@ export function openDshMcpAppTab(
 }
 
 export function updateDshTerminalLabel(key: TerminalKey, terminalKey: TerminalKey, shellLabel: string): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   let changed = false;
   const nextTabs = ws.tabs.map((t) => {
     if (t.kind === "terminal" && t.terminalKey === terminalKey && t.shellLabel !== shellLabel) {
@@ -324,7 +324,7 @@ export function updateDshTerminalLabel(key: TerminalKey, terminalKey: TerminalKe
 
 /** 关闭指定标签；返回被关闭的标签（若是终端标签，调用方负责关闭对应 PTY）。最后一个标签关闭后自动收起右侧栏。 */
 export function closeDshTab(key: TerminalKey, tabId: string): DshTabItem | null {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const idx = ws.tabs.findIndex((t) => t.id === tabId);
   if (idx < 0) return null;
   const removed = ws.tabs[idx]!;
@@ -342,7 +342,7 @@ export function closeDshTab(key: TerminalKey, tabId: string): DshTabItem | null 
 /** 拖拽重排右侧工作台标签位置。 */
 export function reorderDshTab(key: TerminalKey, fromId: string, toId: string): void {
   if (fromId === toId) return;
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const fromIdx = ws.tabs.findIndex((t) => t.id === fromId);
   const toIdx = ws.tabs.findIndex((t) => t.id === toId);
   if (fromIdx < 0 || toIdx < 0) return;
@@ -355,14 +355,14 @@ export function reorderDshTab(key: TerminalKey, fromId: string, toId: string): v
 
 /** 关闭某类单例或主终端标签（供旧版 closeFilePreview / closeBrowserPanel / setTerminalOpen(false) 兼容同步）。 */
 export function closeDshToolKind(key: TerminalKey, kind: Exclude<DshToolKind, "start" | "preview" | "mcp-app">): void {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   const target = ws.tabs.find((t) => t.kind === kind);
   if (!target) return;
   closeDshTab(key, target.id);
 }
 
 export function isDshToolActive(key: TerminalKey, kind: DshToolKind): boolean {
-  const ws = getWorkspace(key);
+  const ws = getDshWorkspace(key);
   if (!ws.open) return false;
   const active = ws.tabs.find((t) => t.id === ws.activeTabId);
   return active?.kind === kind;

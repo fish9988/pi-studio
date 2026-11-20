@@ -24,6 +24,8 @@ interface TopBarProps {
   onToggleSidebar(): void;
   onGoBack?(): void;
   onGoForward?(): void;
+  /** 窄窗口抽屉盖住整窗时顶栏不可达（App.tsx 传）。 */
+  inert?: boolean | undefined;
 }
 
 export function TaskTools() {
@@ -52,7 +54,7 @@ export function TopBar(props: TopBarProps) {
   const t = useT();
   const isZcode = useShellValue("uiStyle") === "zcode";
   return (
-    <header className="topbar" data-testid="topbar">
+    <header className="topbar" data-testid="topbar" inert={props.inert}>
       <div className="topbar-left">
         <span className="topbar-brand" data-testid="topbar-brand">
           <PixelLogo unit={1.6} />

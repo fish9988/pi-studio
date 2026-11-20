@@ -114,7 +114,7 @@
   padding: 0 var(--space-2) 0 var(--space-2-5);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
   white-space: nowrap;
@@ -126,7 +126,7 @@
 
 .dsh-wb-tab:hover {
   background: var(--bg-hover);
-  color: var(--text-2);
+  color: var(--text);
 }
 
 .dsh-wb-tab:focus-visible {
@@ -426,7 +426,9 @@
   flex-direction: column;
   justify-content: space-between;
   gap: var(--space-2-5);
+  min-width: 0;
   min-height: 72px;
+  overflow: hidden;
   padding: var(--space-2-5) var(--space-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
@@ -508,7 +510,7 @@
   }
 }
 
-@container (max-width: 340px) {
+@container (max-width: 375px) {
   .dsh-ov-tile-kbd {
     display: none;
   }
@@ -1309,6 +1311,16 @@
   box-shadow: none;
 }
 
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .dsh-wb-tab[data-active] {
+  background: color-mix(in srgb, var(--text) 11%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="zcode"]:not([data-theme]) .dsh-wb-tab[data-active] {
+    background: color-mix(in srgb, var(--text) 11%, transparent);
+  }
+}
+
 :root[data-ui-style="zcode"] .dsh-wb-tab-close {
   width: 15px;
   height: 15px;
@@ -1321,24 +1333,47 @@
   border-radius: 8px;
 }
 
-/* 宽窗口（≥1181px）：右侧工作台默认 540px 舒展双列，拖左缘时 inline flex-basis 覆盖默认宽。 */
-@media (min-width: 1181px) {
-  :root[data-ui-style="zcode"] .dsh-wb {
-    flex: 0 0 540px;
-    width: 540px;
-    min-width: 320px;
-    max-width: 76%;
-  }
+/* 内嵌终端：和工作台同一张纸，头部不再垫一层灰坑（原来 --bg-app / --bg-sunken 两层灰在面板里像贴纸） */
+:root[data-ui-style="zcode"] .dsh-wb-terminal {
+  background: transparent;
+}
 
-  :root[data-ui-style="zcode"] .dsh-wb[data-expanded] {
-    flex: 0 0 760px;
-    width: 760px;
+:root[data-ui-style="zcode"] .dsh-wb-term-head {
+  height: 28px;
+  background: transparent;
+}
+
+/* 中宽窗口（841–1180px）：工作台仍然是右侧 inline 的一列（不再等到 1181px 才并排），但收窄到 380px，
+   主对话列不被挤成一条窄缝；拖左缘时 inline flex-basis 照样覆盖这个默认宽。 */
+@media (min-width: 841px) and (max-width: 1180px) {
+  :root[data-ui-style="zcode"] .dsh-wb {
+    flex: 0 1 380px;
+    width: 380px;
+    min-width: 280px;
+    max-width: 56%;
   }
 }
 
-/* 窄窗口（≤1180px）：工作台转为右侧圆角浮层卡片，不挤压中间主对话列；
+/* 宽窗口（≥1181px）：右侧工作台默认 540px 舒展双列，拖左缘时 inline flex-basis 覆盖默认宽。
+   flex-shrink 留 1、max-width 写成 calc：窗口不够宽时先收工作台，头部的关闭按钮不会被挤到窗口外。 */
+@media (min-width: 1181px) {
+  :root[data-ui-style="zcode"] .dsh-wb {
+    flex: 0 1 540px;
+    width: 540px;
+    min-width: 320px;
+    max-width: calc(100% - 360px);
+  }
+
+  :root[data-ui-style="zcode"] .dsh-wb[data-expanded] {
+    flex: 0 1 760px;
+    width: 760px;
+    max-width: calc(100% - 320px);
+  }
+}
+
+/* 窄窗口（≤840px）：工作台转为右侧圆角浮层卡片，不挤压中间主对话列；
    层级低于左侧抽屉遮罩（--z-popover - 1），打开抽屉时遮罩自然盖住右侧浮层，绝不双栏夹击。 */
-@media (max-width: 1180px) {
+@media (max-width: 840px) {
   :root[data-ui-style="zcode"] .dsh-wb {
     position: absolute;
     top: 0;
@@ -1350,6 +1385,11 @@
     max-width: none;
     margin: 0;
     box-shadow: var(--shadow-2);
+  }
+
+  /* 浮层模式下展开也是浮层：直接把窗口宽度让给它，不再被 min(460px, …) 卡住 */
+  :root[data-ui-style="zcode"] .dsh-wb[data-expanded] {
+    width: calc(100vw - 12px);
   }
 }
 
@@ -1731,25 +1771,43 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 「打开」胶囊平时不占位：12 行应用的名字因此多出 ~50px 文字宽度，列表看上去也没有一排重复按钮；
+   悬停或键盘聚焦到这一行才滑出来（宽度 + 不透明度一起过渡，出现时不会硬挺一下）。 */
 .spl-open-pill {
   display: inline-flex;
   align-items: center;
   flex: none;
   height: 22px;
-  padding: 0 9px;
+  max-width: 0;
+  padding: 0;
+  overflow: hidden;
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--text) 5.5%, transparent);
   color: var(--text-2);
   font-size: 11px;
   font-weight: var(--fw-medium);
+  opacity: 0;
+  white-space: nowrap;
   transition:
+    opacity var(--dur-fast) var(--ease-out),
+    max-width var(--dur-fast) var(--ease-out),
+    padding var(--dur-fast) var(--ease-out),
     background-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
 
-.spl-app:hover .spl-open-pill {
+.spl-app:is(:hover, :focus-visible) .spl-open-pill {
+  max-width: 64px;
+  padding: 0 8px;
   background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spl-open-pill {
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
 }
 
 /* 居中短分割线：把「工作台工具」和「应用插件」两区輕輕分开 */

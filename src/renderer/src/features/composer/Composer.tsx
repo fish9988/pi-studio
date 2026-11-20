@@ -228,6 +228,13 @@ export function Composer({ taskId, fromDraft = false }: { taskId: TaskId; fromDr
       if (event.key !== "Escape" || event.defaultPrevented) return;
       // TSP 过程区里的 Esc（关选择器、取消提问）是写给 omp 的按键，不是"停止任务"。
       if (event.target instanceof Element && event.target.closest('[data-testid="tsp-view"]') !== null) return;
+      // 设置模态窗、窄窗口抽屉遮罩、工作台浮层遮罩开着时，Esc 是"关那一层"，不能顺手把任务停了。
+      if (
+        document.querySelector(
+          '[data-testid="settings-window"][data-mode="modal"], [data-testid="drawer-scrim"], [data-testid="wb-scrim"]',
+        ) !== null
+      )
+        return;
       if (running || screenOpen) {
         event.preventDefault();
         stop();

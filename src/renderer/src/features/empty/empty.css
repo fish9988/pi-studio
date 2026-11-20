@@ -37,6 +37,11 @@
   padding: var(--space-6) 0 var(--space-12);
 }
 
+/* 桌宠骑在输入框上时，它比输入框高出几十像素：底下多留一道空白，不会和下面的用量热力图叠在一起 */
+.empty:has(.composer-mascot) .empty-main {
+  padding-bottom: calc(var(--space-16) + var(--space-4));
+}
+
 .empty-hero {
   display: flex;
   flex-direction: column;
@@ -777,7 +782,7 @@
   align-items: center;
   width: min(100%, 740px);
   margin-block: auto;
-  padding-bottom: 16vh;
+  padding-bottom: clamp(24px, 8vh, 80px);
 }
 
 .zempty-hero {

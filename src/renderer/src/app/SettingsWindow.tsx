@@ -1,6 +1,6 @@
 // DSH 风格居中模态设置弹窗（默认弹出居中圆角对话框 `min(880px, 90vw) × min(640px, 85vh)`，带通透暗化与微毛玻璃遮罩，
 // 支持 Esc 或点击遮罩关闭；右上角保留可选的「停靠至侧边」与「独立新窗口」按钮）。
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Close, External, Sliders } from "../icons.tsx";
 import { useLocale, useT } from "../i18n/use-t.ts";
 import { setSettingsPage, showView, useSettingsPage, type SettingsPage } from "../store/index.ts";
@@ -72,7 +72,7 @@ export function SettingsWindow({ compactNav }: { compactNav: boolean }) {
   }, [currentSection]);
 
   useEffect(() => {
-    if (mode !== "modal") return;
+    // 模态 / 停靠两种布局都要能用 Esc 退出：内层菜单、对话框自己先处理（preventDefault），剩下的才归这里。
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       const active = document.activeElement;
@@ -87,7 +87,25 @@ export function SettingsWindow({ compactNav }: { compactNav: boolean }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mode]);
+  }, []);
+
+  // 头部按钮（停靠 / 独立窗口 / 关闭）不在 `.settings`、`.snav` 里：Ctrl+F 和 Esc 也要在它们身上生效。
+  const onSettingsWinKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+      const input = document.querySelector<HTMLInputElement>('[data-testid="settings-search"]');
+      if (input === null) return;
+      event.preventDefault();
+      input.focus();
+      input.select();
+      return;
+    }
+    if (event.key !== "Escape") return;
+    // 内容区 / 导航自己先收到并处理（它们关掉或清搜索）；这里只补焦点落在头部按钮上的那一路。
+    if (event.target instanceof Element && event.target.closest(".settings, .snav, .snav-compact") !== null) return;
+    event.preventDefault();
+    showView("conversation");
+  };
 
   const dialogContent = (
     <aside
@@ -97,6 +115,7 @@ export function SettingsWindow({ compactNav }: { compactNav: boolean }) {
       role={mode === "modal" ? "dialog" : undefined}
       aria-modal={mode === "modal" ? true : undefined}
       aria-label={t("settings.sections")}
+      onKeyDown={onSettingsWinKeyDown}
     >
       <div className="settings-win-bar">
         <div className="settings-win-title">

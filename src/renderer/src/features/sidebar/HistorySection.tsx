@@ -154,7 +154,9 @@ export function HistorySection(props: HistorySectionProps) {
     return () => observer.disconnect();
   }, [head]);
   const empty = props.flatItems.shown.length === 0 && (order === "time" || folders.length === 0);
-  if (empty && !activeOnly) return null;
+  // 一个文件夹都没有时整块不渲染；但切成「时间」后若还有文件夹，头部得留着，否则空列表一片死白，再也切不回去
+  const nothingAtAll = empty && !activeOnly && folders.length === 0;
+  if (nothingAtAll) return null;
 
   const renderFolder = (folder: SidebarFolder) => (
     <FolderGroup
@@ -181,7 +183,9 @@ export function HistorySection(props: HistorySectionProps) {
       className="sb-group sb-history"
       aria-label={t("sidebar.listTitle")}
       data-testid="sidebar-history"
-      style={{ "--sb-sticky-top": zcode ? "0px" : `${headHeight}px` } as Record<string, string>}
+      style={
+        { "--sb-sticky-top": zcode ? "0px" : `${Math.max(0, Math.floor(headHeight))}px` } as Record<string, string>
+      }
     >
       {!zcode && (
         <div className="sb-history-head" ref={setHead}>
@@ -205,7 +209,13 @@ export function HistorySection(props: HistorySectionProps) {
           {t("sidebar.activeEmpty")}
         </p>
       ) : order === "time" ? (
-        <FlatRows {...props} />
+        empty ? (
+          <p className="sb-note" role="status">
+            {t("sidebar.empty")}
+          </p>
+        ) : (
+          <FlatRows {...props} />
+        )
       ) : (
         <>
           {folders.length > 0 && (

@@ -19,9 +19,11 @@ import { SessionTreePanel } from "../features/conversation/index.ts";
 import { releaseTspDocument, TspView } from "../features/tsp/index.ts";
 import { NoticeLayer } from "../features/dialogs/index.ts";
 import { DropOverlay, EmptyState, startDraft } from "../features/empty/index.ts";
+import { useDraftProjectId } from "../features/empty/draft-project.ts";
 import { toggleFilesPanel } from "../features/file-preview/index.ts";
 import { openBrowserPanel, toggleBrowserPanel } from "../features/browser/index.ts";
 import { RightWorkbench } from "../features/workbench/RightWorkbench.tsx";
+import { collapseDshSidebar, useDshWorkspace } from "../features/workbench/dsh-workbench-store.ts";
 import { toggleTerminalFocus, useDraftTerminalCleanup, useDraftTerminalKey } from "../features/terminal/index.ts";
 import { CommandPalette, GitDialogHost, OmpSetupView, preloadFrequentViews, SessionInfoHost } from "./lazy-views.tsx";
 import { isStandaloneSettingsWindow, SettingsWindow, StandaloneSettingsWindowRoot } from "./SettingsWindow.tsx";
@@ -59,6 +61,8 @@ import { EditMenu } from "./EditMenu.tsx";
 
 /** spec §3.3：窄于 1000px 侧栏改成覆盖式抽屉。 */
 const narrowQuery = "(max-width: 999px)";
+/** 现代工作台在这个宽度以下是盖在主区上的浮层（见 workbench.css），要有遮罩和 Esc。 */
+const workbenchOverlayQuery = "(max-width: 840px)";
 /** 留着不卸载的对话区个数（同时跑四五个任务来回切的常见情形）。 */
 const KEPT_VIEWS = 5;
 /** 藏着的对话区这么久没再看就卸载（DOM 和文档镜像一起放掉），切回来重新拉快照、重画。 */
@@ -155,9 +159,16 @@ export function App() {
   const sidebarCollapsed = useShellValue("sidebarCollapsed");
   const chatWidth = useShellValue("chatWidth") ?? 0;
   const drawerOpen = useShellValue("drawerOpen");
+  const draftProjectId = useDraftProjectId();
   const sidebarColumn = useRef<HTMLDivElement>(null);
   const mainPanel = useRef<HTMLElement>(null);
   const narrow = useMediaQuery(narrowQuery);
+  const narrowWorkbench = useMediaQuery(workbenchOverlayQuery);
+  const workbench = useDshWorkspace(terminalKey);
+  /** 窄窗口里现代工作台是浮层：底下垫一块可点的遮罩，Esc 也能收起。 */
+  const workbenchOverlay = uiStyle === "zcode" && narrowWorkbench && workbench.open;
+  /** 抽屉盖住整窗时主区（顶栏、面板、工作台）不可达，Tab / Esc 留在抽屉里。 */
+  const drawerBlocksBody = narrow && drawerOpen;
   // 跟随系统时实际用 light / dark（都没有插图）；用来判断"主题插图"这次画不画。
   const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
   const navigation = useNavigation();
@@ -341,15 +352,55 @@ export function App() {
     clearTimeout(peekOpenTimer.current);
     clearTimeout(peekCloseTimer.current);
     peekCloseTimer.current = setTimeout(() => {
-      // 侧栏里的右键/更多菜单开着时不收起浮层
+      // 侧栏里的右键/更多菜单开着时不收起浮层（菜单是 portal 到 body 的，等它关了再收）
       if (document.querySelector('[role="menu"]') !== null) return;
       setSidebarPeek(false);
     }, 180);
   };
   const peekActive = !narrow && !sidebarShown && sidebarPeek;
 
-  // 选了任务或变宽之后，抽屉自动收起。
-  useEffect(() => setDrawerOpen(false), [taskId, narrow]);
+  // 指针离开时菜单还开着（上面的定时器直接返回）也不会一直挂着：菜单关掉之后的第一次外部点击 / 焦点离开就收起。
+  useEffect(() => {
+    if (!peekActive) return;
+    const within = (node: EventTarget | null): boolean =>
+      node instanceof Element && node.closest('.sidebar-column, [role="menu"]') !== null;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!within(event.target)) setSidebarPeek(false);
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      if (within(event.relatedTarget)) return;
+      if (document.querySelector('[role="menu"]') !== null) return;
+      setSidebarPeek(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("focusout", onFocusOut, true);
+    };
+  }, [peekActive]);
+
+  // 浮层工作台开着时 Esc 收起它（只吞工作台外面按下的 Esc：里面的输入框 / 菜单自己处理）。
+  useEffect(() => {
+    if (!workbenchOverlay) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // 工作台自己的输入框 / 菜单、或盖在上面的弹窗（面板、命令面板、菜单）先处理 Esc，别把浮层一起收掉。
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[data-testid="right-workbench"], [role="dialog"], [role="menu"], [role="listbox"]') !==
+          null
+      )
+        return;
+      event.preventDefault();
+      collapseDshSidebar(terminalKey);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [terminalKey, workbenchOverlay]);
+
+  // 选了任务、变宽、换了视图（设置 / 扩展）或草稿换了项目之后，抽屉自动收起。
+  useEffect(() => setDrawerOpen(false), [draftProjectId, narrow, taskId, view]);
 
   // 草稿发出第一条消息后建出任务：输入框在原位接着用，不重放换页的淡入（否则从透明闪一下）。
   // 记的是"从草稿来的那个任务"，之后同一任务的重渲染保持不变，换到别的任务才清掉。
@@ -524,6 +575,7 @@ export function App() {
         onToggleSidebar={toggleSidebar}
         onGoBack={navigation.goBack}
         onGoForward={navigation.goForward}
+        inert={drawerBlocksBody}
       />
       <div className="body">
         {drawerScrim.mounted && (
@@ -560,6 +612,7 @@ export function App() {
           data-testid="main-panel"
           data-backdrop={backdrop}
           data-backdrop-strength={backdrop && settings?.backdropStrength}
+          inert={drawerBlocksBody}
           style={
             {
               ...(backdrop === "custom" ? { "--bd-image": `url("app://studio/@backdrop/${customBackdrop}")` } : {}),
@@ -587,8 +640,11 @@ export function App() {
             </>
           )}
         </main>
+        {workbenchOverlay && (
+          <div className="wb-scrim" data-testid="wb-scrim" onPointerDown={() => collapseDshSidebar(terminalKey)} />
+        )}
         <ErrorBoundary resetKey={terminalKey}>
-          <RightWorkbench panelKey={terminalKey} taskId={taskId} />
+          <RightWorkbench panelKey={terminalKey} taskId={taskId} inert={drawerBlocksBody} />
         </ErrorBoundary>
         {view === "settings" && (
           <ErrorBoundary resetKey="settings">

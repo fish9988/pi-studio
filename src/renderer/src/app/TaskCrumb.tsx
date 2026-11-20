@@ -2,11 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import { isScratchChatCwd, taskTitle } from "../../../shared/ui/sidebar-model.ts";
 import { useDraftProject } from "../features/empty/use-draft-project.ts";
+import { isDefaultFolder } from "../features/empty/default-folder.ts";
 import { useProjects } from "../features/sidebar/projects-store.ts";
 import { folderAliasKey, useFolderAliases } from "../features/sidebar/sidebar-prefs-store.ts";
 import { useT } from "../i18n/use-t.ts";
 import { Folder, Restart } from "../icons.tsx";
-import { useMainView, useSelectedTaskId, useTask } from "../store/index.ts";
+import { useMainView, useAppInfo, useSelectedTaskId, useTask } from "../store/index.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { reportError } from "../ui/errors.ts";
 import { withShortcut } from "./platform-keys.ts";
@@ -26,6 +27,7 @@ export function TaskCrumb() {
   const projects = useProjects();
   const folderAliases = useFolderAliases();
   const draftProject = useDraftProject();
+  const chatsDir = useAppInfo()?.chatsDir ?? null;
   const isZcode = useShellValue("uiStyle") === "zcode";
   const [restarting, setRestarting] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -75,7 +77,12 @@ export function TaskCrumb() {
     (task.projectId !== null ? projects.find((p) => p.id === task.projectId) : undefined) ??
     projects.find((p) => p.path.toLowerCase() === task.cwd.toLowerCase());
   const folderAlias = folderAliases[folderAliasKey(task.cwd)];
-  const folderName = folderAlias ?? matchedProject?.name ?? (isScratchChatCwd(task.cwd) ? null : baseName(task.cwd));
+  // 默认工作区（AppInfo.chatsDir）在非 zcode 风格里显示「默认文件夹」，绝不把裸的目录名 chats 露出来。
+  const defaultFolder = isDefaultFolder(task.cwd, chatsDir);
+  const folderName =
+    folderAlias ??
+    matchedProject?.name ??
+    (isScratchChatCwd(task.cwd) ? null : defaultFolder ? t("empty.defaultFolder") : baseName(task.cwd));
 
   const title = taskTitle(task) || t("task.untitled");
   const fullTooltip = `${task.cwd}\n${title}`;
@@ -100,7 +107,8 @@ export function TaskCrumb() {
     window.studio.renameTask(task.id, next).catch((error: unknown) => reportError(t, error));
   };
 
-  const showFolder = Boolean(folderName && (!isZcode || folderName.toLowerCase() !== "chats"));
+  // zcode 里默认工作区不占位置（顶栏只放会话标题），其余风格照常显示。
+  const showFolder = Boolean(folderName && !(isZcode && (defaultFolder || folderName.toLowerCase() === "chats")));
   return (
     <div className="crumb" data-testid="topbar-crumb">
       {showFolder && (

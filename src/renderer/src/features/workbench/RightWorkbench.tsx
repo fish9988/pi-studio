@@ -48,10 +48,11 @@ import {
 import { useTask } from "../../store/index.ts";
 import { reportErrorNow } from "../../ui/errors.ts";
 import { dotStatus, sameAgents } from "../agents/agent-model.ts";
-import { openAgentsPanel, useAgentsPanel } from "../agents/agents-store.ts";
-import { openBrowserPanel } from "../browser/browser-store.ts";
+import { closeAgentsPanel, openAgentsPanel, useAgentsPanel } from "../agents/agents-store.ts";
+import { closeBrowserPanel, openBrowserPanel, useBrowserPanel } from "../browser/browser-store.ts";
 import { filesTarget } from "../file-preview/files-target.ts";
 import {
+  closeFilePreview,
   closePreviewTabAndRestoreFocus,
   openFilePreview,
   openFilesPanel,
@@ -64,13 +65,14 @@ import { PreviewPage } from "../file-preview/PreviewPage.tsx";
 import { withRoot } from "../file-preview/files-target.ts";
 import { useGitVersion } from "../git/git-store.ts";
 import { IntegrationsSection } from "../settings/IntegrationsSection.tsx";
-import { setTerminalOpen } from "../terminal/terminal-store.ts";
+import { markTerminalClosed, setTerminalOpen } from "../terminal/terminal-store.ts";
 import { useTspDerived } from "../tsp/tsp-store.ts";
 import {
   activateDshTab,
   addDshStartTab,
   closeDshTab,
   collapseDshSidebar,
+  getDshWorkspace,
   openDshMcpAppTab,
   openDshToolTab,
   reorderDshTab,
@@ -81,8 +83,8 @@ import {
 
 const mcpAppHostView = lazyView(() => import("../mcp-apps/McpAppHost.tsx").then((m) => m.McpAppHost));
 import { EMPTY_SESSION_FILES, extractSessionChanges, sameSessionChanges } from "./GitChangesPanel.tsx";
-import { SidePaneLauncher } from "./SidePaneLauncher.tsx";
-import { openChangesPanel } from "./workbench-store.ts";
+import { ensureTaskForTool, SidePaneLauncher } from "./SidePaneLauncher.tsx";
+import { closeChangesSurface, openChangesPanel } from "./workbench-store.ts";
 import "../file-preview/file-preview.css";
 import "./workbench.css";
 
@@ -161,6 +163,8 @@ function DshStartView({
   const omniListId = useId();
   const [mcpApps, setMcpApps] = useState<McpAppServerSnapshot[]>([]);
   const [mcpAppsTick, setMcpAppsTick] = useState(0);
+  /** 草稿态点 URL：正在自动建会话，连点只建一个。 */
+  const [creatingTask, setCreatingTask] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,7 +205,8 @@ function DshStartView({
 
   useEffect(() => {
     const q = query.trim();
-    if (!q || /^https?:\/\//i.test(q)) {
+    // 当成网址的输入不去查文件（和 SidePaneLauncher 同一套判定）
+    if (!q || urlCandidate !== null) {
       setFileMatches([]);
       return;
     }
@@ -217,7 +222,7 @@ function DshStartView({
     return () => {
       cancelled = true;
     };
-  }, [query, target]);
+  }, [query, target, urlCandidate]);
 
   const sessionFiles = useTspDerived(taskId, extractSessionChanges, sameSessionChanges) ?? EMPTY_SESSION_FILES;
   const agents = useTspDerived(taskId, listAgents, sameAgents, AGENT_NODES) ?? NO_AGENTS;
@@ -225,11 +230,24 @@ function DshStartView({
   const reviewBadgeCount = gitChangedCount > 0 ? gitChangedCount : sessionFiles.length;
 
   const openBrowserAtUrl = (url: string) => {
-    if (taskId === null) return;
-    openBrowserPanel(taskId, true);
-    openDshToolTab(panelKey, "browser", { replaceTabId: tabId });
-    void window.studio.navigateBrowser(taskId, url).catch(reportErrorNow);
-    setQuery("");
+    const show = (key: TerminalKey, id: TaskId) => {
+      openBrowserPanel(id, true);
+      openDshToolTab(key, "browser", { replaceTabId: tabId });
+      void window.studio.navigateBrowser(id, url).catch(reportErrorNow);
+      setQuery("");
+      setActiveIndex(0);
+    };
+    if (taskId !== null) {
+      show(panelKey, taskId);
+      return;
+    }
+    // 草稿态：内嵌浏览器是挂在任务上的，先建会话（工作台状态和草稿终端一起交接过去）再打开，不能点了没反应。
+    if (creatingTask) return;
+    setCreatingTask(true);
+    void ensureTaskForTool(panelKey)
+      .then((ctx) => show(ctx.key, ctx.task))
+      .catch(reportErrorNow)
+      .finally(() => setCreatingTask(false));
   };
 
   const openMatchedFile = (relPath: string) => {
@@ -241,7 +259,7 @@ function DshStartView({
   // 下拉项：URL 直达在内嵌浏览器打开，文件命中直接在预览页打开
   const omniOptions = useMemo(() => {
     const list: { key: string; kind: "url" | "file"; value: string; label: string }[] = [];
-    if (urlCandidate !== null && taskId !== null) {
+    if (urlCandidate !== null) {
       list.push({
         key: "url",
         kind: "url",
@@ -253,7 +271,7 @@ function DshStartView({
       list.push({ key: `file:${relPath}`, kind: "file", value: relPath, label: relPath });
     }
     return list;
-  }, [fileMatches, isZh, taskId, urlCandidate]);
+  }, [fileMatches, isZh, urlCandidate]);
 
   const runOmniOption = (option: (typeof omniOptions)[number]) => {
     if (option.kind === "url") openBrowserAtUrl(option.value);
@@ -328,7 +346,7 @@ function DshStartView({
               spellCheck={false}
               data-testid="dsh-start-omnibox"
             />
-            {urlCandidate !== null && taskId !== null && (
+            {urlCandidate !== null && (
               <span
                 className="dsh-ov-omni-kbd"
                 title={isZh ? "回车在内置浏览器中打开" : "Press Enter to open in Browser"}
@@ -680,15 +698,6 @@ function DshStartView({
   );
 }
 
-function PanelCollapseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="2.3" y="3.3" width="11.4" height="9.4" rx="2" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M6.4 3.5v9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function tabMeta(tab: DshTabItem, isZh: boolean, isZcode: boolean) {
   switch (tab.kind) {
     case "start":
@@ -763,12 +772,22 @@ function StandalonePreviewTab({
   );
 }
 
-export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; taskId: TaskId | null }) {
+export function RightWorkbench({
+  panelKey,
+  taskId,
+  inert,
+}: {
+  panelKey: TerminalKey;
+  taskId: TaskId | null;
+  /** 窄窗口抽屉开着时主区不可达：整张工作台也收进 inert（Tab / Esc 都留在抽屉里）。 */
+  inert?: boolean | undefined;
+}) {
   const t = useT();
   const isZh = useLocale() === "zh-CN";
   const isZcode = useShellValue("uiStyle") === "zcode";
   const ws = useDshWorkspace(panelKey);
   const preview = usePreviewPanel();
+  const browserTaskId = useBrowserPanel();
   const agentsState = useAgentsPanel();
   const width = usePreviewWidth();
   const root = useRef<HTMLElement>(null);
@@ -797,9 +816,7 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
     if (host === null || host === undefined) return value;
     // 现代工作台的槽跟着卡片伸缩（槽宽 = 卡片宽），拉宽的上限要减掉主区最小宽，不能把主区挤没；
     // 其余风格仍然是可用宽度的 78%
-    const available = isZcode
-      ? (host.parentElement?.clientWidth ?? 0) - mainMinWidth - paneGap
-      : host.clientWidth * maxShare;
+    const available = isZcode ? host.clientWidth - mainMinWidth - paneGap : host.clientWidth * maxShare;
     if (available <= 0) return value;
     return Math.max(minWidth, Math.min(available, value));
   };
@@ -823,12 +840,34 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
       return;
     }
     const removed = closeDshTab(panelKey, tab.id);
-    if (removed?.kind === "terminal") {
-      if (removed.terminalKey === panelKey) {
-        setTerminalOpen(panelKey, false);
-      } else {
-        void window.studio.closeTerminal(removed.terminalKey).catch(() => undefined);
+    if (removed === null) return;
+    switch (removed.kind) {
+      case "terminal": {
+        // 主终端页签（terminalKey === panelKey）只收起不杀 PTY，保留 shell 上下文与屏幕（Ctrl+` / terminal-hide 契约）；
+        // 额外新建的终端页签（#t2 起）关闭时才结束对应 PTY。用 markTerminalClosed 避免误关其余终端标签。
+        if (removed.terminalKey !== panelKey) {
+          void window.studio.closeTerminal(removed.terminalKey).catch(() => undefined);
+        }
+        markTerminalClosed(removed.terminalKey);
+        if (!getDshWorkspace(panelKey).tabs.some((item) => item.kind === "terminal")) markTerminalClosed(panelKey);
+        break;
       }
+      case "files":
+        // 面板属于这个键才清：别的任务的预览面板不能跟着被抹掉。
+        closeFilePreview(panelKey);
+        break;
+      case "browser":
+        if (browserTaskId !== null && browserTaskId === effectiveTaskId) closeBrowserPanel();
+        break;
+      case "agents":
+        if (agentsState !== null && agentsState.taskId === effectiveTaskId) closeAgentsPanel();
+        break;
+      case "changes":
+        // 变更面板与全屏评审共用这个标签、状态却分在两个 store：两个一起清。
+        closeChangesSurface({ restoreFocus: false });
+        break;
+      default:
+        break;
     }
   };
 
@@ -852,6 +891,7 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
       data-expanded={ws.expanded ? "" : undefined}
       data-testid="right-workbench"
       aria-label={t("review.wbLabel")}
+      inert={inert}
       style={!ws.expanded && width !== null ? { flexBasis: width } : undefined}
     >
       <div
@@ -993,7 +1033,7 @@ export function RightWorkbench({ panelKey, taskId }: { panelKey: TerminalKey; ta
             data-testid="dsh-wb-collapse"
             onClick={() => collapseDshSidebar(panelKey)}
           >
-            {isZcode ? <PanelCollapseIcon /> : <Close size={14} />}
+            <Close size={14} />
           </button>
         </div>
       </header>

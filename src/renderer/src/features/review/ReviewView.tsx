@@ -16,7 +16,6 @@ import { useT } from "../../i18n/use-t.ts";
 import { Close, Restart } from "../../icons.tsx";
 import {
   clearComments,
-  closeReview,
   setReviewMode,
   setReviewScope,
   setReviewWrap,
@@ -35,6 +34,7 @@ import { FileDiffView } from "./FileDiffView.tsx";
 import { FileTree } from "./FileTree.tsx";
 import { useReviewKeys } from "./review-keys.ts";
 import { refreshGit } from "../git/git-store.ts";
+import { closeChangesSurface } from "../workbench/workbench-store.ts";
 import { useChangeStats, useFileDiff, useReviewStatus } from "./use-review-data.ts";
 import "./review.css";
 import { ViewControls } from "./ViewControls.tsx";
@@ -118,7 +118,7 @@ export function ReviewView({
   useReviewKeys((key) => {
     if (embedded && !root.current?.contains(document.activeElement)) return false;
     if (key === "Escape") {
-      closeReview();
+      closeChangesSurface({ restoreFocus: false });
       return true;
     }
     if (key === "j" || key === "k") {
@@ -157,7 +157,7 @@ export function ReviewView({
     try {
       await window.studio.sendReviewComments(taskId, payload, whenBusy);
       clearComments(taskId);
-      closeReview();
+      closeChangesSurface({ restoreFocus: false });
       pushToast({ message: t("review.sent") });
     } catch (cause) {
       reportError(t, cause);
@@ -235,7 +235,11 @@ export function ReviewView({
     >
       <header className="rv-head">
         {!embedded && (
-          <IconButton label={t("review.close")} testId="review-close" onClick={closeReview}>
+          <IconButton
+            label={t("review.close")}
+            testId="review-close"
+            onClick={() => closeChangesSurface({ restoreFocus: false })}
+          >
             <Close size={14} />
           </IconButton>
         )}

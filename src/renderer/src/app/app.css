@@ -608,6 +608,12 @@ html[data-platform="darwin"] .topbar-left {
   );
 }
 
+/* 收起 / 抽屉的侧栏列是盖在主区上的一张：底下是面板（没有纱）而不是台面，
+   照旧画实底，否则菜单文字压着对话正文、读不下去（毛玻璃那份同理，见下面 [data-glass]）。 */
+:root[data-backdrop] #app:is([data-sidebar="hidden"], [data-drawer="true"]) .sidebar-column {
+  background: var(--bg-sidebar);
+}
+
 .sidebar-resizer {
   position: absolute;
   top: 0;
@@ -713,6 +719,16 @@ html[data-platform="darwin"] .topbar-left {
   animation-duration: var(--dur-slow);
   animation-timing-function: var(--ease-out);
   animation-fill-mode: forwards;
+}
+
+/* 窄窗下右侧工作台是浮层，它自己的遮罩比工作台低一档（工作台是 --z-popover - 2）、
+   比抽屉遮罩也低，确保抽屉打开时盖在上面的是抽屉那一层。 */
+.wb-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-popover) - 3);
+  background: var(--bg-scrim);
+  animation: fade-in var(--dur-fade) var(--ease-out);
 }
 
 /* ───────── Windows 11 毛玻璃（<html data-glass>，App.tsx 设；docs/architecture/themes.md「毛玻璃」） ─────────
@@ -853,7 +869,7 @@ html[data-platform="darwin"] .topbar-left {
 }
 
 .settings-win[data-mode="modal"] {
-  width: min(880px, 90vw);
+  width: min(980px, 92vw);
   height: min(740px, 100%);
   max-height: 100%;
   border: 1px solid var(--border-subtle);
@@ -868,6 +884,8 @@ html[data-platform="darwin"] .topbar-left {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-1);
+  /* 比窄窗下的工作台浮层（--z-popover - 2）高一档：两边同时开着时设置窗口在上 */
+  z-index: calc(var(--z-popover) - 1);
 }
 
 @media (max-width: 1080px) {
@@ -875,6 +893,11 @@ html[data-platform="darwin"] .topbar-left {
     position: absolute;
     inset: 0;
     border-left: 0;
+  }
+
+  /* 侧栏是常驻的一列（不是抽屉）时，停靠的设置窗从侧栏右缘开始，不盖住已经展开的侧栏 */
+  #app:not([data-drawer="true"])[data-sidebar="open"] .settings-win[data-mode="dock"] {
+    left: var(--sidebar-w);
   }
 }
 
@@ -1285,6 +1308,7 @@ html[data-platform="darwin"] .topbar-left {
   background: var(--bg-sidebar);
   padding-left: var(--space-1);
 }
+:root[data-ui-style="zcode"]:is([data-backdrop-scope="window"], [data-glass]) .topbar,
 :root[data-ui-style="zcode"]:is([data-backdrop-scope="window"], [data-glass]) .topbar-left,
 :root[data-ui-style="zcode"]:is([data-backdrop-scope="window"], [data-glass]) .topbar-main,
 :root[data-ui-style="zcode"] #app:is([data-sidebar="hidden"], [data-drawer="true"]) .topbar-left {
@@ -1313,16 +1337,32 @@ html[data-platform="darwin"] .topbar-left {
   border-radius: var(--radius-panel);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
-:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .panel {
+/* 深色里面板回到应用底色：但背景图铺到侧栏 / 整窗时不能生效，否则那道纱（--bd-chat-veil）
+   会被一层实底盖掉，图只在面板四周看得见。 */
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]):not(
+    [data-backdrop-scope="chat-sidebar"]
+  ):not([data-backdrop-scope="window"])
+  .panel {
   background: var(--bg-app);
   border-color: var(--border);
   box-shadow: none;
 }
 @media (prefers-color-scheme: dark) {
-  :root[data-ui-style="zcode"]:not([data-theme]) .panel {
+  :root[data-ui-style="zcode"]:not([data-theme]):not([data-backdrop-scope="chat-sidebar"]):not(
+      [data-backdrop-scope="window"]
+    )
+    .panel {
     background: var(--bg-app);
     border-color: var(--border);
     box-shadow: none;
+  }
+}
+
+/* 841–1180px 工作台是并排的一列（380px）：主区自己把最小宽降到 340，不再抢 --main-min-w 的 480
+   去把工作台、关标签按钮挤到窗口外。 */
+@media (min-width: 841px) and (max-width: 1180px) {
+  :root[data-ui-style="zcode"] .body:has(> .dsh-wb) > .panel {
+    min-width: 340px;
   }
 }
 :root[data-ui-style="zcode"] .crumb,

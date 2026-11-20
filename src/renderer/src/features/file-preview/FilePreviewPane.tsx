@@ -234,7 +234,7 @@ export function FilePreviewPane({
           label={t("preview.close")}
           tip={`${t("preview.close")} (Esc)`}
           testId="file-preview-close"
-          onClick={closeFilePreview}
+          onClick={() => closeFilePreview()}
         >
           <Close size={14} />
         </IconButton>

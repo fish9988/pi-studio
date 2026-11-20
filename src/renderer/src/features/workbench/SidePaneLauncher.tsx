@@ -33,16 +33,11 @@ import { openBrowserPanel } from "../browser/browser-store.ts";
 import { filesTarget } from "../file-preview/files-target.ts";
 import { openFilePreview, openFilesPanel } from "../file-preview/preview-store.ts";
 import { useGitVersion } from "../git/git-store.ts";
+import { handOverDraftTerminal } from "../terminal/terminal-actions.ts";
 import { setTerminalOpen } from "../terminal/terminal-store.ts";
 import { useTspDerived } from "../tsp/tsp-store.ts";
 import { EMPTY_SESSION_FILES, extractSessionChanges, sameSessionChanges } from "./GitChangesPanel.tsx";
-import {
-  activateDshTab,
-  openDshMcpAppTab,
-  openDshToolTab,
-  rekeyDshWorkbench,
-  type DshTabItem,
-} from "./dsh-workbench-store.ts";
+import { activateDshTab, openDshMcpAppTab, openDshToolTab, type DshTabItem } from "./dsh-workbench-store.ts";
 import { openChangesPanel } from "./workbench-store.ts";
 import "./workbench.css";
 
@@ -178,6 +173,20 @@ function LauncherRow({ testId, tone, glyph, title, hint, badge, busy, openLabel,
   );
 }
 
+/**
+ * 草稿态下点需要 TaskId 的入口：先把草稿变成真会话，再在这个会话上打开工具。
+ * 草稿的终端（shell、backlog、打开状态）通过 `handOverDraftTerminal` 跟着交接过去，
+ * 不能直接 `rekeyDshWorkbench` 而不关终端——那样草稿的 PTY 就没人管了。
+ */
+export async function ensureTaskForTool(panelKey: TerminalKey): Promise<{ key: TerminalKey; task: TaskId }> {
+  const draft = parseDraftKey(panelKey);
+  const projectId = draft?.projectId ?? (await window.studio.ensureChatsProject()).id;
+  const created = await window.studio.createTask({ projectId });
+  await handOverDraftTerminal(panelKey as DraftKey, created.id, false);
+  await selectTask(created.id);
+  return { key: created.id, task: created.id };
+}
+
 export interface SidePaneLauncherProps {
   /** 工作台面板键：任务 id，或新任务草稿的键（`new:<项目 id>`）。 */
   panelKey: TerminalKey;
@@ -280,18 +289,8 @@ export function SidePaneLauncher({ panelKey, taskId, tabId, terminalTabs }: Side
   );
 
   /**
-   * 草稿态点需要 TaskId 的入口：先把草稿变成真会话（工作台状态跟着 rekey 过去），再在这个会话上打开工具。
-   * 返回打开工具要用的面板键与任务 id。
+   * 需要任务才成立的入口：有任务就直接开，草稿态先自动建会话。
    */
-  const ensureTaskForTool = async (): Promise<{ key: TerminalKey; task: TaskId }> => {
-    const projectId = draftProjectId ?? (await window.studio.ensureChatsProject()).id;
-    const created = await window.studio.createTask({ projectId });
-    rekeyDshWorkbench(panelKey as DraftKey, created.id, false);
-    await selectTask(created.id);
-    return { key: created.id, task: created.id };
-  };
-
-  /** 需要任务才成立的入口：有任务就直接开，草稿态先自动建会话。 */
   const withTask = (busyKey: string, action: (key: TerminalKey, taskId: TaskId) => void) => {
     if (busyId !== null) return;
     if (taskId !== null) {
@@ -299,7 +298,7 @@ export function SidePaneLauncher({ panelKey, taskId, tabId, terminalTabs }: Side
       return;
     }
     setBusyId(busyKey);
-    void ensureTaskForTool()
+    void ensureTaskForTool(panelKey)
       .then((ctx) => action(ctx.key, ctx.task))
       .catch(reportErrorNow)
       .finally(() => setBusyId(null));
@@ -351,7 +350,7 @@ export function SidePaneLauncher({ panelKey, taskId, tabId, terminalTabs }: Side
       return;
     }
     setBusyId("url");
-    void ensureTaskForTool()
+    void ensureTaskForTool(panelKey)
       .then((ctx) => show(ctx.key, ctx.task))
       .catch(reportErrorNow)
       .finally(() => setBusyId(null));

@@ -227,6 +227,12 @@
       0 1px 3px rgba(0, 0, 0, 0.24);
   }
 }
+/* 有背景图时输入浮岛必须跟着纱一起半透：claude / zcode 的实底（及其深色配方）写在前面，会盖掉上面那条
+   :root[data-backdrop] .composer，所以在这两套风格之后再抬一次同一道 mix。 */
+:root[data-backdrop][data-ui-style="claude"] .composer,
+:root[data-backdrop][data-ui-style="zcode"] .composer {
+  background: color-mix(in srgb, var(--bg-raised) var(--bd-surface-alpha, 88%), transparent);
+}
 /* 桌宠不上工作台：卡通像素小人骑在极简的薄边卡片上会抢走第一眼的焦点，窄槽里还会挡住工具行状态 */
 :root[data-ui-style="zcode"] .composer-mascot,
 :root[data-ui-style="zcode"] .composer-crab {
@@ -493,6 +499,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-0-5);
+  min-width: 0;
   min-height: 36px;
   padding: 0;
 }
@@ -726,8 +733,13 @@ button.usage-context:hover,
   flex-shrink: 100;
   height: var(--control-h-sm);
 }
-/* 再窄（比如右侧开着文件预览）工具行折成两行：左边模型、审批一行，右边的计数、用量、发送换到下一行靠右，模型名不再被挤没。 */
-@container (max-width: 400px) {
+/* 再窄（比如右侧开着文件预览）工具行折成两行：左边模型、审批一行，右边的计数、用量、发送换到下一行靠右，模型名不再被挤没。
+   门槛从 400 放宽到 480：先把项目名缩到 6ch，还不够再折行，不让任何一颗胶囊被挤成省略号。 */
+@container (max-width: 480px) {
+  .composer .empty-project-name {
+    max-width: 6ch;
+  }
+
   .composer-tools {
     flex-wrap: wrap;
     row-gap: var(--space-1);

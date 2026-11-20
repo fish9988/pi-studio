@@ -27,6 +27,18 @@ export function setTerminalOpen(key: TerminalKey, open: boolean, options: { focu
   else closeDshToolKind(baseKey, "terminal");
 }
 
+/**
+ * 只丢掉某个终端键的「开着」状态，不动工作台标签：关掉一个终端页签不能顺手关掉同类的其它终端
+ * （`setTerminalOpen(key, false)` 会 `closeDshToolKind`，那是关整类标签）。
+ */
+export function markTerminalClosed(key: TerminalKey): void {
+  const state = store.get();
+  if (!state.open.has(key)) return;
+  const next = new Set(state.open);
+  next.delete(key);
+  store.set({ open: next, focusRequest: state.focusRequest === key ? null : state.focusRequest });
+}
+
 /** 草稿的终端交给了新建的任务：打开状态跟着走（任务的面板一出现就是开着的）。 */
 export function rekeyTerminalOpen(from: DraftKey, to: TaskId): void {
   const state = store.get();

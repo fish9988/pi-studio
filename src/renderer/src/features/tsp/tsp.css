@@ -4592,3 +4592,12 @@
   border-color: transparent;
   box-shadow: none;
 }
+/* 深色里 5.5% 的白底只比台面亮一丁点：补一条发丝描边，气泡边界才分得出来（浅色下那点灰底已经够用） */
+:root[data-ui-style="zcode"]:is([data-theme$="dark"], [data-theme="dark"]) .tsp-card[data-role="omp.user"] {
+  border-color: var(--border-subtle);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-ui-style="zcode"]:not([data-theme]) .tsp-card[data-role="omp.user"] {
+    border-color: var(--border-subtle);
+  }
+}

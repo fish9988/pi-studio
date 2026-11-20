@@ -56,7 +56,17 @@ function rememberFocus(): void {
 export function restorePreviewTabFocus(tabId: string): void {
   const target = tabReturnFocus.get(tabId) ?? null;
   tabReturnFocus.delete(tabId);
-  if (target?.isConnected) target.focus();
+  if (target !== null && target.isConnected) {
+    target.focus();
+    return;
+  }
+  // 打开它的入口可能已经不在了（启动器自己的页签被预览页签原位替换掉了）：退到工作台的当前页签，再退到输入框。
+  const workbench = document.querySelector<HTMLElement>('[data-testid="right-workbench"]');
+  const fallback =
+    workbench?.querySelector<HTMLElement>('[role="tab"][data-active]') ??
+    workbench ??
+    document.querySelector<HTMLElement>("[data-composer-input]");
+  fallback?.focus({ preventScroll: true });
 }
 
 export function closePreviewTabAndRestoreFocus(key: TerminalKey, tabId: string): void {
@@ -161,8 +171,10 @@ export function previewFileInPanel(path: string, line?: number): void {
   });
 }
 
-export function closeFilePreview(): void {
+/** `key` 给了就只在面板属于它时才关（关某个工作台的标签，不能顺带把别的任务的面板清掉）。 */
+export function closeFilePreview(key?: TerminalKey): void {
   const current = store.get();
+  if (key !== undefined && current !== null && current.key !== key) return;
   if (current !== null) {
     store.set(null);
     closeDshToolKind(current.key, "files");

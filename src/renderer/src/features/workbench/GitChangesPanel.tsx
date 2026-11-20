@@ -24,7 +24,7 @@ import { refreshGit } from "../git/git-store.ts";
 import { ReviewView } from "../review/ReviewView.tsx";
 import { diffKeyOf, useChangeStats, useFileDiff, useReviewStatus } from "../review/use-review-data.ts";
 import { useTspDerived } from "../tsp/tsp-store.ts";
-import { closeChangesPanel } from "./workbench-store.ts";
+import { closeChangesSurface } from "./workbench-store.ts";
 import "../file-preview/file-preview.css";
 import "./workbench.css";
 
@@ -322,7 +322,7 @@ export function GitChangesPanel({ taskId }: { taskId: TaskId }) {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      closeChangesPanel();
+      closeChangesSurface();
       return;
     }
     if ((event.key === "ArrowDown" || event.key === "ArrowUp") && !event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -452,7 +452,7 @@ export function GitChangesPanel({ taskId }: { taskId: TaskId }) {
           label={t("review.panelClose")}
           tip={`${t("review.panelClose")} (Esc)`}
           testId="wb-changes-close"
-          onClick={() => closeChangesPanel()}
+          onClick={() => closeChangesSurface()}
         >
           <Close size={14} />
         </IconButton>

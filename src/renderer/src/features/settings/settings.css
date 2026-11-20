@@ -118,6 +118,15 @@
   background: var(--accent);
 }
 
+/* 现代工作台（zcode）的设置导航：当前项只是一块中性浅底，不要 Fluent 那道强调色竖条与强调色淡底 */
+:root[data-ui-style="zcode"] .snav-item[aria-current="page"] {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+:root[data-ui-style="zcode"] .snav-item[aria-current="page"]::before {
+  display: none;
+}
+
 .snav-item-icon {
   display: inline-flex;
   flex: none;
@@ -500,12 +509,19 @@
   }
 }
 /* 一格里要同时放下“标签列 160 + 控件”（三段以上的分段、下拉差不多 230）：格子太窄时少一列，不拆控件。
-   两列 ≥ 860（每格约 418）、三列 ≥ 1300、四列 ≥ 1750。 */
-@container (min-width: 860px) {
+   两列从 600 起（每格约 290）、三列 ≥ 1300、四列 ≥ 1750；四段以上的分段条和滑杆行横跨整行（见下），
+   所以两列拿到 600 也不会把控件挤成碎字。 */
+@container (min-width: 600px) {
   .st-cells,
   .st-kb-grid {
     --cols: 2;
   }
+}
+/* 宽行：4 段以上的分段条、带滑杆的行（.st-range-wrap）在格子里横跨整行，
+   否则分段会在一格里折成两行、滑杆被挤成一条几十像素的短杆 */
+.st-cells .ui-row:has(.ui-row-control > .ui-seg > :nth-child(4)),
+.st-cells .ui-row:has(.st-range-wrap) {
+  grid-column: 1 / -1;
 }
 @container (min-width: 1300px) {
   .st-cells,
@@ -780,7 +796,7 @@
 }
 
 .st-theme-card[aria-pressed="true"] .st-theme-preview {
-  border-color: var(--accent);
+  border-color: var(--border-subtle);
 }
 
 /* 名称行：名字 + 勾号；名字长了一行省略 */
