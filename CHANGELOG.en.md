@@ -9,6 +9,13 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-11-19
+
+### Fixed
+
+- Fixed collapsed project folder counts stacking over the top Projects header when **Window glass** is enabled, and preserved window glass transparency in **Modern Studio**.
+- Fixed right workbench tabs overlapping each other and blocking the new-tab button when many tabs are open, adding horizontal wheel scrolling, active-tab auto-scroll, and neutral badge styling.
+
 ## [0.7.4] - 2026-11-19
 
 ### Added
