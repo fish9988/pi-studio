@@ -9,6 +9,18 @@ How to write it:
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-20
+
+### Fixed
+
+- Fixed project folder headers shifting downward over empty-state text and adjacent rows when **Window glass** is enabled, and polished sidebar count alignment, empty-project timeline switching, folder rename focus restoration, and backdrop drawer readability.
+- Fixed closing a primary terminal tab accidentally terminating sibling terminal tabs or dropping draft terminal sessions on task creation, and unified close/`Escape` state sync across workbench panels and Review.
+- Fixed **Modern Studio** workbench covering the chat stream and composer at `841px–1180px` widths, added a dismissible scrim and `Escape` handling for `≤ 840px` overlays, wrapped narrow composer toolbars cleanly, fixed hover-peek sidebar stuck states, and localized default workspace breadcrumbs.
+
+### Changed
+
+- Streamlined **Modern Studio** New Tab launcher action pills on hover, unified embedded terminal surface styling, widened the settings modal with responsive two-column grids, and refined dark-mode tab and message bubble contrast.
+
 ## [0.7.5] - 2026-11-19
 
 ### Fixed
